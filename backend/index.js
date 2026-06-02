@@ -1040,6 +1040,213 @@ app.get('/api/drive/product-docs/sync-status', (req, res) => {
   }
 })
 
+// ─────────────────────────────────────────
+// GET /api/observations
+// 查询所有存续产品的观察记录
+// ─────────────────────────────────────────
+app.get('/api/observations', (req, res) => {
+  try {
+    const { search } = req.query
+    let products = queryOngoingProducts()
+    if (search) {
+      const q = search.toLowerCase()
+      products = products.filter(p =>
+        (p.name && p.name.toLowerCase().includes(q)) ||
+        p.id.toLowerCase().includes(q)
+      )
+    }
+
+    const result = products.map(p => {
+      const observations = queryObservationsByProduct(p.id)
+      return {
+        id: p.id,
+        name: p.name,
+        manager: p.manager,
+        holding_status: p.holding_status,
+        code: p.code,
+        entry_price: p.entry_price,
+        first_knockout_ratio: p.first_knockout_ratio,
+        lock_months: p.lock_months,
+        monthly_decrease: p.monthly_decrease,
+        issue_date: p.issue_date,
+        subscribe_amount: p.subscribe_amount,
+        dividend_barrier: p.dividend_barrier,
+        holiday_adjust: p.holiday_adjust,
+        lock_days: p.lock_days,
+        duration_months: p.duration_months,
+        observations: observations.map(o => ({
+          date: o.observation_date,
+          knockout_price: o.knockout_price,
+          dividend_line: o.dividend_line,
+          underlying_price: o.underlying_price,
+          is_knocked_out: o.is_knocked_out,
+          is_dividend: o.is_dividend,
+          months_since_entry: o.months_since_entry,
+        })),
+      }
+    })
+
+    const lastRecord = getLastObservationUpdate()
+    res.json({
+      products: result,
+      lastUpdated: lastRecord ? lastRecord.updated_at : null,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// POST /api/observations/generate
+// 生成/更新观察记录（获取最新价格 + 计算结果）
+// ─────────────────────────────────────────
+app.post('/api/observations/generate', async (req, res) => {
+  try {
+    const products = queryOngoingProducts()
+    const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
+
+    const { results: prices, failed } = await fetchAllPrices(codes)
+
+    const today = new Date().toISOString().slice(0, 10)
+    for (const code of codes) {
+      if (prices[code] !== undefined) {
+        upsertPrice(code, today, prices[code])
+      }
+    }
+
+    let generated = 0
+    let updated = 0
+
+    for (const product of products) {
+      if (!product.code || !product.issue_date || !product.entry_price) continue
+
+      const obsDates = getObservationDates(product)
+      const latestPrice = prices[product.code] || null
+
+      const existingObs = queryObservationsByProduct(product.id)
+      const existingDates = new Set(existingObs.map(o => o.observation_date))
+
+      for (const { date, monthsSinceEntry } of obsDates) {
+        const priceForDate = latestPrice
+        if (priceForDate === null) continue
+
+        const evalResult = evaluateObservation(product, date, priceForDate, monthsSinceEntry)
+        evalResult.product_id = product.id
+        evalResult.underlying_price = priceForDate
+
+        if (existingDates.has(date)) updated++
+        else generated++
+
+        upsertObserv(evalResult)
+      }
+    }
+
+    res.json({ ok: true, generated, updated, priceRefreshed: codes.length, priceFailed: failed.length })
+  } catch (err) {
+    console.error('生成观察记录失败:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// POST /api/observations/refresh-prices
+// 仅刷新标的价格
+// ─────────────────────────────────────────
+app.post('/api/observations/refresh-prices', async (req, res) => {
+  try {
+    const products = queryOngoingProducts()
+    const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
+
+    const { results: prices, failed } = await fetchAllPrices(codes)
+    const today = new Date().toISOString().slice(0, 10)
+
+    let refreshed = 0
+    for (const code of codes) {
+      if (prices[code] !== undefined) {
+        upsertPrice(code, today, prices[code])
+        refreshed++
+      }
+    }
+
+    for (const product of products) {
+      if (!product.code || prices[product.code] === undefined) continue
+      const productObs = queryObservationsByProduct(product.id)
+      for (const obs of productObs) {
+        const latestPrice = prices[product.code]
+        const evalResult = evaluateObservation(
+          product, obs.observation_date, latestPrice, obs.months_since_entry
+        )
+        evalResult.product_id = product.id
+        upsertObserv(evalResult)
+      }
+    }
+
+    res.json({ ok: true, refreshed, failed: failed.length })
+  } catch (err) {
+    console.error('刷新价格失败:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// GET /api/observations/products
+// 获取所有存续产品列表（概要）
+// ─────────────────────────────────────────
+app.get('/api/observations/products', (req, res) => {
+  try {
+    const products = queryOngoingProducts()
+    res.json({ products })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// 定时任务：每个工作日 11:30、15:00、15:30 自动更新价格和观察记录
+// ─────────────────────────────────────────
+const cron = require('node-cron')
+
+async function scheduledPriceUpdate() {
+  try {
+    const products = queryOngoingProducts()
+    const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
+    if (codes.length === 0) return
+
+    console.log(`[定时任务] 开始更新 ${codes.length} 个标的价格...`)
+    const { results: prices, failed } = await fetchAllPrices(codes)
+    const today = new Date().toISOString().slice(0, 10)
+
+    for (const code of codes) {
+      if (prices[code] !== undefined) {
+        upsertPrice(code, today, prices[code])
+      }
+    }
+
+    let updatedObs = 0
+    for (const product of products) {
+      if (!product.code || prices[product.code] === undefined) continue
+      const obsDates = getObservationDates(product)
+      for (const { date, monthsSinceEntry } of obsDates) {
+        if (date === today) {
+          const evalResult = evaluateObservation(product, date, prices[product.code], monthsSinceEntry)
+          evalResult.product_id = product.id
+          upsertObserv(evalResult)
+          updatedObs++
+        }
+      }
+    }
+
+    console.log(`[定时任务] 完成: 价格更新 ${codes.length - failed.length}/${codes.length}, 观察记录更新 ${updatedObs} 条`)
+  } catch (err) {
+    console.error('[定时任务] 失败:', err.message)
+  }
+}
+
+cron.schedule('30 11 * * 1-5', scheduledPriceUpdate)
+cron.schedule('0 15 * * 1-5', scheduledPriceUpdate)
+cron.schedule('30 15 * * 1-5', scheduledPriceUpdate)
+console.log('定时任务已注册: 工作日 11:30, 15:00, 15:30')
+
 // 先初始化数据库，再启动服务器
 initDatabase().then(() => {
   app.listen(PORT, () => {
