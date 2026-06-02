@@ -1,178 +1,271 @@
-const Database = require('better-sqlite3')
+const initSqlJs = require('sql.js')
 const path = require('path')
+const fs = require('fs')
 
-const db = new Database(path.join(__dirname, 'data.sqlite'))
+const DB_PATH = path.join(__dirname, 'data.sqlite')
 
-// 建表（co_invest_users 每次重建以匹配新字段）
-db.exec(`
-  DROP TABLE IF EXISTS co_invest_users;
-  DROP TABLE IF EXISTS co_invest_sync_log;
-  DROP TABLE IF EXISTS customer_product_link;
+let db = null
 
-  CREATE TABLE IF NOT EXISTS products (
-    id TEXT PRIMARY KEY,
-    name TEXT,
-    is_main INTEGER,
-    issue_date TEXT,
-    complete_date TEXT,
-    subscribe_amount REAL,
-    outstanding_amount REAL,
-    raw TEXT
-  );
+// sql.js 需要异步初始化，导出 init 函数供 index.js 调用
+async function initDatabase() {
+  const SQL = await initSqlJs()
+  // 如果已有数据库文件，加载它；否则新建
+  if (fs.existsSync(DB_PATH)) {
+    const buffer = fs.readFileSync(DB_PATH)
+    db = new SQL.Database(buffer)
+  } else {
+    db = new SQL.Database()
+  }
 
-  CREATE TABLE IF NOT EXISTS sync_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    synced_at TEXT,
-    row_count INTEGER
-  );
+  // 建表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      is_main INTEGER,
+      issue_date TEXT,
+      complete_date TEXT,
+      subscribe_amount REAL,
+      outstanding_amount REAL,
+      manager TEXT,
+      holding_status TEXT,
+      structure_type TEXT,
+      code TEXT,
+      lock_days INTEGER,
+      lock_months INTEGER,
+      first_knockout_ratio REAL,
+      entry_price REAL,
+      monthly_decrease REAL,
+      term TEXT,
+      parachute TEXT,
+      dividend_barrier REAL,
+      monthly_coupon REAL,
+      coupon_1st REAL,
+      coupon_2nd REAL,
+      coupon_3rd REAL,
+      duration_months REAL,
+      absolute_return REAL,
+      holiday_adjust TEXT,
+      raw TEXT
+    );
 
-  CREATE TABLE IF NOT EXISTS co_invest_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_name TEXT,
-    actual_buyer TEXT,
-    phone TEXT,
-    wechat TEXT,
-    total_assets REAL,
-    risk_tolerance TEXT,
-    industry TEXT,
-    is_actual_deal TEXT,
-    lead_source TEXT,
-    asset_match TEXT,
-    is_dedicated_account TEXT,
-    is_competitor TEXT,
-    raw TEXT
-  );
+    CREATE TABLE IF NOT EXISTS observations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id TEXT,
+      observation_date TEXT,
+      knockout_price REAL,
+      dividend_line REAL,
+      underlying_price REAL,
+      is_knocked_out TEXT,
+      is_dividend TEXT,
+      months_since_entry INTEGER,
+      updated_at TEXT,
+      UNIQUE(product_id, observation_date),
+      FOREIGN KEY (product_id) REFERENCES products(id)
+    );
 
-  CREATE TABLE IF NOT EXISTS co_invest_sync_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    synced_at TEXT,
-    row_count INTEGER
-  );
+    CREATE TABLE IF NOT EXISTS price_cache (
+      code TEXT,
+      price_date TEXT,
+      price REAL,
+      updated_at TEXT,
+      PRIMARY KEY (code, price_date)
+    );
 
-  -- 客户-产品关联表（通过用户提供的数据同步）
-  CREATE TABLE IF NOT EXISTS customer_product_link (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id TEXT,
-    user_name TEXT,
-    actual_buyer TEXT
-  );
+    CREATE TABLE IF NOT EXISTS sync_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      synced_at TEXT,
+      row_count INTEGER
+    );
 
-  -- 交易表
-  CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    transaction_date TEXT,
-    flight_id TEXT,
-    counterparty TEXT,
-    subscribe_amount REAL,
-    raw TEXT
-  );
+    CREATE TABLE IF NOT EXISTS co_invest_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_name TEXT,
+      actual_buyer TEXT,
+      phone TEXT,
+      wechat TEXT,
+      total_assets REAL,
+      risk_tolerance TEXT,
+      industry TEXT,
+      is_actual_deal TEXT,
+      lead_source TEXT,
+      asset_match TEXT,
+      is_dedicated_account TEXT,
+      is_competitor TEXT,
+      raw TEXT
+    );
 
-  -- 渠道表
-  CREATE TABLE IF NOT EXISTS channels (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    channel_name TEXT,
-    raw TEXT
-  );
+    CREATE TABLE IF NOT EXISTS co_invest_sync_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      synced_at TEXT,
+      row_count INTEGER
+    );
 
-  -- 直客来源表
-  CREATE TABLE IF NOT EXISTS direct_customer_sources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_name TEXT,
-    raw TEXT
-  );
+    CREATE TABLE IF NOT EXISTS customer_product_link (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id TEXT,
+      user_name TEXT,
+      actual_buyer TEXT
+    );
 
-  -- 客户表
-  CREATE TABLE IF NOT EXISTS customers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_name TEXT,
-    raw TEXT
-  );
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      transaction_date TEXT,
+      flight_id TEXT,
+      counterparty TEXT,
+      subscribe_amount REAL,
+      raw TEXT
+    );
 
-  -- 产品库文档表
-  CREATE TABLE IF NOT EXISTS product_docs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    doc_token TEXT UNIQUE,
-    doc_name TEXT,
-    parent_path TEXT,
-    folder_token TEXT,
-    raw_content TEXT,
-    structure_json TEXT,
-    synced_at TEXT
-  );
+    CREATE TABLE IF NOT EXISTS channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_name TEXT,
+      raw TEXT
+    );
 
-  -- 产品库文档同步日志
-  CREATE TABLE IF NOT EXISTS product_docs_sync_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    synced_at TEXT,
-    doc_count INTEGER,
-    folder_count INTEGER
-  );
-`)
+    CREATE TABLE IF NOT EXISTS direct_customer_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_name TEXT,
+      raw TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_name TEXT,
+      raw TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS product_docs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_token TEXT UNIQUE,
+      doc_name TEXT,
+      parent_path TEXT,
+      folder_token TEXT,
+      raw_content TEXT,
+      structure_json TEXT,
+      synced_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS product_docs_sync_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      synced_at TEXT,
+      doc_count INTEGER,
+      folder_count INTEGER
+    );
+  `)
+
+  saveDatabase()
+  console.log('数据库初始化完成')
+}
+
+// 保存数据库到文件（sql.js 是内存数据库，需要手动持久化）
+function saveDatabase() {
+  const data = db.export()
+  const buffer = Buffer.from(data)
+  fs.writeFileSync(DB_PATH, buffer)
+}
+
+// 辅助：执行带参数的 INSERT/UPDATE/DELETE 语句
+function runStatement(sql, params) {
+  db.run(sql, params)
+}
+
+// 辅助：执行查询并返回所有行（对象数组）
+function queryAll(sql, params) {
+  const stmt = db.prepare(sql)
+  if (params && params.length > 0) {
+    stmt.bind(params)
+  }
+  const results = []
+  while (stmt.step()) {
+    results.push(stmt.getAsObject())
+  }
+  stmt.free()
+  return results
+}
+
+// 辅助：执行查询返回一行
+function queryOne(sql, params) {
+  const stmt = db.prepare(sql)
+  if (params && params.length > 0) {
+    stmt.bind(params)
+  }
+  let result = null
+  if (stmt.step()) {
+    result = stmt.getAsObject()
+  }
+  stmt.free()
+  return result
+}
+
+// ──── 产品表 ────
 
 // 批量写入产品数据（先清空再插入）
 function importProducts(rows) {
-  const insert = db.prepare(`
-    INSERT OR REPLACE INTO products
-      (id, name, is_main, issue_date, complete_date, subscribe_amount, outstanding_amount, raw)
-    VALUES
-      (@id, @name, @is_main, @issue_date, @complete_date, @subscribe_amount, @outstanding_amount, @raw)
-  `)
-
-  const insertMany = db.transaction((rows) => {
-    const incomingIds = new Set(rows.map(r => r.id))
-    const existingIds = db.prepare('SELECT id FROM products').all().map(r => r.id)
-    for (const id of existingIds) {
-      if (!incomingIds.has(id)) {
-        db.prepare('DELETE FROM products WHERE id = ?').run(id)
-      }
+  const incomingIds = rows.map(r => r.id)
+  const existing = queryAll('SELECT id FROM products')
+  for (const e of existing) {
+    if (!incomingIds.includes(e.id)) {
+      runStatement('DELETE FROM products WHERE id = ?', [e.id])
     }
-    for (const r of rows) {
-      insert.run(r)
-    }
-  })
-
-  insertMany(rows)
+  }
+  for (const r of rows) {
+    runStatement(`
+      INSERT OR REPLACE INTO products
+        (id, name, is_main, issue_date, complete_date, subscribe_amount, outstanding_amount,
+         manager, holding_status, structure_type, code, lock_days, lock_months,
+         first_knockout_ratio, entry_price, monthly_decrease, term, parachute,
+         dividend_barrier, monthly_coupon, coupon_1st, coupon_2nd, coupon_3rd,
+         duration_months, absolute_return, holiday_adjust, raw)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      r.id, r.name, r.is_main, r.issue_date, r.complete_date,
+      r.subscribe_amount, r.outstanding_amount,
+      r.manager, r.holding_status, r.structure_type, r.code,
+      r.lock_days, r.lock_months, r.first_knockout_ratio,
+      r.entry_price, r.monthly_decrease, r.term, r.parachute,
+      r.dividend_barrier, r.monthly_coupon,
+      r.coupon_1st, r.coupon_2nd, r.coupon_3rd,
+      r.duration_months, r.absolute_return, r.holiday_adjust, r.raw
+    ])
+  }
+  saveDatabase()
 }
 
 // 记录同步日志
 function logSync(rowCount) {
-  db.prepare('INSERT INTO sync_log (synced_at, row_count) VALUES (?, ?)').run(
-    new Date().toISOString(), rowCount
-  )
+  runStatement('INSERT INTO sync_log (synced_at, row_count) VALUES (?, ?)', [new Date().toISOString(), rowCount])
+  saveDatabase()
 }
 
 // 查询最近同步时间
 function getLastSync() {
-  return db.prepare('SELECT synced_at, row_count FROM sync_log ORDER BY id DESC LIMIT 1').get()
+  return queryOne('SELECT synced_at, row_count FROM sync_log ORDER BY id DESC LIMIT 1')
 }
 
 // 查询产品数据（按完结日期或发行日期范围）
 function queryProducts({ startDate, endDate }) {
-  return db.prepare(`
+  return queryAll(`
     SELECT * FROM products
     WHERE (
         (complete_date >= ? AND complete_date <= ?)
         OR (issue_date >= ? AND issue_date <= ?)
       )
-  `).all(startDate, endDate, startDate, endDate)
+  `, [startDate, endDate, startDate, endDate])
 }
+
+// ──── 合投用户表 ────
 
 // 批量写入合投用户数据（先清空再插入）
 function importCoInvestUsers(rows) {
-  const insert = db.prepare(`
-    INSERT INTO co_invest_users (user_name, actual_buyer, phone, wechat, total_assets, risk_tolerance, industry, is_actual_deal, lead_source, asset_match, is_dedicated_account, is_competitor, raw)
-    VALUES (@user_name, @actual_buyer, @phone, @wechat, @total_assets, @risk_tolerance, @industry, @is_actual_deal, @lead_source, @asset_match, @is_dedicated_account, @is_competitor, @raw)
-  `)
-
-  db.prepare('DELETE FROM co_invest_users').run()
-
-  const insertMany = db.transaction((rows) => {
-    for (const r of rows) {
-      insert.run(r)
-    }
-  })
-
-  insertMany(rows)
+  runStatement('DELETE FROM co_invest_users')
+  for (const r of rows) {
+    runStatement(`
+      INSERT INTO co_invest_users (user_name, actual_buyer, phone, wechat, total_assets, risk_tolerance, industry, is_actual_deal, lead_source, asset_match, is_dedicated_account, is_competitor, raw)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [r.user_name, r.actual_buyer, r.phone, r.wechat, r.total_assets, r.risk_tolerance, r.industry, r.is_actual_deal, r.lead_source, r.asset_match, r.is_dedicated_account, r.is_competitor, r.raw])
+  }
+  saveDatabase()
 }
 
 // 查询合投用户（支持多条件过滤）
@@ -202,89 +295,103 @@ function queryCoInvestUsers({ actualBuyer, nominalBuyer, isDedicated, isCompetit
   }
 
   sql += ' ORDER BY id'
-  return db.prepare(sql).all(...params)
+  return queryAll(sql, params)
 }
 
 // 获取所有行业的唯一值（用于下拉）
 function getDistinctIndustries() {
-  return db.prepare('SELECT DISTINCT industry FROM co_invest_users WHERE industry IS NOT NULL AND industry != "" ORDER BY industry').all().map(r => r.industry)
+  const rows = queryAll('SELECT DISTINCT industry FROM co_invest_users WHERE industry IS NOT NULL AND industry != "" ORDER BY industry')
+  return rows.map(r => r.industry)
 }
+
+// 记录合投用户同步日志
+function logCoInvestSync(rowCount) {
+  runStatement('INSERT INTO co_invest_sync_log (synced_at, row_count) VALUES (?, ?)', [new Date().toISOString(), rowCount])
+  saveDatabase()
+}
+
+// 查询最近合投用户同步时间
+function getLastCoInvestSync() {
+  return queryOne('SELECT synced_at, row_count FROM co_invest_sync_log ORDER BY id DESC LIMIT 1')
+}
+
+// ──── 客户-产品关联表 ────
 
 // 获取客户-产品关联列表
 function getCustomerProductLinks() {
-  return db.prepare('SELECT * FROM customer_product_link').all()
+  return queryAll('SELECT * FROM customer_product_link')
 }
 
 // 批量写入客户-产品关联
 function importCustomerProductLinks(rows) {
-  db.prepare('DELETE FROM customer_product_link').run()
-  const insert = db.prepare('INSERT INTO customer_product_link (product_id, user_name, actual_buyer) VALUES (@product_id, @user_name, @actual_buyer)')
-  const insertMany = db.transaction((rows) => {
-    for (const r of rows) insert.run(r)
-  })
-  insertMany(rows)
+  runStatement('DELETE FROM customer_product_link')
+  for (const r of rows) {
+    runStatement('INSERT INTO customer_product_link (product_id, user_name, actual_buyer) VALUES (?, ?, ?)', [r.product_id, r.user_name, r.actual_buyer])
+  }
+  saveDatabase()
 }
+
+// ──── 交易表 ────
 
 // 批量写入交易表
 function importTransactions(rows) {
-  db.prepare('DELETE FROM transactions').run()
-  const insert = db.prepare(`INSERT INTO transactions (transaction_date, flight_id, counterparty, subscribe_amount, raw) VALUES (@transaction_date, @flight_id, @counterparty, @subscribe_amount, @raw)`)
-  const insertMany = db.transaction((rows) => {
-    for (const r of rows) insert.run(r)
-  })
-  insertMany(rows)
+  runStatement('DELETE FROM transactions')
+  for (const r of rows) {
+    runStatement('INSERT INTO transactions (transaction_date, flight_id, counterparty, subscribe_amount, raw) VALUES (?, ?, ?, ?, ?)', [r.transaction_date, r.flight_id, r.counterparty, r.subscribe_amount, r.raw])
+  }
+  saveDatabase()
 }
+
+// ──── 渠道表 ────
 
 // 批量写入渠道表
 function importChannels(rows) {
-  db.prepare('DELETE FROM channels').run()
-  const insert = db.prepare(`INSERT INTO channels (channel_name, raw) VALUES (@channel_name, @raw)`)
-  const insertMany = db.transaction((rows) => {
-    for (const r of rows) insert.run(r)
-  })
-  insertMany(rows)
+  runStatement('DELETE FROM channels')
+  for (const r of rows) {
+    runStatement('INSERT INTO channels (channel_name, raw) VALUES (?, ?)', [r.channel_name, r.raw])
+  }
+  saveDatabase()
 }
+
+// ──── 直客来源表 ────
 
 // 批量写入直客来源表
 function importDirectCustomerSources(rows) {
-  db.prepare('DELETE FROM direct_customer_sources').run()
-  const insert = db.prepare(`INSERT INTO direct_customer_sources (source_name, raw) VALUES (@source_name, @raw)`)
-  const insertMany = db.transaction((rows) => {
-    for (const r of rows) insert.run(r)
-  })
-  insertMany(rows)
+  runStatement('DELETE FROM direct_customer_sources')
+  for (const r of rows) {
+    runStatement('INSERT INTO direct_customer_sources (source_name, raw) VALUES (?, ?)', [r.source_name, r.raw])
+  }
+  saveDatabase()
 }
+
+// ──── 客户表 ────
 
 // 批量写入客户表
 function importCustomers(rows) {
-  db.prepare('DELETE FROM customers').run()
-  const insert = db.prepare(`INSERT INTO customers (customer_name, raw) VALUES (@customer_name, @raw)`)
-  const insertMany = db.transaction((rows) => {
-    for (const r of rows) insert.run(r)
-  })
-  insertMany(rows)
+  runStatement('DELETE FROM customers')
+  for (const r of rows) {
+    runStatement('INSERT INTO customers (customer_name, raw) VALUES (?, ?)', [r.customer_name, r.raw])
+  }
+  saveDatabase()
 }
 
-// 计算客户历史存量峰值和峰值差额
-// 历史存量峰值：对每个航班日期（issue_date），计算在该日期之前的产品中，
-//             完结时间在该日期之后或完结时间为0的产品金额合计，取最大值
-// 峰值差额：历史存量峰值 - 当前存续产品金额合计
-function computeUserPeakBalances() {
-  const links = db.prepare('SELECT * FROM customer_product_link').all()
-  const products = db.prepare('SELECT * FROM products').all()
+// ──── 峰值计算 ────
 
-  const result = {} // { actual_buyer: { peak_balance, peak_diff, current_outstanding } }
+// 计算客户历史存量峰值和峰值差额
+function computeUserPeakBalances() {
+  const links = queryAll('SELECT * FROM customer_product_link')
+  const products = queryAll('SELECT * FROM products')
+
+  const result = {}
 
   for (const link of links) {
     const buyer = link.actual_buyer
     if (!buyer) continue
 
     // 找出该客户关联的所有产品
-    const customerProducts = products.filter(p => {
-      return link.product_id === p.id
-    })
+    const customerProducts = products.filter(p => link.product_id === p.id)
 
-    // 当前存续产品（未完结）：完结时间在今天之后 或 完结时间为0
+    // 当前存续产品（未完结）
     const now = new Date().toISOString().slice(0, 10)
     const activeProducts = customerProducts.filter(p => {
       const notCompleted = !p.complete_date || p.complete_date === '' || p.complete_date === '0' || p.complete_date > now
@@ -292,10 +399,9 @@ function computeUserPeakBalances() {
     })
     const currentOutstanding = activeProducts.reduce((sum, p) => sum + (p.outstanding_amount || 0), 0)
 
-    // 计算峰值：遍历每个航班日期，找到历史最大存量
+    // 计算峰值
     let peakBalance = currentOutstanding
     if (customerProducts.length > 0) {
-      // 收集该客户所有的航班日期（issue_date）
       const flightDates = new Set()
       for (const p of customerProducts) {
         if (p.issue_date) flightDates.add(p.issue_date)
@@ -303,12 +409,8 @@ function computeUserPeakBalances() {
       const sortedDates = Array.from(flightDates).sort()
 
       for (const flightDate of sortedDates) {
-        // 在该航班日期之前的所有产品中，存续状态的产品金额合计
-        // 存续状态：完结时间在该航班日期之后 或 完结时间为0
         const activeOnFlightDate = customerProducts.filter(p => {
-          // 产品在该航班日期之前已进场
           const issuedBefore = !p.issue_date || p.issue_date <= flightDate
-          // 产品尚未完结：完结时间 > 航班日期 或 完结时间为0/空
           const notCompleted = !p.complete_date || p.complete_date === '' || p.complete_date === '0' || p.complete_date > flightDate
           return issuedBefore && notCompleted
         })
@@ -327,71 +429,146 @@ function computeUserPeakBalances() {
   return result
 }
 
-// 记录合投用户同步日志
-function logCoInvestSync(rowCount) {
-  db.prepare('INSERT INTO co_invest_sync_log (synced_at, row_count) VALUES (?, ?)').run(
-    new Date().toISOString(), rowCount
-  )
-}
-
-// 查询最近合投用户同步时间
-function getLastCoInvestSync() {
-  return db.prepare('SELECT synced_at, row_count FROM co_invest_sync_log ORDER BY id DESC LIMIT 1').get()
-}
+// ──── 产品库文档表 ────
 
 // 批量写入产品文档数据
 function importProductDocs(docs) {
-  const insert = db.prepare(`
-    INSERT OR REPLACE INTO product_docs
-      (doc_token, doc_name, parent_path, folder_token, raw_content, structure_json, synced_at)
-    VALUES
-      (@doc_token, @doc_name, @parent_path, @folder_token, @raw_content, @structure_json, @synced_at)
-  `)
-
-  db.prepare('DELETE FROM product_docs').run()
-
-  const insertMany = db.transaction((docs) => {
-    for (const doc of docs) {
-      insert.run(doc)
-    }
-  })
-
-  insertMany(docs)
+  runStatement('DELETE FROM product_docs')
+  for (const doc of docs) {
+    runStatement(`
+      INSERT OR REPLACE INTO product_docs
+        (doc_token, doc_name, parent_path, folder_token, raw_content, structure_json, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [doc.doc_token, doc.doc_name, doc.parent_path, doc.folder_token, doc.raw_content, doc.structure_json, doc.synced_at])
+  }
+  saveDatabase()
 }
 
 // 记录产品文档同步日志
 function logProductDocsSync(docCount, folderCount) {
-  db.prepare('INSERT INTO product_docs_sync_log (synced_at, doc_count, folder_count) VALUES (?, ?, ?)').run(
-    new Date().toISOString(), docCount, folderCount
-  )
+  runStatement('INSERT INTO product_docs_sync_log (synced_at, doc_count, folder_count) VALUES (?, ?, ?)', [new Date().toISOString(), docCount, folderCount])
+  saveDatabase()
 }
 
 // 查询最近产品文档同步时间
 function getLastProductDocsSync() {
-  return db.prepare('SELECT synced_at, doc_count, folder_count FROM product_docs_sync_log ORDER BY id DESC LIMIT 1').get()
+  return queryOne('SELECT synced_at, doc_count, folder_count FROM product_docs_sync_log ORDER BY id DESC LIMIT 1')
 }
 
 // 查询所有产品文档
 function getAllProductDocs() {
-  return db.prepare('SELECT * FROM product_docs ORDER BY parent_path, doc_name').all()
+  return queryAll('SELECT * FROM product_docs ORDER BY parent_path, doc_name')
 }
 
-// 按月份查询产品文档（忽略空格差异）
+// 按月份查询产品文档
 function getProductDocsByMonth(month) {
-  // 移除月份中的所有空格来匹配
   const normalizedMonth = month.replace(/\s+/g, '')
-  return db.prepare('SELECT * FROM product_docs ORDER BY parent_path, doc_name').all().filter(doc => {
+  const docs = queryAll('SELECT * FROM product_docs ORDER BY parent_path, doc_name')
+  return docs.filter(doc => {
     const normalizedPath = doc.parent_path.replace(/\s+/g, '')
     return normalizedPath.includes(normalizedMonth)
   })
 }
 
+// ──── 存续产品查询 ────
+
+function queryOngoingProducts() {
+  return queryAll(`SELECT * FROM products WHERE holding_status LIKE '%持有%'`)
+}
+
+// ──── 观察记录表 ────
+
+function upsertObserv(row) {
+  const existing = queryOne(
+    'SELECT id FROM observations WHERE product_id = ? AND observation_date = ?',
+    [row.product_id, row.observation_date]
+  )
+  if (existing) {
+    runStatement(`
+      UPDATE observations SET
+        knockout_price = ?, dividend_line = ?, underlying_price = ?,
+        is_knocked_out = ?, is_dividend = ?, months_since_entry = ?, updated_at = ?
+      WHERE id = ?
+    `, [
+      row.knockout_price, row.dividend_line, row.underlying_price,
+      row.is_knocked_out, row.is_dividend, row.months_since_entry,
+      new Date().toISOString(), existing.id
+    ])
+  } else {
+    runStatement(`
+      INSERT INTO observations
+        (product_id, observation_date, knockout_price, dividend_line,
+         underlying_price, is_knocked_out, is_dividend, months_since_entry, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      row.product_id, row.observation_date, row.knockout_price, row.dividend_line,
+      row.underlying_price, row.is_knocked_out, row.is_dividend,
+      row.months_since_entry, new Date().toISOString()
+    ])
+  }
+}
+
+function queryObservationsByProduct(productId) {
+  return queryAll(
+    'SELECT * FROM observations WHERE product_id = ? ORDER BY observation_date',
+    [productId]
+  )
+}
+
+function queryAllObservations() {
+  return queryAll('SELECT * FROM observations ORDER BY product_id, observation_date')
+}
+
+// ──── 价格缓存表 ────
+
+function upsertPrice(code, priceDate, price) {
+  const existing = queryOne(
+    'SELECT code FROM price_cache WHERE code = ? AND price_date = ?',
+    [code, priceDate]
+  )
+  if (existing) {
+    runStatement(
+      'UPDATE price_cache SET price = ?, updated_at = ? WHERE code = ? AND price_date = ?',
+      [price, new Date().toISOString(), code, priceDate]
+    )
+  } else {
+    runStatement(
+      'INSERT INTO price_cache (code, price_date, price, updated_at) VALUES (?, ?, ?, ?)',
+      [code, priceDate, price, new Date().toISOString()]
+    )
+  }
+  saveDatabase()
+}
+
+function queryLatestPrice(code) {
+  return queryOne(
+    'SELECT * FROM price_cache WHERE code = ? ORDER BY price_date DESC LIMIT 1',
+    [code]
+  )
+}
+
+function queryPriceByDate(code, priceDate) {
+  return queryOne(
+    'SELECT * FROM price_cache WHERE code = ? AND price_date = ?',
+    [code, priceDate]
+  )
+}
+
+function getLastObservationUpdate() {
+  return queryOne('SELECT updated_at FROM observations ORDER BY updated_at DESC LIMIT 1')
+}
+
 module.exports = {
+  initDatabase,
   importProducts, logSync, getLastSync, queryProducts,
   importCoInvestUsers, logCoInvestSync, getLastCoInvestSync,
   queryCoInvestUsers, getDistinctIndustries,
   getCustomerProductLinks, importCustomerProductLinks,
   importTransactions, importChannels, importDirectCustomerSources, importCustomers,
   computeUserPeakBalances,
-  importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth
+  importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth,
+  queryOngoingProducts,
+  upsertObserv, queryObservationsByProduct, queryAllObservations,
+  upsertPrice, queryLatestPrice, queryPriceByDate,
+  getLastObservationUpdate
 }
