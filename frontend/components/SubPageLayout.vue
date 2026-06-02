@@ -11,7 +11,7 @@
         <router-link to="/user-profile" class="nav-link">用户画像</router-link>
         <router-link to="/customer-churn" class="nav-link">客户流失</router-link>
         <router-link to="/product-report" class="nav-link">产品报告</router-link>
-        <router-link to="/product-completion" class="nav-link">完结与发行</router-link>
+        <router-link to="/product-completion" class="nav-link">派息/敲出观察</router-link>
         <router-link to="/ongoing-product" class="nav-link">存续分析</router-link>
         <router-link to="/channel-analysis" class="nav-link">渠道分析</router-link>
         <router-link to="/nominal-buyer" class="nav-link">名义购买人</router-link>
