@@ -2,7 +2,9 @@ require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const axios = require('axios')
-const { importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, queryCoInvestUsers, getDistinctIndustries, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, computeUserPeakBalances, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth } = require('./db')
+const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, queryCoInvestUsers, getDistinctIndustries, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, computeUserPeakBalances, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate } = require('./db')
+const { fetchAllPrices } = require('./services/priceService')
+const { getObservationDates, evaluateObservation } = require('./services/observationService')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -536,6 +538,7 @@ app.post('/api/db/sync', async (req, res) => {
       const flightId = r['航班编号']
       if (!flightId) continue
       const isMain = String(r['是否主产品'] || r[' 是否主产品'] || '').trim() === '是' ? 1 : 0
+      const lockDays = Number(r['锁定期']) || 0
       productRows.push({
         id: String(flightId).trim(),
         name: r['产品名称'] || null,
@@ -544,12 +547,58 @@ app.post('/api/db/sync', async (req, res) => {
         complete_date: excelDateToString(r['完结时间']),
         subscribe_amount: Number(r['认购金额']) || 0,
         outstanding_amount: Number(r['存续金额']) || 0,
+        manager: r['私募管理人'] || null,
+        holding_status: r['持有状态'] || null,
+        structure_type: r['结构类型'] || null,
+        code: r['代码'] || null,
+        lock_days: lockDays,
+        lock_months: Math.floor(lockDays / 30),
+        first_knockout_ratio: Number(r['敲出']) || Number(r['首月的敲出比例']) || 0,
+        entry_price: Number(r['入场价']) || 0,
+        monthly_decrease: Number(r['每月递减']) || 0,
+        term: r['期限'] || null,
+        parachute: r['降落伞'] || null,
+        dividend_barrier: Number(r['派息障碍']) || 0,
+        monthly_coupon: Number(r['月票息']) || Number(r['月票息（税费后）']) || 0,
+        coupon_1st: Number(r['第一段票息']) || Number(r['第一段票息（税费后）']) || 0,
+        coupon_2nd: Number(r['第二段票息']) || Number(r['第二段票息（税费后）']) || 0,
+        coupon_3rd: Number(r['第三段票息']) || Number(r['第三段票息（税费后）']) || 0,
+        duration_months: Number(r['存续时间（月）']) || Number(r['存续时间']) || 0,
+        absolute_return: Number(r['绝对收益率']) || 0,
+        holiday_adjust: r['观察日节假日顺延/提前'] || r['观察日节假日顺延'] || null,
         raw: JSON.stringify(r),
       })
     }
 
     importProducts(productRows)
     console.log(`产品表同步完成，共写入 ${productRows.length} 条`)
+
+    // ── 同步后自动更新价格和观察记录 ──
+    try {
+      const ongoingProducts = queryOngoingProducts()
+      const ongoingCodes = [...new Set(ongoingProducts.map(p => p.code).filter(Boolean))]
+      if (ongoingCodes.length > 0) {
+        const { results: autoPrices, failed: autoFailed } = await fetchAllPrices(ongoingCodes)
+        const today = new Date().toISOString().slice(0, 10)
+        for (const code of ongoingCodes) {
+          if (autoPrices[code] !== undefined) upsertPrice(code, today, autoPrices[code])
+        }
+        let autoGen = 0
+        for (const product of ongoingProducts) {
+          if (!product.code || !product.issue_date || !product.entry_price || autoPrices[product.code] === undefined) continue
+          const obsDates = getObservationDates(product)
+          for (const { date, monthsSinceEntry } of obsDates) {
+            const evalResult = evaluateObservation(product, date, autoPrices[product.code], monthsSinceEntry)
+            evalResult.product_id = product.id
+            upsertObserv(evalResult)
+            autoGen++
+          }
+        }
+        console.log(`同步后自动更新：价格 ${ongoingCodes.length - (autoFailed?.length || 0)}/${ongoingCodes.length}，观察记录 ${autoGen} 条`)
+      }
+    } catch (autoErr) {
+      console.warn('[同步后自动更新观察记录失败，不影响主同步]', autoErr.message)
+    }
 
     // 读交易表
     const { id: txId, rows: txRowCount, cols: txColCount } = SHEETS_META['交易表']
@@ -573,7 +622,9 @@ app.post('/api/db/sync', async (req, res) => {
     importTransactions(transactionRows)
     console.log(`交易表同步完成，共写入 ${transactionRows.length} 条`)
 
-    res.json({ ok: true, productCount: productRows.length, transactionCount: transactionRows.length })
+    const totalCount = productRows.length + transactionRows.length
+    logSync(totalCount)
+    res.json({ ok: true, rowCount: totalCount, productCount: productRows.length, transactionCount: transactionRows.length })
   } catch (err) {
     const detail = err.response?.data || err.message
     console.error('同步失败:', JSON.stringify(detail))
@@ -989,9 +1040,15 @@ app.get('/api/drive/product-docs/sync-status', (req, res) => {
   }
 })
 
-app.listen(PORT, () => {
-  console.log(`飞书中转服务已启动: http://localhost:${PORT}`)
-  if (!FEISHU_APP_ID || FEISHU_APP_ID === 'your_app_id_here') {
-    console.warn('警告: 请先在 server/.env 中填写 FEISHU_APP_ID 和 FEISHU_APP_SECRET')
-  }
+// 先初始化数据库，再启动服务器
+initDatabase().then(() => {
+  app.listen(PORT, () => {
+    console.log(`飞书中转服务已启动: http://localhost:${PORT}`)
+    if (!FEISHU_APP_ID || FEISHU_APP_ID === 'your_app_id_here') {
+      console.warn('警告: 请先在 server/.env 中填写 FEISHU_APP_ID 和 FEISHU_APP_SECRET')
+    }
+  })
+}).catch(err => {
+  console.error('数据库初始化失败:', err)
+  process.exit(1)
 })
