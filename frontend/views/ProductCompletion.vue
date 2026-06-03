@@ -180,7 +180,7 @@ async function generateObservations() {
     const res = await fetch('/api/observations/generate', { method: 'POST' })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '生成失败')
-    successMsg.value = `生成完成：新增 ${data.generated} 条，更新 ${data.updated} 条`
+      successMsg.value = `生成完成：新增 ${data.generated} 条${data.skippedExisting ? '，已有 ' + data.skippedExisting + ' 条跳过' : ''}`
     await loadData()
   } catch (err) {
     errorMsg.value = err.message

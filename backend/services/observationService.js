@@ -1,3 +1,5 @@
+const { isTradingDay, adjustToNearestTradingDay } = require('./tradingCalendar')
+
 function monthsBetween(entryDate, obsDate) {
   const entry = new Date(entryDate)
   const obs = new Date(obsDate)
@@ -14,24 +16,10 @@ function addMonths(date, months) {
   return d.toISOString().slice(0, 10)
 }
 
-function isWeekend(dateStr) {
-  const day = new Date(dateStr).getDay()
-  return day === 0 || day === 6
-}
-
 function adjustForHoliday(dateStr, holidayAdjust) {
-  if (!isWeekend(dateStr)) return dateStr
-  const d = new Date(dateStr)
-  if (holidayAdjust === '提前') {
-    while (isWeekend(d.toISOString().slice(0, 10))) {
-      d.setDate(d.getDate() - 1)
-    }
-  } else {
-    while (isWeekend(d.toISOString().slice(0, 10))) {
-      d.setDate(d.getDate() + 1)
-    }
-  }
-  return d.toISOString().slice(0, 10)
+  if (isTradingDay(dateStr)) return dateStr
+  const direction = holidayAdjust === '提前' ? 'advance' : 'postpone'
+  return adjustToNearestTradingDay(dateStr, direction)
 }
 
 function getObservationDates(product) {
@@ -87,7 +75,7 @@ function evaluateObservation(product, obsDate, underlyingPrice, monthsSinceEntry
 }
 
 module.exports = {
-  monthsBetween, addMonths, isWeekend, adjustForHoliday,
+  monthsBetween, addMonths, adjustForHoliday,
   getObservationDates, computeKnockoutPrice, computeDividendLine,
   evaluateObservation
 }

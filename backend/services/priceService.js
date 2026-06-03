@@ -20,6 +20,13 @@ function resolveSecId(code) {
   return `${market}.${parsed.num}`
 }
 
+function normalizePrice(rawPrice) {
+  if (typeof rawPrice !== 'number' || isNaN(rawPrice)) return null
+  if (rawPrice > 100000) return rawPrice / 100
+  if (rawPrice > 10000 && Number.isInteger(rawPrice)) return rawPrice / 100
+  return rawPrice
+}
+
 async function fetchLatestPrice(code, retries = 3) {
   const secid = resolveSecId(code)
   if (!secid) throw new Error(`Invalid code: ${code}`)
@@ -46,7 +53,9 @@ async function fetchLatestPrice(code, retries = 3) {
         throw new Error(`No price data for ${code}: ${JSON.stringify(data)}`)
       }
 
-      return data.data.f43 / 100
+      const price = normalizePrice(data.data.f43)
+      if (price === null) throw new Error(`Invalid price for ${code}: ${data.data.f43}`)
+      return price
     } catch (err) {
       if (attempt === retries) throw err
       const delay = attempt * 1000
@@ -56,21 +65,38 @@ async function fetchLatestPrice(code, retries = 3) {
   }
 }
 
-async function fetchAllPrices(codes) {
-  const results = {}
-  const failed = []
-  for (const code of codes) {
+async function fetchBatch(codes) {
+  return Promise.all(codes.map(async (code) => {
     try {
-      results[code] = await fetchLatestPrice(code)
+      const price = await fetchLatestPrice(code)
+      return { code, price, error: null }
     } catch (err) {
       console.error(`Failed to fetch price for ${code}:`, err.message)
-      failed.push(code)
+      return { code, price: null, error: err.message }
     }
-    if (codes.length > 1) {
-      await new Promise(r => setTimeout(r, 500))
+  }))
+}
+
+async function fetchAllPrices(codes, batchSize = 3) {
+  const results = {}
+  const failed = []
+
+  for (let i = 0; i < codes.length; i += batchSize) {
+    const batch = codes.slice(i, i + batchSize)
+    const batchResults = await fetchBatch(batch)
+    for (const r of batchResults) {
+      if (r.price !== null) {
+        results[r.code] = r.price
+      } else {
+        failed.push(r.code)
+      }
+    }
+    if (i + batchSize < codes.length) {
+      await new Promise(r => setTimeout(r, 300))
     }
   }
+
   return { results, failed }
 }
 
-module.exports = { fetchLatestPrice, fetchAllPrices, resolveSecId, parseCode }
+module.exports = { fetchLatestPrice, fetchAllPrices, resolveSecId, parseCode, normalizePrice }

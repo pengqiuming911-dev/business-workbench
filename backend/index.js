@@ -1,4 +1,4 @@
-require('dotenv').config()
+﻿require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const axios = require('axios')
@@ -599,14 +599,19 @@ app.post('/api/db/sync', async (req, res) => {
         for (const product of ongoingProducts) {
           if (!product.code || !product.issue_date || !product.entry_price || autoPrices[product.code] === undefined) continue
           const obsDates = getObservationDates(product)
+          const existingObs = queryObservationsByProduct(product.id)
+          const existingMap = new Map(existingObs.map(o => [o.observation_date, o]))
           for (const { date, monthsSinceEntry } of obsDates) {
-            const evalResult = evaluateObservation(product, date, autoPrices[product.code], monthsSinceEntry)
+            if (existingMap.has(date)) continue
+            const cachedPrice = queryPriceByDate(product.code, date)
+            const priceForDate = cachedPrice ? cachedPrice.price : autoPrices[product.code]
+            const evalResult = evaluateObservation(product, date, priceForDate, monthsSinceEntry)
             evalResult.product_id = product.id
             upsertObserv(evalResult)
             autoGen++
           }
         }
-        console.log(`同步后自动更新：价格 ${ongoingCodes.length - (autoFailed?.length || 0)}/${ongoingCodes.length}，观察记录 ${autoGen} 条`)
+        console.log(`同步后自动更新：价格 ${ongoingCodes.length - (autoFailed?.length || 0)}/${ongoingCodes.length}，新增观察记录 ${autoGen} 条`)
       }
     } catch (autoErr) {
       console.warn('[同步后自动更新观察记录失败，不影响主同步]', autoErr.message)
@@ -1058,7 +1063,7 @@ app.get('/api/drive/product-docs/sync-status', (req, res) => {
 // ─────────────────────────────────────────
 app.get('/api/observations', (req, res) => {
   try {
-    const { search } = req.query
+    const { search, code } = req.query
     let products = queryOngoingProducts()
     if (search) {
       const q = search.toLowerCase()
@@ -1066,6 +1071,10 @@ app.get('/api/observations', (req, res) => {
         (p.name && p.name.toLowerCase().includes(q)) ||
         p.id.toLowerCase().includes(q)
       )
+    }
+    if (code) {
+      const codeLower = code.toLowerCase()
+      products = products.filter(p => p.code && p.code.toLowerCase().includes(codeLower))
     }
 
     const result = products.map(p => {
@@ -1110,7 +1119,8 @@ app.get('/api/observations', (req, res) => {
 
 // ─────────────────────────────────────────
 // POST /api/observations/generate
-// 生成/更新观察记录（获取最新价格 + 计算结果）
+// 生成观察记录（获取最新价格 + 计算结果）
+// 已有观察记录且包含价格时跳过，新观察日优先使用缓存的历史价格
 // ─────────────────────────────────────────
 app.post('/api/observations/generate', async (req, res) => {
   try {
@@ -1123,7 +1133,6 @@ app.post('/api/observations/generate', async (req, res) => {
     const { results: prices, failed } = await fetchAllPrices(codes)
     console.log(`[generate] 价格获取完成: 成功 ${Object.keys(prices).length}, 失败 ${failed.length}`)
     if (failed.length > 0) console.log(`[generate] 失败的代码:`, failed)
-    console.log(`[generate] 获取到的价格:`, JSON.stringify(prices))
 
     const today = new Date().toISOString().slice(0, 10)
     for (const code of codes) {
@@ -1133,7 +1142,7 @@ app.post('/api/observations/generate', async (req, res) => {
     }
 
     let generated = 0
-    let updated = 0
+    let skippedExisting = 0
     let skippedNoCode = 0
     let skippedNoPrice = 0
     let skippedNoDates = 0
@@ -1145,30 +1154,33 @@ app.post('/api/observations/generate', async (req, res) => {
       }
 
       const obsDates = getObservationDates(product)
-      const latestPrice = prices[product.code] || null
-
       if (obsDates.length === 0) { skippedNoDates++; continue }
-      if (latestPrice === null) { skippedNoPrice++; continue }
 
-      console.log(`[generate] ${product.id} (${product.name}): ${obsDates.length} 个观察日, 价格=${latestPrice}`)
-
+      const latestPrice = prices[product.code] || null
       const existingObs = queryObservationsByProduct(product.id)
-      const existingDates = new Set(existingObs.map(o => o.observation_date))
+      const existingMap = new Map(existingObs.map(o => [o.observation_date, o]))
 
       for (const { date, monthsSinceEntry } of obsDates) {
-        const evalResult = evaluateObservation(product, date, latestPrice, monthsSinceEntry)
+        if (existingMap.has(date)) {
+          skippedExisting++
+          continue
+        }
+        const cachedPrice = queryPriceByDate(product.code, date)
+        const priceForDate = cachedPrice ? cachedPrice.price : latestPrice
+        if (priceForDate === null || priceForDate === undefined) {
+          skippedNoPrice++
+          continue
+        }
+
+        const evalResult = evaluateObservation(product, date, priceForDate, monthsSinceEntry)
         evalResult.product_id = product.id
-        evalResult.underlying_price = latestPrice
-
-        if (existingDates.has(date)) updated++
-        else generated++
-
         upsertObserv(evalResult)
+        generated++
       }
     }
 
-    console.log(`[generate] 结果: 新增=${generated}, 更新=${updated}, 跳过(无code/date/price)=${skippedNoCode}, 跳过(无价格)=${skippedNoPrice}, 跳过(无观察日)=${skippedNoDates}`)
-    res.json({ ok: true, generated, updated, priceRefreshed: codes.length, priceFailed: failed.length })
+    console.log(`[generate] 结果: 新增=${generated}, 跳过(已有)=${skippedExisting}, 跳过(无code)=${skippedNoCode}, 跳过(无价格)=${skippedNoPrice}, 跳过(无观察日)=${skippedNoDates}`)
+    res.json({ ok: true, generated, skippedExisting, priceRefreshed: codes.length, priceFailed: failed.length })
   } catch (err) {
     console.error('生成观察记录失败:', err)
     res.status(500).json({ error: err.message })
@@ -1177,7 +1189,7 @@ app.post('/api/observations/generate', async (req, res) => {
 
 // ─────────────────────────────────────────
 // POST /api/observations/refresh-prices
-// 仅刷新标的价格
+// 仅刷新标的价格：更新今日观察日使用最新价格，历史观察日使用对应日期的缓存价格
 // ─────────────────────────────────────────
 app.post('/api/observations/refresh-prices', async (req, res) => {
   try {
@@ -1195,20 +1207,24 @@ app.post('/api/observations/refresh-prices', async (req, res) => {
       }
     }
 
+    let updated = 0
     for (const product of products) {
       if (!product.code || prices[product.code] === undefined) continue
+      const latestPrice = prices[product.code]
       const productObs = queryObservationsByProduct(product.id)
       for (const obs of productObs) {
-        const latestPrice = prices[product.code]
+        const cachedPrice = queryPriceByDate(product.code, obs.observation_date)
+        const priceForObs = cachedPrice ? cachedPrice.price : latestPrice
         const evalResult = evaluateObservation(
-          product, obs.observation_date, latestPrice, obs.months_since_entry
+          product, obs.observation_date, priceForObs, obs.months_since_entry
         )
         evalResult.product_id = product.id
         upsertObserv(evalResult)
+        updated++
       }
     }
 
-    res.json({ ok: true, refreshed, failed: failed.length })
+    res.json({ ok: true, refreshed, updated, failed: failed.length })
   } catch (err) {
     console.error('刷新价格失败:', err)
     res.status(500).json({ error: err.message })
