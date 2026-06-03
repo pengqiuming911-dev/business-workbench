@@ -1107,8 +1107,11 @@ app.post('/api/observations/generate', async (req, res) => {
     const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
     console.log(`[generate] 标的代码(去重): ${codes.join(', ')}`)
 
+    console.log(`[generate] 开始获取 ${codes.length} 个标的价格...`)
     const { results: prices, failed } = await fetchAllPrices(codes)
-    console.log(`[generate] 价格获取: 成功 ${Object.keys(prices).length}, 失败 ${failed.length}`)
+    console.log(`[generate] 价格获取完成: 成功 ${Object.keys(prices).length}, 失败 ${failed.length}`)
+    if (failed.length > 0) console.log(`[generate] 失败的代码:`, failed)
+    console.log(`[generate] 获取到的价格:`, JSON.stringify(prices))
 
     const today = new Date().toISOString().slice(0, 10)
     for (const code of codes) {
