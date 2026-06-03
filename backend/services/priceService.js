@@ -1,5 +1,3 @@
-const axios = require('axios')
-
 const EASTMONEY_API = 'https://push2.eastmoney.com/api/qt/stock/get'
 
 function parseCode(rawCode) {
@@ -22,29 +20,40 @@ function resolveSecId(code) {
   return `${market}.${parsed.num}`
 }
 
-async function fetchLatestPrice(code) {
+async function fetchLatestPrice(code, retries = 3) {
   const secid = resolveSecId(code)
   if (!secid) throw new Error(`Invalid code: ${code}`)
 
-  const res = await axios.get(EASTMONEY_API, {
-    params: {
-      secid,
-      fields: 'f43,f44,f45,f46,f47,f170'
-    },
-    timeout: 5000,
-    headers: {
-      'User-Agent': 'Mozilla/5.0',
-      'Referer': 'https://quote.eastmoney.com/'
+  const url = `${EASTMONEY_API}?secid=${encodeURIComponent(secid)}&fields=f43,f44,f45,f46,f47,f170`
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 5000)
+
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Referer': 'https://quote.eastmoney.com/'
+        },
+        signal: controller.signal
+      })
+      clearTimeout(timeout)
+
+      const data = await res.json()
+
+      if (!data || !data.data || data.data.f43 === undefined) {
+        throw new Error(`No price data for ${code}: ${JSON.stringify(data)}`)
+      }
+
+      return data.data.f43 / 100
+    } catch (err) {
+      if (attempt === retries) throw err
+      const delay = attempt * 1000
+      console.log(`[priceService] Retry ${attempt}/${retries} for ${code} after ${delay}ms...`)
+      await new Promise(r => setTimeout(r, delay))
     }
-  })
-
-  if (!res.data || !res.data.data || res.data.data.f43 === undefined) {
-    throw new Error(`No price data for ${code}: ${JSON.stringify(res.data)}`)
   }
-
-  const rawPrice = res.data.data.f43
-  const price = rawPrice / 100
-  return price
 }
 
 async function fetchAllPrices(codes) {
@@ -56,6 +65,9 @@ async function fetchAllPrices(codes) {
     } catch (err) {
       console.error(`Failed to fetch price for ${code}:`, err.message)
       failed.push(code)
+    }
+    if (codes.length > 1) {
+      await new Promise(r => setTimeout(r, 500))
     }
   }
   return { results, failed }
