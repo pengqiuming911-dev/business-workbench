@@ -1103,9 +1103,12 @@ app.get('/api/observations', (req, res) => {
 app.post('/api/observations/generate', async (req, res) => {
   try {
     const products = queryOngoingProducts()
+    console.log(`[generate] 存续产品数量: ${products.length}`)
     const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
+    console.log(`[generate] 标的代码(去重): ${codes.join(', ')}`)
 
     const { results: prices, failed } = await fetchAllPrices(codes)
+    console.log(`[generate] 价格获取: 成功 ${Object.keys(prices).length}, 失败 ${failed.length}`)
 
     const today = new Date().toISOString().slice(0, 10)
     for (const code of codes) {
@@ -1116,23 +1119,31 @@ app.post('/api/observations/generate', async (req, res) => {
 
     let generated = 0
     let updated = 0
+    let skippedNoCode = 0
+    let skippedNoPrice = 0
+    let skippedNoDates = 0
 
     for (const product of products) {
-      if (!product.code || !product.issue_date || !product.entry_price) continue
+      if (!product.code || !product.issue_date || !product.entry_price) {
+        skippedNoCode++
+        continue
+      }
 
       const obsDates = getObservationDates(product)
       const latestPrice = prices[product.code] || null
+
+      if (obsDates.length === 0) { skippedNoDates++; continue }
+      if (latestPrice === null) { skippedNoPrice++; continue }
+
+      console.log(`[generate] ${product.id} (${product.name}): ${obsDates.length} 个观察日, 价格=${latestPrice}`)
 
       const existingObs = queryObservationsByProduct(product.id)
       const existingDates = new Set(existingObs.map(o => o.observation_date))
 
       for (const { date, monthsSinceEntry } of obsDates) {
-        const priceForDate = latestPrice
-        if (priceForDate === null) continue
-
-        const evalResult = evaluateObservation(product, date, priceForDate, monthsSinceEntry)
+        const evalResult = evaluateObservation(product, date, latestPrice, monthsSinceEntry)
         evalResult.product_id = product.id
-        evalResult.underlying_price = priceForDate
+        evalResult.underlying_price = latestPrice
 
         if (existingDates.has(date)) updated++
         else generated++
@@ -1141,6 +1152,7 @@ app.post('/api/observations/generate', async (req, res) => {
       }
     }
 
+    console.log(`[generate] 结果: 新增=${generated}, 更新=${updated}, 跳过(无code/date/price)=${skippedNoCode}, 跳过(无价格)=${skippedNoPrice}, 跳过(无观察日)=${skippedNoDates}`)
     res.json({ ok: true, generated, updated, priceRefreshed: codes.length, priceFailed: failed.length })
   } catch (err) {
     console.error('生成观察记录失败:', err)

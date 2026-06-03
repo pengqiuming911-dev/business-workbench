@@ -506,6 +506,7 @@ function upsertObserv(row) {
       row.months_since_entry, new Date().toISOString()
     ])
   }
+  saveDatabase()
 }
 
 function queryObservationsByProduct(productId) {
