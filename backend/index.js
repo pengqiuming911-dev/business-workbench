@@ -533,6 +533,18 @@ app.post('/api/db/sync', async (req, res) => {
     const prodRows = await readSheet(prodId, prodRowCount, prodColCount)
     console.log(`产品表读取完成：${prodRows.length} 行`)
 
+    function findField(r, patterns) {
+      for (const pattern of patterns) {
+        const normalized = pattern.replace(/\s+/g, '')
+        for (const key of Object.keys(r)) {
+          if (key.replace(/\s+/g, '') === normalized || key.replace(/\s+/g, '').includes(normalized)) {
+            return r[key]
+          }
+        }
+      }
+      return undefined
+    }
+
     const productRows = []
     for (const r of prodRows) {
       const flightId = r['航班编号']
@@ -553,19 +565,19 @@ app.post('/api/db/sync', async (req, res) => {
         code: r['代码'] || null,
         lock_days: lockDays,
         lock_months: Math.floor(lockDays / 30),
-        first_knockout_ratio: Number(r['敲出']) || Number(r['首月的敲出比例']) || 0,
+        first_knockout_ratio: Number(findField(r, ['首月的敲出比例', '敲出比例'])) || 0,
         entry_price: Number(r['入场价']) || 0,
-        monthly_decrease: Number(r['每月递减']) || 0,
-        term: r['期限'] || null,
+        monthly_decrease: Number(findField(r, ['每月递减'])) || 0,
+        term: findField(r, ['期限']) || null,
         parachute: r['降落伞'] || null,
-        dividend_barrier: Number(r['派息障碍']) || 0,
-        monthly_coupon: Number(r['月票息']) || Number(r['月票息（税费后）']) || 0,
-        coupon_1st: Number(r['第一段票息']) || Number(r['第一段票息（税费后）']) || 0,
-        coupon_2nd: Number(r['第二段票息']) || Number(r['第二段票息（税费后）']) || 0,
-        coupon_3rd: Number(r['第三段票息']) || Number(r['第三段票息（税费后）']) || 0,
-        duration_months: Number(r['存续时间（月）']) || Number(r['存续时间']) || 0,
-        absolute_return: Number(r['绝对收益率']) || 0,
-        holiday_adjust: r['观察日节假日顺延/提前'] || r['观察日节假日顺延'] || null,
+        dividend_barrier: Number(findField(r, ['派息障碍'])) || 0,
+        monthly_coupon: Number(findField(r, ['月票息'])) || 0,
+        coupon_1st: Number(findField(r, ['第一段票息'])) || 0,
+        coupon_2nd: Number(findField(r, ['第二段票息'])) || 0,
+        coupon_3rd: Number(findField(r, ['第三段票息'])) || 0,
+        duration_months: Number(findField(r, ['存续时间'])) || 0,
+        absolute_return: Number(findField(r, ['绝对收益率'])) || 0,
+        holiday_adjust: findField(r, ['观察日节假日']) || null,
         raw: JSON.stringify(r),
       })
     }
