@@ -2,7 +2,7 @@ const EASTMONEY_API = 'https://push2.eastmoney.com/api/qt/stock/get'
 
 function parseCode(rawCode) {
   if (!rawCode) return null
-  const match = rawCode.match(/(\d{6})\.\s*(SH|SZ|sh|sz)/i)
+  const match = rawCode.match(/(\d{6})\s*[.．·]\s*(SH|SZ|sh|sz)/i)
   if (match) {
     return { num: match[1], exchange: match[2].toUpperCase() }
   }
@@ -16,15 +16,19 @@ function parseCode(rawCode) {
 function resolveSecId(code) {
   const parsed = parseCode(code)
   if (!parsed) return null
-  const market = parsed.exchange === 'SH' ? 1 : 0
-  return `${market}.${parsed.num}`
-}
-
-function normalizePrice(rawPrice) {
-  if (typeof rawPrice !== 'number' || isNaN(rawPrice)) return null
-  if (rawPrice > 100000) return rawPrice / 100
-  if (rawPrice > 10000 && Number.isInteger(rawPrice)) return rawPrice / 100
-  return rawPrice
+  const num = parsed.num
+  const exchange = parsed.exchange
+  let market
+  if (exchange === 'SH') {
+    if (num.startsWith('0') || num.startsWith('5')) {
+      market = 1
+    } else {
+      market = 0
+    }
+  } else {
+    market = 0
+  }
+  return `${market}.${num}`
 }
 
 async function fetchLatestPrice(code, retries = 3) {
@@ -53,9 +57,7 @@ async function fetchLatestPrice(code, retries = 3) {
         throw new Error(`No price data for ${code}: ${JSON.stringify(data)}`)
       }
 
-      const price = normalizePrice(data.data.f43)
-      if (price === null) throw new Error(`Invalid price for ${code}: ${data.data.f43}`)
-      return price
+      return data.data.f43 / 100
     } catch (err) {
       if (attempt === retries) throw err
       const delay = attempt * 1000
@@ -99,4 +101,4 @@ async function fetchAllPrices(codes, batchSize = 3) {
   return { results, failed }
 }
 
-module.exports = { fetchLatestPrice, fetchAllPrices, resolveSecId, parseCode, normalizePrice }
+module.exports = { fetchLatestPrice, fetchAllPrices, resolveSecId, parseCode }

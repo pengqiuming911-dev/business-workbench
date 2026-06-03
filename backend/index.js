@@ -545,12 +545,26 @@ app.post('/api/db/sync', async (req, res) => {
       return undefined
     }
 
+    function firstUnnamedNumericField(r) {
+      for (const [key, val] of Object.entries(r)) {
+        if (key === '' || key === '[object Object]' || key.includes('[object')) {
+          const num = Number(val)
+          if (!isNaN(num) && typeof val === 'number') {
+            return num
+          }
+        }
+      }
+      return undefined
+    }
+
     const productRows = []
     for (const r of prodRows) {
       const flightId = r['航班编号']
       if (!flightId) continue
       const isMain = String(r['是否主产品'] || r[' 是否主产品'] || '').trim() === '是' ? 1 : 0
       const lockDays = Number(r['锁定期']) || 0
+      const namedKO = findField(r, ['首月的敲出比例', '敲出比例'])
+      const koRatio = namedKO !== undefined ? Number(namedKO) : (firstUnnamedNumericField(r) || 0)
       productRows.push({
         id: String(flightId).trim(),
         name: r['产品名称'] || null,
@@ -565,7 +579,7 @@ app.post('/api/db/sync', async (req, res) => {
         code: r['代码'] || null,
         lock_days: lockDays,
         lock_months: Math.floor(lockDays / 30),
-        first_knockout_ratio: Number(findField(r, ['首月的敲出比例', '敲出比例'])) || 0,
+        first_knockout_ratio: koRatio,
         entry_price: Number(r['入场价']) || 0,
         monthly_decrease: Number(findField(r, ['每月递减'])) || 0,
         term: findField(r, ['期限']) || null,
@@ -1110,6 +1124,57 @@ app.get('/api/observations', (req, res) => {
     const lastRecord = getLastObservationUpdate()
     res.json({
       products: result,
+      lastUpdated: lastRecord ? lastRecord.updated_at : null,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/observations/today', (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const products = queryOngoingProducts()
+
+    const result = products.map(p => {
+      const obsDates = getObservationDates(p)
+      const hasObservationToday = obsDates.some(d => d.date === today)
+
+      if (!hasObservationToday) return null
+
+      const observations = queryObservationsByProduct(p.id)
+      return {
+        id: p.id,
+        name: p.name,
+        manager: p.manager,
+        holding_status: p.holding_status,
+        code: p.code,
+        entry_price: p.entry_price,
+        first_knockout_ratio: p.first_knockout_ratio,
+        lock_months: p.lock_months,
+        monthly_decrease: p.monthly_decrease,
+        issue_date: p.issue_date,
+        subscribe_amount: p.subscribe_amount,
+        dividend_barrier: p.dividend_barrier,
+        holiday_adjust: p.holiday_adjust,
+        lock_days: p.lock_days,
+        duration_months: p.duration_months,
+        observations: observations.map(o => ({
+          date: o.observation_date,
+          knockout_price: o.knockout_price,
+          dividend_line: o.dividend_line,
+          underlying_price: o.underlying_price,
+          is_knocked_out: o.is_knocked_out,
+          is_dividend: o.is_dividend,
+          months_since_entry: o.months_since_entry,
+        })),
+      }
+    }).filter(Boolean)
+
+    const lastRecord = getLastObservationUpdate()
+    res.json({
+      products: result,
+      today: today,
       lastUpdated: lastRecord ? lastRecord.updated_at : null,
     })
   } catch (err) {

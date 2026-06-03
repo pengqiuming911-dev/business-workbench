@@ -43,6 +43,7 @@ function getObservationDates(product) {
 }
 
 function computeKnockoutPrice(product, monthsSinceEntry) {
+  if (!product.first_knockout_ratio) return null
   if (monthsSinceEntry < (product.lock_months || 0)) return null
   const currentRatio = product.first_knockout_ratio
     - (monthsSinceEntry - product.lock_months) * product.monthly_decrease
@@ -58,7 +59,7 @@ function evaluateObservation(product, obsDate, underlyingPrice, monthsSinceEntry
   const isDividend = underlyingPrice > dividendLine ? '是' : '否'
 
   const knockoutPrice = computeKnockoutPrice(product, monthsSinceEntry)
-  let isKnockedOut = '--'
+  let isKnockedOut = '不观察'
   if (knockoutPrice !== null) {
     isKnockedOut = underlyingPrice > knockoutPrice ? '是' : '否'
   }
