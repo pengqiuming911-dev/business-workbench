@@ -473,7 +473,7 @@ function getProductDocsByMonth(month) {
 // ──── 存续产品查询 ────
 
 function queryOngoingProducts() {
-  return queryAll(`SELECT * FROM products WHERE holding_status LIKE '%持有%'`)
+  return queryAll(`SELECT * FROM products WHERE holding_status LIKE '%存续%' OR holding_status LIKE '%持有%'`)
 }
 
 // ──── 观察记录表 ────

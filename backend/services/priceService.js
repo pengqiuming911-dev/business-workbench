@@ -2,16 +2,24 @@ const axios = require('axios')
 
 const EASTMONEY_API = 'https://push2.eastmoney.com/api/qt/stock/get'
 
+function parseCode(rawCode) {
+  if (!rawCode) return null
+  const match = rawCode.match(/(\d{6})\.\s*(SH|SZ|sh|sz)/i)
+  if (match) {
+    return { num: match[1], exchange: match[2].toUpperCase() }
+  }
+  const cleaned = rawCode.trim().toLowerCase()
+  if (/^(sh|sz)\d{6}/.test(cleaned)) {
+    return { num: cleaned.slice(2), exchange: cleaned.slice(0, 2).toUpperCase() }
+  }
+  return null
+}
+
 function resolveSecId(code) {
-  if (!code) return null
-  const cleaned = code.trim().toLowerCase()
-  if (cleaned.startsWith('sh') || cleaned.startsWith('1.') || cleaned.startsWith('5')) {
-    return `1.${cleaned.replace(/^(sh|1\.)/, '')}`
-  }
-  if (cleaned.startsWith('sz') || cleaned.startsWith('0.') || cleaned.startsWith('3')) {
-    return `0.${cleaned.replace(/^(sz|0\.)/, '')}`
-  }
-  return `1.${cleaned}`
+  const parsed = parseCode(code)
+  if (!parsed) return null
+  const market = parsed.exchange === 'SH' ? 1 : 0
+  return `${market}.${parsed.num}`
 }
 
 async function fetchLatestPrice(code) {
@@ -35,7 +43,7 @@ async function fetchLatestPrice(code) {
   }
 
   const rawPrice = res.data.data.f43
-  const price = rawPrice > 10000 ? rawPrice / 100 : rawPrice
+  const price = rawPrice / 100
   return price
 }
 
@@ -53,4 +61,4 @@ async function fetchAllPrices(codes) {
   return { results, failed }
 }
 
-module.exports = { fetchLatestPrice, fetchAllPrices, resolveSecId }
+module.exports = { fetchLatestPrice, fetchAllPrices, resolveSecId, parseCode }
