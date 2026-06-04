@@ -57,7 +57,10 @@ async function fetchLatestPrice(code, retries = 3) {
         throw new Error(`No price data for ${code}: ${JSON.stringify(data)}`)
       }
 
-      return data.data.f43 / 100
+      const raw = data.data.f43
+      const parsed = parseCode(code)
+      const isETF = parsed && parsed.num.startsWith('513')
+      return isETF ? raw / 1000 : raw / 100
     } catch (err) {
       if (attempt === retries) throw err
       const delay = attempt * 1000
