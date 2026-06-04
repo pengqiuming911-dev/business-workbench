@@ -481,6 +481,18 @@ async function readSheet(sheetId, rowCount, colCount) {
     return s || 'A'
   }
 
+  function cellToString(v) {
+    if (v == null) return ''
+    if (typeof v === 'string') return v.trim()
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v).trim()
+    if (Array.isArray(v)) return v.map(cellToString).join('').trim()
+    if (typeof v === 'object') {
+      if (v.text) return String(v.text).trim()
+      if (v.elements) return v.elements.map(cellToString).join('').trim()
+    }
+    return String(v).trim()
+  }
+
   const BATCH = 500
   let allValues = null
 
@@ -488,7 +500,7 @@ async function readSheet(sheetId, rowCount, colCount) {
     const endRow = Math.min(startRow + BATCH - 1, rowCount + 1)
     const range = `${sheetId}!A${startRow}:${colLetter(colCount)}${endRow}`
     const valRes = await axios.get(
-      `https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/${SHEET_TOKEN}/values/${encodeURIComponent(range)}`,
+      `https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/${SHEET_TOKEN}/values/${encodeURIComponent(range)}?valueRenderOption=UnformattedValue`,
       { headers: { Authorization: `Bearer ${userToken}` } }
     )
     if (valRes.data.code !== 0) {
@@ -500,7 +512,7 @@ async function readSheet(sheetId, rowCount, colCount) {
   }
 
   if (!allValues || allValues.length === 0) return []
-  const headers = allValues[0].map(h => (h == null ? '' : String(h).trim()))
+  const headers = allValues[0].map(cellToString)
   const rows = []
   for (let i = 1; i < allValues.length; i++) {
     const row = allValues[i]
@@ -545,26 +557,20 @@ app.post('/api/db/sync', async (req, res) => {
       return undefined
     }
 
-    function firstUnnamedNumericField(r) {
-      for (const [key, val] of Object.entries(r)) {
-        if (key === '' || key === '[object Object]' || key.includes('[object')) {
-          const num = Number(val)
-          if (!isNaN(num) && typeof val === 'number') {
-            return num
-          }
-        }
-      }
-      return undefined
-    }
-
     const productRows = []
     for (const r of prodRows) {
       const flightId = r['航班编号']
       if (!flightId) continue
       const isMain = String(r['是否主产品'] || r[' 是否主产品'] || '').trim() === '是' ? 1 : 0
       const lockDays = Number(r['锁定期']) || 0
-      const namedKO = findField(r, ['首月的敲出比例', '敲出比例'])
-      const koRatio = namedKO !== undefined ? Number(namedKO) : (firstUnnamedNumericField(r) || 0)
+      const rawKO = r['敲出']
+      let firstKO = 0
+      if (rawKO != null) {
+        const s = String(rawKO)
+        if (s.match(/^\d/) && !s.includes('*')) {
+          firstKO = Number(rawKO) || 0
+        }
+      }
       productRows.push({
         id: String(flightId).trim(),
         name: r['产品名称'] || null,
@@ -579,7 +585,7 @@ app.post('/api/db/sync', async (req, res) => {
         code: r['代码'] || null,
         lock_days: lockDays,
         lock_months: Math.floor(lockDays / 30),
-        first_knockout_ratio: koRatio,
+        first_knockout_ratio: firstKO,
         entry_price: Number(r['入场价']) || 0,
         monthly_decrease: Number(findField(r, ['每月递减'])) || 0,
         term: findField(r, ['期限']) || null,

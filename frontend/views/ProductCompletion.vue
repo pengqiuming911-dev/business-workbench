@@ -67,14 +67,14 @@
                     <td class="col-left">{{ p.manager }}</td>
                     <td class="col-left"><span class="status-badge">{{ p.holding_status }}</span></td>
                     <td class="col-left code-cell">{{ p.code }}</td>
-                    <td class="col-right">{{ formatPrice(p.entry_price) }}</td>
+                    <td class="col-right">{{ formatPrice(p.entry_price, p) }}</td>
                     <td class="col-left">{{ p.issue_date || '--' }}</td>
                     <td class="col-right">{{ computeMonthsSince(p) }}</td>
                     <td class="col-right">{{ p.lock_months || '--' }}</td>
                     <td class="col-left">{{ latestObs(p)?.date || '--' }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.underlying_price) }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.knockout_price) }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.dividend_line) }}</td>
+                    <td class="col-right">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
+                    <td class="col-right">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
+                    <td class="col-right">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
                     <td class="col-center" :class="knockoutClass(latestObs(p)?.is_knocked_out)">
                       {{ latestObs(p)?.is_knocked_out || '--' }}
                     </td>
@@ -99,9 +99,9 @@
                         <tbody>
                           <tr v-for="obs in p.observations" :key="obs.date">
                             <td>{{ obs.date }}</td>
-                            <td>{{ formatPrice(obs.underlying_price) }}</td>
-                            <td>{{ formatPrice(obs.knockout_price) }}</td>
-                            <td>{{ formatPrice(obs.dividend_line) }}</td>
+                            <td>{{ formatPrice(obs.underlying_price, p) }}</td>
+                            <td>{{ formatPrice(obs.knockout_price, p) }}</td>
+                            <td>{{ formatPrice(obs.dividend_line, p) }}</td>
                             <td :class="knockoutClass(obs.is_knocked_out)">{{ obs.is_knocked_out }}</td>
                             <td :class="dividendClass(obs.is_dividend)">{{ obs.is_dividend }}</td>
                           </tr>
@@ -153,11 +153,11 @@
                   <td class="col-left">{{ p.name }}</td>
                   <td class="col-left">{{ p.manager }}</td>
                   <td class="col-left code-cell">{{ p.code }}</td>
-                  <td class="col-right">{{ formatPrice(p.entry_price) }}</td>
+                  <td class="col-right">{{ formatPrice(p.entry_price, p) }}</td>
                   <td class="col-right">{{ computeMonthsSince(p) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.underlying_price) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.knockout_price) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.dividend_line) }}</td>
+                  <td class="col-right">{{ formatPrice(todayObs(p)?.underlying_price, p) }}</td>
+                  <td class="col-right">{{ formatPrice(todayObs(p)?.knockout_price, p) }}</td>
+                  <td class="col-right">{{ formatPrice(todayObs(p)?.dividend_line, p) }}</td>
                   <td class="col-center" :class="knockoutClass(todayObs(p)?.is_knocked_out)">
                     {{ todayObs(p)?.is_knocked_out || '--' }}
                   </td>
@@ -294,9 +294,15 @@ function computeMonthsSince(product) {
   return (now.getFullYear() - entry.getFullYear()) * 12 + (now.getMonth() - entry.getMonth())
 }
 
-function formatPrice(val) {
+function isETF(product) {
+  if (!product) return false
+  return (product.name && product.name.includes('恒科ETF')) || (product.code && product.code.includes('恒科ETF'))
+}
+
+function formatPrice(val, product) {
   if (val === null || val === undefined) return '--'
-  return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const decimals = isETF(product) ? 3 : 2
+  return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 }
 
 function knockoutClass(status) {
