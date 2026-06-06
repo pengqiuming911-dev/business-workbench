@@ -1,5 +1,8 @@
 <template>
-  <SubPageLayout title="名义购买人 × 私募管理人">
+  <SubPageLayout
+    title="名义购买人 × 私募管理人"
+    description="一次输入多个名义购买人，查看每个人分别在哪些私募管理人处购买过产品。"
+  >
     <div class="section">
       <p class="desc">一次输入多个名义购买人，查看每个人分别在哪些私募管理人处买过产品，仅展示姓名与私募管理人名称。</p>
 
@@ -51,20 +54,8 @@ function query() {
 </script>
 
 <style scoped>
-.desc { color: #6B5C4E; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
-.panel { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #E8DDD0; }
-.panel-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.form-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.form-row.align-top { align-items: flex-start; }
-.form-row label { font-size: 13px; white-space: nowrap; width: 90px; line-height: 1.6; }
-.hint { font-size: 11px; color: #aaa; }
-.input { flex: 1; border: 1px solid #E8DDD0; border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none; background: #fff; }
-.textarea { flex: 1; border: 1px solid #E8DDD0; border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none; resize: vertical; font-family: inherit; background: #fff; }
-.input:focus, .textarea:focus { border-color: #D97757; }
-.btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; }
-.btn-primary { background: #D97757; color: #fff; }
-.result-panel { background: #fff; border-radius: 12px; padding: 24px; border: 1px solid #E8DDD0; }
-.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.table th, .table td { padding: 10px 14px; border-bottom: 1px solid #EDE5DA; text-align: left; }
-.table th { background: #F5F0E8; font-weight: 600; color: #6B5C4E; }
+.hint {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
 </style>

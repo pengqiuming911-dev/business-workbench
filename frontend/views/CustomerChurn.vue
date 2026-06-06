@@ -1,5 +1,8 @@
 <template>
-  <SubPageLayout title="客户流失分析">
+  <SubPageLayout
+    title="客户流失分析"
+    description="生成客户存量峰值分析报告，识别已完结未复购客户，并为后续 Excel 导出预留入口。"
+  >
     <div class="section">
       <p class="desc">生成客户存量峰值分析报告，识别已完结未复购客户，输出 Excel；报告可直接在页面查看。</p>
 
@@ -41,17 +44,8 @@ function download() { alert('下载 Excel 功能尚未接入后端。') }
 </script>
 
 <style scoped>
-.desc { color: #6B5C4E; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
-.panel { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #E8DDD0; }
-.panel-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.form-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.form-row label { font-size: 13px; white-space: nowrap; width: 90px; }
-.input { flex: 1; border: 1px solid #E8DDD0; border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none; background: #fff; }
-.input:focus { border-color: #D97757; }
-.actions { display: flex; gap: 12px; flex-wrap: wrap; }
-.btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; }
-.btn-primary { background: #D97757; color: #fff; }
-.btn-outline { background: #fff; color: #D97757; border: 1px solid #D97757; }
-.report-panel { background: #fff; border-radius: 12px; padding: 24px; border: 1px solid #E8DDD0; }
-.placeholder { color: #aaa; font-size: 14px; padding: 40px 0; text-align: center; }
+.placeholder {
+  padding: 40px 0;
+  text-align: center;
+}
 </style>

@@ -1,5 +1,8 @@
 <template>
-  <SubPageLayout title="数据准备">
+  <SubPageLayout
+    title="数据准备"
+    description="连接飞书账号后，将航班服务交易总表和合投用户表同步到本地数据库，供后续业务页面使用。"
+  >
     <div class="section">
       <p class="desc">连接飞书账号后，点击「同步数据」将「航班服务交易总表」（含产品表、交易表、客户表、渠道表、直客来源表）写入本地数据库，供各功能页面使用。数据同步后无需再次连接，直接使用即可。</p>
 
@@ -205,34 +208,28 @@ function formatTime(iso) {
 </script>
 
 <style scoped>
-.desc { color: #6B5C4E; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
-.panel { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #E8DDD0; }
-.panel-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; }
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-primary { background: #D97757; color: #fff; }
-.btn-outline { background: #fff; color: #D97757; border: 1px solid #D97757; }
-.result { margin-top: 16px; padding: 14px 18px; background: #FDF3E7; border-radius: 8px; color: #D97757; font-size: 14px; }
+.result {
+  margin-top: 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  color: var(--brand);
+  font-size: 14px;
+  background: var(--brand-soft);
+}
 
 .auth-panel .panel-title { margin-bottom: 12px; }
 .auth-row { display: flex; align-items: center; gap: 12px; }
-.auth-badge { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
-.auth-ok { background: #E6F4EA; color: #2E7D32; }
-.auth-none { background: #FDF3E7; color: #D97757; }
+.auth-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
 
 .source-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
 .source-icon { font-size: 28px; flex-shrink: 0; }
 .source-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.source-name { font-size: 14px; font-weight: 600; color: #1A1109; }
-.source-desc { font-size: 12px; color: #A8967E; }
+.source-name { font-size: 14px; font-weight: 700; color: var(--ink-strong); }
+.source-desc { font-size: 12px; color: var(--ink-soft); }
 .source-status { flex-shrink: 0; }
-.status-badge { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
-.status-ok { background: #E6F4EA; color: #2E7D32; }
-.status-loading { background: #FDF3E7; color: #D97757; }
-.status-none { background: #F5F0E8; color: #A8967E; }
+.status-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
 
 .sync-actions { display: flex; align-items: center; gap: 12px; }
-.hint { font-size: 12px; color: #A8967E; }
-.error-msg { font-size: 13px; color: #C62828; }
-.success-msg { font-size: 13px; color: #2E7D32; }
+.hint { font-size: 12px; color: var(--ink-soft); }
 </style>
