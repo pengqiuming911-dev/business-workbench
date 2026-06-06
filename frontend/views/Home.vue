@@ -1,277 +1,179 @@
 <template>
-  <div class="page">
-    <!-- Header with nav -->
-    <header class="header">
-      <div class="header-brand">
-        <h1 class="title">业务工作台</h1>
-        <p class="subtitle">航班服务 · 数据分析平台</p>
+  <WorkbenchLayout
+    title="业务工作台"
+    description="统一管理航班服务数据准备、客户分析、产品报告、存续观察和渠道统计。"
+  >
+    <section class="home-hero">
+      <div>
+        <p class="home-label">Operational Console</p>
+        <h2>从数据同步到观察报告，一屏进入核心流程。</h2>
+        <p>
+          先完成飞书数据同步，再进入用户画像、产品观察、存续分析和渠道分析等业务模块。
+        </p>
       </div>
+      <button class="btn btn-primary" type="button" @click="openExternal">打开飞书总表</button>
+    </section>
 
-      <nav class="nav">
-        <router-link to="/data-preparation" class="nav-link">数据准备</router-link>
-        <router-link to="/user-profile" class="nav-link">用户画像</router-link>
-        <router-link to="/customer-churn" class="nav-link">客户流失</router-link>
-        <router-link to="/product-report" class="nav-link">产品报告</router-link>
-        <router-link to="/product-completion" class="nav-link">派息/敲出观察</router-link>
-        <router-link to="/ongoing-product" class="nav-link">存续分析</router-link>
-        <router-link to="/channel-analysis" class="nav-link">渠道分析</router-link>
-        <router-link to="/nominal-buyer" class="nav-link">名义购买人</router-link>
-      </nav>
+    <section class="module-grid" aria-label="业务模块">
+      <RouterLink v-for="item in modules" :key="item.path" :to="item.path" class="module-card">
+        <span class="module-index">{{ item.index }}</span>
+        <strong>{{ item.title }}</strong>
+        <em>{{ item.description }}</em>
+      </RouterLink>
+    </section>
 
-      <div class="header-actions">
-        <button class="btn-feishu" @click="openExternal">打开飞书总表</button>
-        <button class="logout-btn">退出登录</button>
-      </div>
-    </header>
-
-    <!-- Home landing -->
-    <main class="main">
-      <div class="hero">
-        <p class="hero-label">航班服务数据分析平台</p>
-        <h2 class="hero-title">业务工作台</h2>
-        <p class="hero-desc">通过上方导航进入各分析模块，按以下流程完成数据分析工作。</p>
-      </div>
-
+    <section class="report-panel">
+      <h3 class="panel-title">建议流程</h3>
       <div class="flow">
-        <div class="flow-step" v-for="(s, i) in steps" :key="i">
-          <router-link :to="s.path" class="flow-card">
-            <span class="flow-num">0{{ i + 1 }}</span>
-            <span class="flow-name">{{ s.name }}</span>
-          </router-link>
-          <span class="flow-arrow" v-if="i < steps.length - 1">→</span>
-        </div>
+        <RouterLink v-for="item in workflow" :key="item.path" :to="item.path" class="flow-card">
+          <span class="flow-num">{{ item.index }}</span>
+          <span class="flow-name">{{ item.title }}</span>
+        </RouterLink>
       </div>
-
-      <p class="feishu-hint">
-        开始前，请先点击右上角「打开飞书总表」，在飞书中导出「航班服务交易总表」并保存至项目目录。
-      </p>
-    </main>
-  </div>
+    </section>
+  </WorkbenchLayout>
 </template>
 
 <script setup>
-const steps = [
-  { name: '数据准备', path: '/data-preparation' },
-  { name: '用户画像', path: '/user-profile' },
-  { name: '客户流失', path: '/customer-churn' },
-  { name: '产品报告', path: '/product-report' },
-  { name: '派息/敲出', path: '/product-completion' },
-  { name: '存续分析', path: '/ongoing-product' },
-  { name: '渠道分析', path: '/channel-analysis' },
+import { RouterLink } from 'vue-router'
+import WorkbenchLayout from '../components/WorkbenchLayout.vue'
+
+const modules = [
+  { index: '01', title: '数据准备', description: '同步飞书总表和合投用户表', path: '/data-preparation' },
+  { index: '02', title: '用户画像', description: '按购买人、专户、竞品和行业筛选用户', path: '/user-profile' },
+  { index: '03', title: '客户流失', description: '生成完结未复购客户分析', path: '/customer-churn' },
+  { index: '04', title: '产品报告', description: '同步和查看产品运行材料', path: '/product-report' },
+  { index: '05', title: '派息/敲出观察', description: '跟踪存续产品观察日和喜报', path: '/product-completion' },
+  { index: '06', title: '存续分析', description: '分析存续产品金额、人数和类型', path: '/ongoing-product' },
+  { index: '07', title: '渠道分析', description: '统计渠道成交人数、金额和复购表现', path: '/channel-analysis' },
+  { index: '08', title: '名义购买人', description: '查询名义购买人与私募管理人关系', path: '/nominal-buyer' },
 ]
 
+const workflow = modules.slice(0, 7)
+
 function openExternal() {
-  alert('请在飞书中打开「航班服务交易总表」')
+  alert('请在飞书中打开“航班服务交易总表”，导出或同步后再继续分析。')
 }
 </script>
 
 <style scoped>
-.page {
-  min-height: 100vh;
-  background: #F5F0E8;
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 24px;
+  padding: 28px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
-/* ─── Header ─── */
-.header {
-  background: #FEFCFA;
-  border-bottom: 1px solid #E8DDD0;
-  padding: 0 28px;
-  height: 58px;
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-
-.header-brand {
-  flex-shrink: 0;
-  margin-right: 28px;
-}
-
-.title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1A1109;
-  line-height: 1;
-}
-
-.subtitle {
-  font-size: 11px;
-  color: #A8967E;
-  margin-top: 3px;
-}
-
-/* ─── Nav ─── */
-.nav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 1;
-}
-
-.nav-link {
-  font-size: 13.5px;
-  color: #6B5C4E;
-  padding: 6px 11px;
-  border-radius: 6px;
-  transition: color 0.15s, background 0.15s;
-  white-space: nowrap;
-}
-
-.nav-link:hover {
-  color: #1A1109;
-  background: #EFE9DF;
-}
-
-.nav-link.router-link-exact-active {
-  color: #D97757;
-  background: #FDF0E8;
-  font-weight: 500;
-}
-
-/* ─── Header Actions ─── */
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  margin-left: 16px;
-}
-
-.btn-feishu {
-  background: #D97757;
-  color: #fff;
-  border: none;
-  padding: 7px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: opacity 0.15s;
-  white-space: nowrap;
-}
-
-.btn-feishu:hover { opacity: 0.85; }
-
-.logout-btn {
-  background: transparent;
-  color: #8C7B6E;
-  border: 1px solid #D6C9BB;
-  padding: 6px 13px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: background 0.15s;
-  white-space: nowrap;
-}
-
-.logout-btn:hover { background: #EFE9DF; }
-
-/* ─── Landing ─── */
-.main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80px 32px 60px;
-  gap: 40px;
-}
-
-.hero {
-  text-align: center;
-}
-
-.hero-label {
+.home-label {
+  margin: 0 0 12px;
+  color: var(--brand);
   font-size: 12px;
-  font-weight: 600;
-  color: #D97757;
+  font-weight: 800;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 14px;
 }
 
-.hero-title {
-  font-size: 36px;
-  font-weight: 700;
-  color: #1A1109;
-  margin-bottom: 14px;
-  letter-spacing: -0.5px;
+.home-hero h2 {
+  max-width: 760px;
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: clamp(28px, 3.2vw, 44px);
+  font-weight: 800;
+  line-height: 1.12;
 }
 
-.hero-desc {
-  font-size: 15px;
-  color: #6B5C4E;
+.home-hero p:last-child {
+  max-width: 720px;
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  line-height: 1.8;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.module-card {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.module-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--brand);
+  box-shadow: var(--shadow-soft);
+}
+
+.module-index {
+  color: var(--brand);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.module-card strong {
+  color: var(--ink-strong);
+  font-size: 18px;
+}
+
+.module-card em {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-style: normal;
   line-height: 1.6;
 }
 
-/* ─── Flow ─── */
 .flow {
   display: flex;
-  align-items: center;
-  gap: 8px;
   flex-wrap: wrap;
-  justify-content: center;
-}
-
-.flow-step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .flow-card {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  background: #fff;
-  border: 1px solid #E8DDD0;
-  border-radius: 10px;
-  padding: 14px 20px;
-  transition: border-color 0.15s, box-shadow 0.15s;
-  text-align: center;
-  min-width: 88px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: #ffffff;
 }
 
 .flow-card:hover {
-  border-color: #D97757;
-  box-shadow: 0 2px 10px rgba(217, 119, 87, 0.12);
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 .flow-num {
-  font-size: 10px;
-  font-weight: 700;
-  color: #D97757;
-  letter-spacing: 0.5px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .flow-name {
   font-size: 13px;
-  font-weight: 600;
-  color: #1A1109;
+  font-weight: 700;
 }
 
-.flow-arrow {
-  font-size: 16px;
-  color: #C4B5A5;
-}
-
-/* ─── Hint ─── */
-.feishu-hint {
-  font-size: 13px;
-  color: #8C7B6E;
-  background: #fff;
-  border: 1px solid #E8DDD0;
-  border-radius: 8px;
-  padding: 14px 20px;
-  max-width: 560px;
-  text-align: center;
-  line-height: 1.6;
-}
-
-@media (max-width: 1100px) {
-  .nav-link { font-size: 12.5px; padding: 6px 9px; }
-}
-
-@media (max-width: 860px) {
-  .nav { display: none; }
+@media (max-width: 720px) {
+  .home-hero {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
 }
 </style>
