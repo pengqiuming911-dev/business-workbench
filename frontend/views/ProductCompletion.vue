@@ -1,5 +1,9 @@
 <template>
-  <SubPageLayout title="产品派息/敲出观察">
+  <SubPageLayout
+    title="产品派息/敲出观察"
+    description="展示存续产品的派息与敲出观察情况，并生成对应日期的喜报海报。"
+    wide
+  >
     <div class="section">
       <div class="tab-bar">
         <button class="tab-btn" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">全量</button>
@@ -580,5 +584,108 @@ function dividendClass(status) {
   background: #fff;
   border-radius: 12px;
   border: 1px solid #E8DDD0;
+}
+
+/* Workbench theme overrides */
+.desc {
+  color: var(--ink-soft);
+}
+
+.tab-bar,
+.panel,
+.report-panel,
+.empty-state {
+  border-color: var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tab-btn,
+.form-row > label:first-child,
+.file-from,
+.update-time,
+.table-summary,
+.detail-label,
+.detail-empty,
+.code-cell,
+.result-no,
+.result-na {
+  color: var(--ink-soft);
+}
+
+.tab-btn:hover,
+.data-row:hover {
+  background: var(--surface-muted);
+}
+
+.tab-btn.active,
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-hover);
+}
+
+.btn-secondary {
+  border: 1px solid var(--border);
+  color: var(--ink);
+  background: #fff;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.panel-title,
+.section-title,
+.file-badge,
+.overview-table td {
+  color: var(--ink-strong);
+}
+
+.input {
+  border-color: var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+}
+
+.input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.file-from,
+.overview-table th,
+.overview-table th.sticky-col,
+.detail-cell,
+.data-row:hover .sticky-col {
+  background: var(--surface-muted);
+}
+
+.sticky-col {
+  background: var(--surface);
+}
+
+.overview-table th,
+.overview-table td,
+.detail-row td,
+.detail-table th,
+.detail-table td {
+  border-color: var(--border-soft);
+}
+
+.status-badge,
+.result-yes-dividend {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.result-yes-knockout {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 </style>
