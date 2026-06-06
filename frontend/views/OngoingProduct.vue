@@ -1,5 +1,9 @@
 <template>
-  <SubPageLayout title="存续产品分析">
+  <SubPageLayout
+    title="存续产品分析"
+    description="指定开始和结束年月，查看进场时间、金额、人次、人数及新客/增购/复购分布。"
+    wide
+  >
     <div class="section">
       <p class="desc">指定开始/结束年月，查看进场时间分布、每月进场金额、交易人次与人数、新客/增购/复购分布。</p>
 
@@ -414,5 +418,72 @@ function fmt(val) {
   border-top: 2px solid #E8DDD0;
   border-bottom: none;
   background: #F5F0E8;
+}
+
+/* Workbench theme overrides */
+.desc,
+.section-desc,
+.s-lbl {
+  color: var(--ink-soft);
+}
+
+.panel,
+.report-panel,
+.s-card {
+  border-color: var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.panel-title,
+.data-table td {
+  color: var(--ink-strong);
+}
+
+.section-title,
+.s-val,
+.data-table th {
+  color: var(--brand);
+}
+
+.input,
+.file-label {
+  border-color: var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+}
+
+.input:focus,
+.file-label:hover {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-hover);
+}
+
+.btn-primary:disabled {
+  background: var(--brand);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.s-card,
+.total-row td {
+  background: var(--surface-muted);
+}
+
+.data-table th,
+.data-table td,
+.total-row td {
+  border-color: var(--border-soft);
 }
 </style>
