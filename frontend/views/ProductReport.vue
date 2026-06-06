@@ -1,5 +1,9 @@
 <template>
-  <SubPageLayout title="产品运行报告">
+  <SubPageLayout
+    title="产品运行报告"
+    description="指定开始和结束年月，查看产品结构材料、月度产品文档和同步状态。"
+    wide
+  >
     <div class="section">
       <p class="desc">指定开始/结束年月至月份区间，统计每月完结产品数量与金额、按结构类型与标的的完结与交易分布、交易人次与人数及人均金额、不同标的的新客/续做/增购人数与金额。</p>
 
@@ -356,5 +360,85 @@ onMounted(async () => {
 }
 @media (max-width: 640px) {
   .product-cards { grid-template-columns: 1fr; }
+}
+
+/* Workbench theme overrides */
+:deep(.content) {
+  max-width: none;
+  padding: 0;
+}
+
+.desc,
+.source-label,
+.sync-info,
+.info-key,
+.raw-content,
+.loading-msg,
+.placeholder {
+  color: var(--ink-soft);
+}
+
+.panel,
+.report-panel,
+.product-card {
+  border-color: var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.panel-title,
+.info-val,
+.card-title {
+  color: var(--ink-strong);
+}
+
+.input,
+.month-select {
+  border-color: var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+}
+
+.input:focus,
+.month-select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.btn-primary,
+.card-header {
+  background: var(--brand);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--brand-hover);
+}
+
+.btn-secondary {
+  border-color: var(--border);
+  color: var(--ink);
+  background: #fff;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.month-search,
+.info-row {
+  border-color: var(--border-soft);
+}
+
+.product-card:hover {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-soft);
+}
+
+.error-msg {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 </style>
