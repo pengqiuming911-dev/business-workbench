@@ -152,6 +152,30 @@ async function initDatabase() {
       doc_count INTEGER,
       folder_count INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS posters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id TEXT,
+      poster_type TEXT,
+      observation_date TEXT,
+      product_name TEXT,
+      date_display TEXT,
+      months_since_entry INTEGER,
+      underlying_name TEXT,
+      absolute_return REAL,
+      annualized_return REAL,
+      duration_months INTEGER,
+      parachute_value TEXT,
+      knockout_value TEXT,
+      dividend_barrier_value TEXT,
+      dividend_count INTEGER,
+      cumulative_rate REAL,
+      monthly_coupon REAL,
+      entry_date TEXT,
+      created_at TEXT,
+      UNIQUE(product_id, poster_type, observation_date),
+      FOREIGN KEY (product_id) REFERENCES products(id)
+    );
   `)
 
   saveDatabase()
@@ -559,6 +583,74 @@ function getLastObservationUpdate() {
   return queryOne('SELECT updated_at FROM observations ORDER BY updated_at DESC LIMIT 1')
 }
 
+// ──── 喜报表 ────
+
+function upsertPoster(row) {
+  const existing = queryOne(
+    'SELECT id FROM posters WHERE product_id = ? AND poster_type = ? AND observation_date = ?',
+    [row.product_id, row.poster_type, row.observation_date]
+  )
+  if (existing) {
+    runStatement(`
+      UPDATE posters SET
+        product_name = ?, date_display = ?, months_since_entry = ?, underlying_name = ?,
+        absolute_return = ?, annualized_return = ?, duration_months = ?,
+        parachute_value = ?, knockout_value = ?, dividend_barrier_value = ?,
+        dividend_count = ?, cumulative_rate = ?, monthly_coupon = ?, entry_date = ?, created_at = ?
+      WHERE id = ?
+    `, [
+      row.product_name, row.date_display, row.months_since_entry, row.underlying_name,
+      row.absolute_return, row.annualized_return, row.duration_months,
+      row.parachute_value, row.knockout_value, row.dividend_barrier_value,
+      row.dividend_count, row.cumulative_rate, row.monthly_coupon, row.entry_date,
+      new Date().toISOString(), existing.id
+    ])
+  } else {
+    runStatement(`
+      INSERT INTO posters
+        (product_id, poster_type, observation_date, product_name, date_display, months_since_entry,
+         underlying_name, absolute_return, annualized_return, duration_months,
+         parachute_value, knockout_value, dividend_barrier_value,
+         dividend_count, cumulative_rate, monthly_coupon, entry_date, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      row.product_id, row.poster_type, row.observation_date, row.product_name,
+      row.date_display, row.months_since_entry, row.underlying_name,
+      row.absolute_return, row.annualized_return, row.duration_months,
+      row.parachute_value, row.knockout_value, row.dividend_barrier_value,
+      row.dividend_count, row.cumulative_rate, row.monthly_coupon, row.entry_date,
+      new Date().toISOString()
+    ])
+  }
+  saveDatabase()
+}
+
+function queryPostersByDate(date) {
+  return queryAll(
+    'SELECT * FROM posters WHERE observation_date = ? ORDER BY created_at DESC',
+    [date]
+  )
+}
+
+function queryPostersByProduct(productId) {
+  return queryAll(
+    'SELECT * FROM posters WHERE product_id = ? ORDER BY observation_date DESC',
+    [productId]
+  )
+}
+
+function queryAllPosters() {
+  return queryAll('SELECT * FROM posters ORDER BY observation_date DESC, created_at DESC')
+}
+
+function deletePoster(product_id, poster_type, observation_date) {
+  runStatement(
+    'DELETE FROM posters WHERE product_id = ? AND poster_type = ? AND observation_date = ?',
+    [product_id, poster_type, observation_date]
+  )
+  saveDatabase()
+}
+
 module.exports = {
   initDatabase,
   importProducts, logSync, getLastSync, queryProducts,
@@ -571,5 +663,6 @@ module.exports = {
   queryOngoingProducts,
   upsertObserv, queryObservationsByProduct, queryAllObservations,
   upsertPrice, queryLatestPrice, queryPriceByDate,
-  getLastObservationUpdate
+  getLastObservationUpdate,
+  upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster,
 }

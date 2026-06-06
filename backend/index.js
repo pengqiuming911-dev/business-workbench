@@ -2,9 +2,14 @@
 const express = require('express')
 const cors = require('cors')
 const axios = require('axios')
-const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, queryCoInvestUsers, getDistinctIndustries, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, computeUserPeakBalances, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate } = require('./db')
+const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, queryCoInvestUsers, getDistinctIndustries, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, computeUserPeakBalances, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate, upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster } = require('./db')
 const { fetchAllPrices } = require('./services/priceService')
-const { getObservationDates, evaluateObservation } = require('./services/observationService')
+const { getObservationDates, getNextObservationDate, getObservationDatesForMonth, evaluateObservation, parseRatio, parseFirstKnockoutRatio } = require('./services/observationService')
+const { generatePosterData, formatChineseDate, computeDividendCount, computeCumulativeDividendRate } = require('./services/posterService')
+const {
+  buildTodayObservationNotification,
+  sendObservationEmail,
+} = require('./services/observationNotificationService')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -16,6 +21,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
 app.use(cors({ origin: FRONTEND_URL, credentials: true }))
 app.use(express.json())
+app.use('/public', express.static(require('path').join(__dirname, 'public')))
 
 // 内存存储 user_access_token（生产环境应换成 session/数据库）
 let userToken = null
@@ -564,13 +570,8 @@ app.post('/api/db/sync', async (req, res) => {
       const isMain = String(r['是否主产品'] || r[' 是否主产品'] || '').trim() === '是' ? 1 : 0
       const lockDays = Number(r['锁定期']) || 0
       const rawKO = r['敲出']
-      let firstKO = 0
-      if (rawKO != null) {
-        const s = String(rawKO)
-        if (s.match(/^\d/) && !s.includes('*')) {
-          firstKO = Number(rawKO) || 0
-        }
-      }
+      const entryPrice = Number(r['入场价']) || 0
+      const firstKO = rawKO != null && !String(rawKO).includes('*') ? parseFirstKnockoutRatio(rawKO, entryPrice) : 0
       productRows.push({
         id: String(flightId).trim(),
         name: r['产品名称'] || null,
@@ -586,15 +587,15 @@ app.post('/api/db/sync', async (req, res) => {
         lock_days: lockDays,
         lock_months: Math.floor(lockDays / 30),
         first_knockout_ratio: firstKO,
-        entry_price: Number(r['入场价']) || 0,
-        monthly_decrease: Number(findField(r, ['每月递减'])) || 0,
+        entry_price: entryPrice,
+        monthly_decrease: parseRatio(findField(r, ['每月递减'])),
         term: findField(r, ['期限']) || null,
         parachute: r['降落伞'] || null,
-        dividend_barrier: Number(findField(r, ['派息障碍'])) || 0,
-        monthly_coupon: Number(findField(r, ['月票息'])) || 0,
-        coupon_1st: Number(findField(r, ['第一段票息'])) || 0,
-        coupon_2nd: Number(findField(r, ['第二段票息'])) || 0,
-        coupon_3rd: Number(findField(r, ['第三段票息'])) || 0,
+        dividend_barrier: parseRatio(findField(r, ['派息障碍'])),
+        monthly_coupon: parseRatio(findField(r, ['月票息'])),
+        coupon_1st: parseRatio(findField(r, ['第一段票息'])),
+        coupon_2nd: parseRatio(findField(r, ['第二段票息'])),
+        coupon_3rd: parseRatio(findField(r, ['第三段票息'])),
         duration_months: Number(findField(r, ['存续时间'])) || 0,
         absolute_return: Number(findField(r, ['绝对收益率'])) || 0,
         holiday_adjust: findField(r, ['观察日节假日']) || null,
@@ -1115,6 +1116,7 @@ app.get('/api/observations', (req, res) => {
         holiday_adjust: p.holiday_adjust,
         lock_days: p.lock_days,
         duration_months: p.duration_months,
+        next_observation_date: getNextObservationDate(p),
         observations: observations.map(o => ({
           date: o.observation_date,
           knockout_price: o.knockout_price,
@@ -1132,6 +1134,43 @@ app.get('/api/observations', (req, res) => {
       products: result,
       lastUpdated: lastRecord ? lastRecord.updated_at : null,
     })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/observations/calendar', (req, res) => {
+  try {
+    const month = req.query.month || new Date().toISOString().slice(0, 7)
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: '月份格式应为 YYYY-MM' })
+    }
+
+    const products = queryOngoingProducts()
+    const dates = new Map()
+
+    for (const product of products) {
+      const monthDates = getObservationDatesForMonth(product, month)
+      for (const obs of monthDates) {
+        if (!dates.has(obs.date)) dates.set(obs.date, [])
+        dates.get(obs.date).push({
+          id: product.id,
+          name: product.name,
+          manager: product.manager,
+          code: product.code,
+          months_since_entry: obs.monthsSinceEntry,
+        })
+      }
+    }
+
+    const calendar = [...dates.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, productsForDate]) => ({
+        date,
+        products: productsForDate.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')),
+      }))
+
+    res.json({ month, calendar })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1165,6 +1204,7 @@ app.get('/api/observations/today', (req, res) => {
         holiday_adjust: p.holiday_adjust,
         lock_days: p.lock_days,
         duration_months: p.duration_months,
+        next_observation_date: getNextObservationDate(p, today),
         observations: observations.map(o => ({
           date: o.observation_date,
           knockout_price: o.knockout_price,
@@ -1232,12 +1272,9 @@ app.post('/api/observations/generate', async (req, res) => {
       const existingMap = new Map(existingObs.map(o => [o.observation_date, o]))
 
       for (const { date, monthsSinceEntry } of obsDates) {
-        if (existingMap.has(date)) {
-          skippedExisting++
-          continue
-        }
         const cachedPrice = queryPriceByDate(product.code, date)
-        const priceForDate = cachedPrice ? cachedPrice.price : latestPrice
+        const existingRecord = existingMap.get(date)
+        const priceForDate = cachedPrice ? cachedPrice.price : (existingRecord?.underlying_price ?? latestPrice)
         if (priceForDate === null || priceForDate === undefined) {
           skippedNoPrice++
           continue
@@ -1246,12 +1283,16 @@ app.post('/api/observations/generate', async (req, res) => {
         const evalResult = evaluateObservation(product, date, priceForDate, monthsSinceEntry)
         evalResult.product_id = product.id
         upsertObserv(evalResult)
+        if (existingRecord) {
+          skippedExisting++
+          continue
+        }
         generated++
       }
     }
 
-    console.log(`[generate] 结果: 新增=${generated}, 跳过(已有)=${skippedExisting}, 跳过(无code)=${skippedNoCode}, 跳过(无价格)=${skippedNoPrice}, 跳过(无观察日)=${skippedNoDates}`)
-    res.json({ ok: true, generated, skippedExisting, priceRefreshed: codes.length, priceFailed: failed.length })
+    console.log(`[generate] 结果: 新增=${generated}, 重算(已有)=${skippedExisting}, 跳过(无code)=${skippedNoCode}, 跳过(无价格)=${skippedNoPrice}, 跳过(无观察日)=${skippedNoDates}`)
+    res.json({ ok: true, generated, recalculatedExisting: skippedExisting, priceRefreshed: codes.length, priceFailed: failed.length })
   } catch (err) {
     console.error('生成观察记录失败:', err)
     res.status(500).json({ error: err.message })
@@ -1316,50 +1357,284 @@ app.get('/api/observations/products', (req, res) => {
 })
 
 // ─────────────────────────────────────────
-// 定时任务：每个工作日 11:30、15:00、15:30 自动更新价格和观察记录
+// 喜报 API
+// ─────────────────────────────────────────
+app.get('/api/posters/today', (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().slice(0, 10)
+    const today = new Date().toISOString().slice(0, 10)
+    const posters = queryPostersByDate(date)
+    res.json({ posters, today, queryDate: date })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/posters', (req, res) => {
+  try {
+    const { product_id } = req.query
+    const posters = product_id ? queryPostersByProduct(product_id) : queryAllPosters()
+    res.json({ posters })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/posters/generate', async (req, res) => {
+  try {
+    const targetDate = req.body?.date || new Date().toISOString().slice(0, 10)
+    const products = queryOngoingProducts()
+    const todayProducts = []
+
+    for (const p of products) {
+      const obsDates = getObservationDates(p)
+      const hasDate = obsDates.some(d => d.date === targetDate)
+      if (hasDate) todayProducts.push(p)
+    }
+
+    if (todayProducts.length === 0) {
+      return res.json({ ok: true, generated: 0, message: `${targetDate} 无产品需要观察` })
+    }
+
+    let generated = 0
+    let knockoutCount = 0
+    let dividendCount = 0
+
+    for (const product of todayProducts) {
+      if (!product.code) continue
+
+      const obsDates = getObservationDates(product)
+      const targetObs = obsDates.find(d => d.date === targetDate)
+      if (!targetObs) continue
+
+      const posterData = generatePosterData(product, targetDate, targetObs.monthsSinceEntry)
+      if (!posterData) continue
+
+      const isKnockout = posterData.knockout_value !== null
+      const isDividend = posterData.has_dividend_observation && posterData.dividend_barrier_value !== null
+
+      if (isKnockout) {
+        knockoutCount++
+        const row = {
+          product_id: product.id,
+          poster_type: 'knockout',
+          observation_date: targetDate,
+          product_name: product.name || '',
+          date_display: formatChineseDate(targetDate),
+          months_since_entry: targetObs.monthsSinceEntry,
+          underlying_name: posterData.underlying_name,
+          absolute_return: posterData.absolute_return,
+          annualized_return: posterData.annualized_return,
+          duration_months: targetObs.monthsSinceEntry,
+          parachute_value: posterData.parachute_value,
+          knockout_value: posterData.knockout_value,
+          dividend_barrier_value: null,
+          dividend_count: 0,
+          cumulative_rate: 0,
+          monthly_coupon: posterData.monthly_coupon,
+          entry_date: product.issue_date,
+        }
+        upsertPoster(row)
+        if (!isDividend) continue
+      }
+
+      if (isDividend && !isKnockout) {
+        dividendCount++
+        const row = {
+          product_id: product.id,
+          poster_type: 'dividend',
+          observation_date: targetDate,
+          product_name: product.name || '',
+          date_display: formatChineseDate(targetDate),
+          months_since_entry: targetObs.monthsSinceEntry,
+          underlying_name: posterData.underlying_name,
+          absolute_return: 0,
+          annualized_return: posterData.annualized_return,
+          duration_months: 0,
+          parachute_value: posterData.parachute_value,
+          knockout_value: posterData.knockout_value,
+          dividend_barrier_value: posterData.dividend_barrier_value,
+          dividend_count: posterData.dividend_count,
+          cumulative_rate: posterData.cumulative_dividend_rate,
+          monthly_coupon: posterData.monthly_coupon,
+          entry_date: product.issue_date,
+        }
+        upsertPoster(row)
+      }
+    }
+
+    generated = knockoutCount + dividendCount
+    res.json({
+      ok: true,
+      generated,
+      knockout: knockoutCount,
+      dividend: dividendCount,
+      today: targetDate,
+    })
+  } catch (err) {
+    console.error('生成喜报失败:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// 定时任务：自动更新价格和观察记录，并在今日有观察产品时发送邮件提醒
 // ─────────────────────────────────────────
 const cron = require('node-cron')
+const CRON_TIMEZONE = process.env.CRON_TIMEZONE || 'Asia/Shanghai'
+
+async function refreshTodayObservations() {
+  const products = queryOngoingProducts()
+  const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
+  if (codes.length === 0) {
+    return { products, codes, prices: {}, failed: [], today: new Date().toISOString().slice(0, 10), updatedObs: 0 }
+  }
+
+  console.log(`[定时任务] 开始更新 ${codes.length} 个标的价格...`)
+  const { results: prices, failed } = await fetchAllPrices(codes)
+  const today = new Date().toISOString().slice(0, 10)
+
+  for (const code of codes) {
+    if (prices[code] !== undefined) {
+      upsertPrice(code, today, prices[code])
+    }
+  }
+
+  let updatedObs = 0
+  for (const product of products) {
+    if (!product.code || prices[product.code] === undefined) continue
+    const obsDates = getObservationDates(product, today)
+    for (const { date, monthsSinceEntry } of obsDates) {
+      if (date === today) {
+        const evalResult = evaluateObservation(product, date, prices[product.code], monthsSinceEntry)
+        evalResult.product_id = product.id
+        upsertObserv(evalResult)
+        updatedObs++
+      }
+    }
+  }
+
+  return { products, codes, prices, failed, today, updatedObs }
+}
 
 async function scheduledPriceUpdate() {
   try {
-    const products = queryOngoingProducts()
-    const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
+    const { codes, failed, updatedObs } = await refreshTodayObservations()
     if (codes.length === 0) return
-
-    console.log(`[定时任务] 开始更新 ${codes.length} 个标的价格...`)
-    const { results: prices, failed } = await fetchAllPrices(codes)
-    const today = new Date().toISOString().slice(0, 10)
-
-    for (const code of codes) {
-      if (prices[code] !== undefined) {
-        upsertPrice(code, today, prices[code])
-      }
-    }
-
-    let updatedObs = 0
-    for (const product of products) {
-      if (!product.code || prices[product.code] === undefined) continue
-      const obsDates = getObservationDates(product)
-      for (const { date, monthsSinceEntry } of obsDates) {
-        if (date === today) {
-          const evalResult = evaluateObservation(product, date, prices[product.code], monthsSinceEntry)
-          evalResult.product_id = product.id
-          upsertObserv(evalResult)
-          updatedObs++
-        }
-      }
-    }
-
     console.log(`[定时任务] 完成: 价格更新 ${codes.length - failed.length}/${codes.length}, 观察记录更新 ${updatedObs} 条`)
   } catch (err) {
     console.error('[定时任务] 失败:', err.message)
   }
 }
 
-cron.schedule('30 11 * * 1-5', scheduledPriceUpdate)
-cron.schedule('0 15 * * 1-5', scheduledPriceUpdate)
-cron.schedule('30 15 * * 1-5', scheduledPriceUpdate)
-console.log('定时任务已注册: 工作日 11:30, 15:00, 15:30')
+async function scheduledObservationEmail() {
+  try {
+    const refreshed = await refreshTodayObservations()
+    if (refreshed.codes.length === 0) return
+
+    const notification = buildTodayObservationNotification({
+      products: refreshed.products,
+      prices: refreshed.prices,
+      today: refreshed.today,
+    })
+
+    const result = await sendObservationEmail({ notification })
+    if (result.sent) {
+      console.log(`[邮件提醒] 已发送今日观察提醒: ${result.count} 个产品`)
+    } else {
+      console.log(`[邮件提醒] 未发送: ${result.reason}`)
+    }
+  } catch (err) {
+    console.error('[邮件提醒] 失败:', err.message)
+  }
+}
+
+async function generateAutoPosters() {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const products = queryOngoingProducts()
+    let knocked = 0
+    let dividends = 0
+
+    for (const product of products) {
+      if (!product.code) continue
+      const obsDates = getObservationDates(product, today)
+      const todayObsInfo = obsDates.find(d => d.date === today)
+      if (!todayObsInfo) continue
+
+      const observations = queryObservationsByProduct(product.id)
+      const todayObsRecord = observations.find(o => o.observation_date === today)
+      if (!todayObsRecord) continue
+
+      const posterData = generatePosterData(product, today, todayObsInfo.monthsSinceEntry)
+      if (!posterData) continue
+
+      const isKnockout = posterData.knockout_value !== null && todayObsRecord.is_knocked_out === '是'
+      const isDividend = posterData.has_dividend_observation && posterData.dividend_barrier_value !== null && todayObsRecord.is_dividend === '是'
+
+      if (isKnockout) {
+        knocked++
+        const row = {
+          product_id: product.id,
+          poster_type: 'knockout',
+          observation_date: today,
+          product_name: product.name || '',
+          date_display: formatChineseDate(today),
+          months_since_entry: todayObsInfo.monthsSinceEntry,
+          underlying_name: posterData.underlying_name,
+          absolute_return: posterData.absolute_return,
+          annualized_return: posterData.annualized_return,
+          duration_months: todayObsInfo.monthsSinceEntry,
+          parachute_value: posterData.parachute_value,
+          knockout_value: posterData.knockout_value,
+          dividend_barrier_value: null,
+          dividend_count: 0,
+          cumulative_rate: 0,
+          monthly_coupon: posterData.monthly_coupon,
+          entry_date: product.issue_date,
+        }
+        upsertPoster(row)
+        if (!isDividend) continue
+      }
+
+      if (isDividend && !isKnockout) {
+        dividends++
+        const row = {
+          product_id: product.id,
+          poster_type: 'dividend',
+          observation_date: today,
+          product_name: product.name || '',
+          date_display: formatChineseDate(today),
+          months_since_entry: todayObsInfo.monthsSinceEntry,
+          underlying_name: posterData.underlying_name,
+          absolute_return: 0,
+          annualized_return: posterData.annualized_return,
+          duration_months: 0,
+          parachute_value: posterData.parachute_value,
+          knockout_value: posterData.knockout_value,
+          dividend_barrier_value: posterData.dividend_barrier_value,
+          dividend_count: posterData.dividend_count,
+          cumulative_rate: posterData.cumulative_dividend_rate,
+          monthly_coupon: posterData.monthly_coupon,
+          entry_date: product.issue_date,
+        }
+        upsertPoster(row)
+      }
+    }
+
+    console.log(`[喜报生成] 今日自动生成：敲出喜报 ${knocked} 张，派息喜报 ${dividends} 张`)
+  } catch (err) {
+    console.error('[喜报生成] 失败:', err.message)
+  }
+}
+
+cron.schedule('30 11 * * 1-5', scheduledPriceUpdate, { timezone: CRON_TIMEZONE })
+cron.schedule('0 15 * * 1-5', scheduledPriceUpdate, { timezone: CRON_TIMEZONE })
+cron.schedule('30 15 * * 1-5', scheduledPriceUpdate, { timezone: CRON_TIMEZONE })
+cron.schedule('5 15 * * 1-5', generateAutoPosters, { timezone: CRON_TIMEZONE })
+cron.schedule('0 10 * * *', scheduledObservationEmail, { timezone: CRON_TIMEZONE })
+cron.schedule('10 15 * * *', scheduledObservationEmail, { timezone: CRON_TIMEZONE })
+console.log(`定时任务已注册: 工作日 11:30, 15:00, 15:30 更新价格；15:05 自动生成喜报；每日 10:00, 15:10 邮件提醒 (${CRON_TIMEZONE})`)
 
 // 先初始化数据库，再启动服务器
 initDatabase().then(() => {
