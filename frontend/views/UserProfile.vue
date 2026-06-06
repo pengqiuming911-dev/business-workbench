@@ -1,5 +1,9 @@
 <template>
-  <SubPageLayout title="用户画像">
+  <SubPageLayout
+    title="用户画像"
+    description="查询合投用户画像，支持按实际购买人、名义购买人、专户客户、竞品客户和行业筛选。"
+    wide
+  >
     <div class="section">
       <p class="desc">查询合投用户画像，支持按实际购买人、名义购买人、是否专户客户、客户是否竞品群、客户行业等条件筛选。</p>
 
@@ -174,40 +178,17 @@ function fmtAmt(v) {
 </script>
 
 <style scoped>
-.desc { color: #6B5C4E; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
-.panel { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #E8DDD0; }
-.panel-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.table-panel { padding: 16px 24px; }
+.table-panel {
+  overflow-x: auto;
+}
 
-.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.form-row { display: flex; align-items: center; gap: 8px; }
-.form-row label { font-size: 13px; white-space: nowrap; width: 90px; color: #6B5C4E; }
+.positive {
+  color: var(--success);
+  font-weight: 700;
+}
 
-.input { flex: 1; border: 1px solid #E8DDD0; border-radius: 6px; padding: 7px 10px; font-size: 13px; outline: none; background: #fff; min-width: 0; }
-.input:focus { border-color: #D97757; }
-select.input { cursor: pointer; }
-
-.search-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; }
-.btn-primary { background: #D97757; color: #fff; }
-.btn-outline { background: #fff; color: #D97757; border: 1px solid #D97757; }
-.result-count { font-size: 13px; color: #A8967E; margin-left: 8px; }
-.error { font-size: 13px; color: #C62828; }
-
-.table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.table th, .table td { padding: 9px 12px; border-bottom: 1px solid #EDE5DA; text-align: left; white-space: nowrap; }
-.table th { background: #F5F0E8; font-weight: 600; color: #6B5C4E; position: sticky; top: 0; }
-.table tbody tr:hover { background: #FFFAF7; }
-.table tbody tr:last-child td { border-bottom: none; }
-
-.badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
-.badge-red { background: #FDECEA; color: #C62828; }
-.badge-green { background: #E6F4EA; color: #2E7D32; }
-
-.positive { color: #2E7D32; font-weight: 600; }
-.negative { color: #C62828; font-weight: 600; }
-.pending { color: #A8967E; font-style: italic; font-size: 12px; }
-.empty { text-align: center; color: #A8967E; padding: 40px 0; font-size: 14px; }
-
-.table-panel { overflow-x: auto; }
+.negative {
+  color: var(--danger);
+  font-weight: 700;
+}
 </style>
