@@ -1,100 +1,211 @@
 <template>
   <div class="workbench-shell">
-    <header class="workbench-topbar">
-      <RouterLink to="/" class="workbench-brand" aria-label="返回工作台首页" @click="closeSidebar">
-        <span class="brand-mark">BW</span>
-        <span>
-          <strong>业务工作台</strong>
-          <em>航班服务 · 数据分析平台</em>
-        </span>
-      </RouterLink>
+    <SidebarNav
+      :collapsed="sidebarCollapsed"
+      :overlay-open="sidebarOverlay"
+      @navigate="closeSidebar"
+      @close="sidebarOverlay = false"
+    />
 
-      <nav class="topbar-links" aria-label="顶部导航">
-        <RouterLink to="/" class="topbar-link">首页</RouterLink>
-        <RouterLink to="/product-completion" class="topbar-link">观察</RouterLink>
-        <RouterLink to="/product-report" class="topbar-link">报告</RouterLink>
-      </nav>
-
-      <div class="topbar-actions">
-        <button class="btn btn-secondary btn-sm" type="button" @click="openFeishu">
-          打开飞书总表
-        </button>
+    <div class="workbench-content" :class="{ expanded: sidebarCollapsed }">
+      <header class="workbench-topbar">
         <button
-          class="icon-menu"
+          class="sidebar-toggle"
           type="button"
-          :aria-expanded="sidebarOpen"
-          aria-controls="workbench-sidebar"
-          aria-label="切换导航"
-          @click="sidebarOpen = !sidebarOpen"
+          @click="toggleSidebar"
         >
-          <span></span>
-          <span></span>
-          <span></span>
-          <span class="menu-text">菜单</span>
+          <Menu :size="20" />
         </button>
-      </div>
-    </header>
 
-    <div class="workbench-body">
-      <aside id="workbench-sidebar" class="workbench-sidebar" :class="{ open: sidebarOpen }">
-        <div class="sidebar-section">
-          <p class="sidebar-kicker">Modules</p>
-          <RouterLink
-            v-for="item in navItems"
-            :key="item.path"
-            :to="item.path"
-            class="sidebar-link"
-            @click="closeSidebar"
-          >
-            <span class="sidebar-index">{{ item.index }}</span>
-            <span>
-              <strong>{{ item.title }}</strong>
-              <em>{{ item.description }}</em>
-            </span>
-          </RouterLink>
+        <div class="topbar-search" @click="openSearch">
+          <Search :size="16" />
+          <span class="search-placeholder">搜索客户、产品、渠道...</span>
+          <kbd class="search-kbd">{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
         </div>
-      </aside>
 
-      <main class="workbench-main" :class="{ wide }">
-        <div class="page-heading">
-          <p class="page-kicker">Business Workbench</p>
-          <h1>{{ title }}</h1>
-          <p v-if="description" class="page-description">{{ description }}</p>
+        <div class="topbar-actions">
+          <div class="topbar-avatar">
+            <span class="avatar-circle">BW</span>
+          </div>
         </div>
+      </header>
+
+      <main class="workbench-main">
         <slot />
       </main>
     </div>
+
+    <GlobalSearch v-model:open="searchOpen" />
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { Menu, Search } from '@lucide/vue'
+import SidebarNav from './SidebarNav.vue'
+import GlobalSearch from './GlobalSearch.vue'
 
 defineProps({
-  title: { type: String, required: true },
-  description: { type: String, default: '' },
   wide: { type: Boolean, default: false },
 })
 
-const sidebarOpen = ref(false)
+const sidebarCollapsed = ref(false)
+const sidebarOverlay = ref(false)
+const searchOpen = ref(false)
+const isMac = ref(false)
 
-const navItems = [
-  { index: '01', title: '数据准备', description: '同步飞书与本地数据', path: '/data-preparation' },
-  { index: '02', title: '用户画像', description: '查询合投用户特征', path: '/user-profile' },
-  { index: '03', title: '客户流失', description: '识别完结未复购客户', path: '/customer-churn' },
-  { index: '04', title: '产品报告', description: '查看产品运行材料', path: '/product-report' },
-  { index: '05', title: '派息/敲出观察', description: '跟踪存续产品观察日', path: '/product-completion' },
-  { index: '06', title: '存续分析', description: '分析仍在持有产品', path: '/ongoing-product' },
-  { index: '07', title: '渠道分析', description: '统计渠道成交表现', path: '/channel-analysis' },
-  { index: '08', title: '名义购买人', description: '匹配私募管理人', path: '/nominal-buyer' },
-]
+function toggleSidebar() {
+  if (window.innerWidth <= 720) {
+    sidebarOverlay.value = !sidebarOverlay.value
+  } else {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+  }
+}
 
 function closeSidebar() {
-  sidebarOpen.value = false
+  sidebarOverlay.value = false
 }
 
-function openFeishu() {
-  alert('请在飞书中打开“航班服务交易总表”。')
+function openSearch() {
+  searchOpen.value = true
 }
+
+function handleKeydown(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault()
+    searchOpen.value = !searchOpen.value
+  }
+}
+
+onMounted(() => {
+  isMac.value = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
+
+<style scoped>
+.workbench-shell {
+  min-height: 100vh;
+}
+
+.workbench-content {
+  margin-left: 240px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 250ms ease;
+}
+
+.workbench-content.expanded {
+  margin-left: 64px;
+}
+
+.workbench-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  background: rgba(254, 252, 245, 0.85);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  transition: all 150ms;
+}
+.sidebar-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--ink-strong);
+}
+
+.topbar-search {
+  flex: 1;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: border-color 150ms;
+}
+.topbar-search:hover {
+  border-color: var(--brand);
+}
+
+.search-placeholder {
+  flex: 1;
+  font-size: 13px;
+}
+
+.search-kbd {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--ink-soft);
+  background: var(--bg-hover);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workbench-main {
+  flex: 1;
+  padding: 24px 28px;
+  max-width: 1200px;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .workbench-content {
+    margin-left: 0;
+  }
+  .workbench-content.expanded {
+    margin-left: 0;
+  }
+  .topbar-search {
+    max-width: 240px;
+  }
+}
+</style>
