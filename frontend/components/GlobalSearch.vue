@@ -37,16 +37,19 @@
           </div>
 
           <div v-else-if="query" class="search-results">
-            <div
-              v-for="(r, i) in results"
-              :key="r.type + r.id"
-              class="search-item"
-              :class="{ active: activeIndex === i }"
-              @click="navigateTo(r)"
-            >
-              <span class="item-type" :class="'type-' + r.type">{{ typeLabel(r.type) }}</span>
-              <span class="item-name">{{ r.name }}</span>
-            </div>
+            <template v-for="(items, type) in groupedResults" :key="type">
+              <p class="section-label">{{ typeLabel(type) }}</p>
+              <div
+                v-for="r in items"
+                :key="r.type + r.id"
+                class="search-item"
+                :class="{ active: activeIndex === flatIndex(r) }"
+                @click="navigateTo(r)"
+              >
+                <span class="item-type" :class="'type-' + r.type">{{ typeLabel(r.type) }}</span>
+                <span class="item-name">{{ r.name }}</span>
+              </div>
+            </template>
           </div>
         </div>
       </div>
@@ -55,7 +58,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@lucide/vue'
 
@@ -72,6 +75,19 @@ const loading = ref(false)
 const activeIndex = ref(0)
 const recents = ref([])
 let debounceTimer = null
+
+const groupedResults = computed(() => {
+  const groups = {}
+  for (const r of results.value) {
+    if (!groups[r.type]) groups[r.type] = []
+    groups[r.type].push(r)
+  }
+  return groups
+})
+
+function flatIndex(item) {
+  return results.value.findIndex(r => r.type === item.type && r.id === item.id)
+}
 
 function close() {
   emit('update:open', false)
