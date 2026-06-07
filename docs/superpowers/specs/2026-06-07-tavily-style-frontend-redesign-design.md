@@ -1,162 +1,162 @@
-# Tavily Style Frontend Redesign Design
+# Tavily-Inspired Frontend Redesign Design
 
 Date: 2026-06-07
 
 ## Goal
 
-Refactor the existing Vue frontend into a professional SaaS control console inspired by Tavily's application workspace, while preserving the current business workflows, routes, API behavior, and backend contracts.
+Refactor the current Vue/Vite frontend into a premium business control console inspired by the Tavily app screenshot the user provided, while preserving all current business workflows, routes, API calls, calculations, and backend contracts.
 
-The redesign should make the application feel like a mature business workbench: clear left navigation, compact top actions, dashboard-style home, consistent forms and tables, readable Chinese UI text, and predictable operational flows.
+The chosen direction is option B from the visual companion: Tavily-inspired warmth and polish, adapted to a dense business workbench. The UI should feel high-end, calm, and operational rather than decorative or marketing-like.
 
 ## Confirmed Scope
 
-- Redesign the whole frontend, including the home page, application shell, navigation, and all business pages.
-- Use a professional SaaS console direction: left navigation, top utility area, overview dashboard, compact tools, and dense but readable data presentation.
-- Add a frontend icon dependency, preferably `lucide-vue-next`, for module icons, action buttons, and status affordances.
-- Fix visible Chinese text encoding issues in touched frontend files.
-- Keep existing routes, business logic, data fetching, calculations, API paths, methods, and payload assumptions stable.
-- Preserve the app as a business workbench, not an AI search clone or marketing page.
+- Redesign the full frontend, not only the homepage.
+- Preserve the current route structure and business modules.
+- Preserve existing backend endpoints, HTTP methods, request payload assumptions, and response field assumptions.
+- Keep existing page script logic stable unless a small script edit is required to fix visible Chinese text or a broken template binding.
+- Fix visible Chinese text encoding problems in touched frontend files.
+- Use the existing `@lucide/vue` icon package for module and action icons.
+- Use Playwright with the local system Chrome for visual verification.
+- Keep Chrome DevTools MCP installed and available for deeper browser inspection.
 
 ## Out Of Scope
 
 - Backend changes.
+- New API fields or changed API response shapes.
 - New authentication behavior.
-- New API fields or changed response shapes.
-- Replacing the business workflow with natural-language AI workflows.
-- Pixel-perfect cloning of Tavily's logged-in UI.
-- Adding landing-page marketing sections.
+- Replacing the existing workflows with AI search or chat workflows.
+- A pixel-perfect Tavily clone.
+- Marketing landing-page sections.
+- Large unrelated refactors.
 
-## Reference Direction
+## Visual Direction
 
-The reference URL is `https://app.tavily.com/home`. The logged-in page is not reliably available without an account, so the design uses the visible Tavily product direction and common SaaS console patterns rather than treating the reference as a pixel-perfect source.
+The design should borrow from the provided Tavily screenshot:
 
-The relevant direction is:
+- Warm near-white page background.
+- Slightly tinted sidebar surface.
+- Strong, simple dark brand mark.
+- Rounded but controlled containers.
+- Pill-shaped status/action elements where appropriate.
+- Soft layered shadows used sparingly.
+- Clean typography with strong hierarchy.
+- Blue as the primary operational accent and green for healthy/ready states.
 
-- Left-side product navigation.
-- A compact top area for page context and primary actions.
-- Dashboard-style home content.
-- Minimal decoration, strong whitespace discipline, and thin borders.
-- Clear module icons and concise labels.
-- Operational density appropriate for daily use.
+The adaptation for this project:
 
-For this application, those ideas map to:
-
-- Application modules in the left navigation.
-- Business actions and page context in the top bar.
-- Home page as an operational overview.
-- Tables, forms, filters, tabs, status badges, and empty states as first-class interface elements.
+- Keep the density and clarity expected from a daily business operations tool.
+- Use compact filters, tables, badges, and action toolbars.
+- Avoid large decorative heroes, oversized cards, gradients, blobs, and purely atmospheric visuals.
+- Repeated cards should use a radius of 8px or less unless the application shell needs a slightly softer container.
 
 ## Architecture
 
 ### Application Shell
 
-`WorkbenchLayout` should become the main application shell used across the frontend.
+`WorkbenchLayout` remains the main shell for the app.
 
-It should include:
+It should provide:
 
-- Fixed or persistent left sidebar with brand area and module navigation.
-- Top bar with current page context, optional breadcrumb/title, global search entry, and primary action area.
-- Main content region with consistent width rules and page padding.
-- Mobile sidebar drawer behavior.
-- Shared responsive constraints so content does not overlap at desktop or mobile sizes.
+- Persistent desktop sidebar with brand area and module navigation.
+- Mobile drawer behavior for the sidebar.
+- Compact top bar with current page context, global search entry, and utility actions.
+- Consistent main content width and padding.
+- A wide-mode option for operational tables and dashboard pages.
+- Layout safeguards so controls and text do not overlap at desktop or mobile widths.
 
-`SubPageLayout` should become a thin wrapper around `WorkbenchLayout` or be folded into the shell if that keeps the code simpler. The result should avoid duplicate navigation and page heading logic.
+`SidebarNav` can remain separate if that matches the existing structure. `SubPageLayout` should stay a thin wrapper around the shell so pages do not duplicate navigation and heading logic.
 
 ### Shared UI Layer
 
-`frontend/assets/global.css` should hold the main design system:
+`frontend/assets/main.css` should define the shared design system:
 
-- Color variables.
-- Typography and font stacks.
-- Layout sizing variables.
+- Color tokens.
+- Font stacks.
+- Border radius and shadow tokens.
 - Buttons and icon buttons.
-- Inputs, selects, textareas, and filter rows.
-- Tabs and segmented controls.
-- Panels, metric tiles, and data cards.
-- Tables, sticky columns, and horizontal scroll containers.
+- Inputs, selects, textareas, and filter toolbars.
+- Tabs or segmented controls.
+- Panels, metric tiles, source cards, and module rows.
+- Tables and horizontal scroll containers.
 - Badges and semantic status colors.
-- Empty, loading, success, and error states.
+- Empty, loading, success, warning, and error states.
 
-Page-scoped CSS should stay limited to page-specific structures such as calendars, poster grids, and unusually wide tables.
+Page-scoped CSS should only handle page-specific structures such as observation calendars, poster grids, unusually wide tables, and report-specific layouts.
 
 ### Icons
 
-Install and use `lucide-vue-next`.
+Use `@lucide/vue`, already present in `frontend/package.json`.
 
 Icons should be used for:
 
 - Sidebar modules.
-- Top bar actions.
-- Search field affordance.
+- Search and menu controls.
 - Data source cards.
-- Sync, refresh, generate, download, and reset actions where appropriate.
-- Empty states or status callouts when useful.
+- Sync, refresh, generate, download, reset, edit, copy, and delete actions.
+- Empty states and status callouts where useful.
 
-Text labels should remain present for primary business actions, especially where Chinese labels are needed for clarity.
+Primary business actions still need readable Chinese labels; icon-only buttons should be reserved for familiar compact actions and should include accessible labels.
 
 ## Page Design
 
 ### Home
 
-The home page should become an operational dashboard rather than a simple module index.
+The homepage becomes a business overview dashboard.
 
 It should include:
 
-- A compact overview band with the app name, short purpose, and primary action.
-- Key status cards for data preparation, product observation, reports, and user/customer analysis.
+- A compact overview band with the app name, short operational purpose, and primary action.
+- Metric/status cards for data preparation, product observation, product reports, and customer analysis.
 - Module shortcuts with icons and concise descriptions.
-- A recommended workflow area that links the usual sequence: data preparation, user/customer analysis, product reports, observations, and channel analysis.
-- A neutral alert or reminder if data sync status is unavailable.
+- A recommended workflow: data sync, customer analysis, product reports, product observations, channel analysis.
+- A neutral reminder if sync status is unavailable.
 
-The home page should avoid marketing-style hero composition and avoid oversized decorative cards.
+The page should not look like a marketing landing page.
 
 ### Data Preparation
 
-This page should become a clear connection and sync console:
+This page becomes a connection and sync console:
 
-- Feishu account connection status.
-- Data source cards for the transaction table and co-invest user table.
+- Feishu account connection state.
+- Data source cards for transaction and co-invest user tables.
 - Last sync time and row count.
-- Primary sync actions.
-- Inline success, error, and disabled states.
+- Clear primary sync actions.
+- Inline success, error, disabled, and loading states.
 
-The page should make the next required action obvious when the account is not connected.
+The next required action should be obvious when the account is not connected.
 
-### Search And Analysis Pages
+### Analysis Pages
 
-The user profile, customer churn, channel analysis, and nominal buyer pages should follow a shared pattern:
+User profile, customer churn, channel analysis, and nominal buyer should share a pattern:
 
-- Page context from the shell.
-- A compact filter toolbar.
-- Primary action button.
-- Result summary text or metric row.
+- Shell-provided page context.
+- Compact filter toolbar.
+- Primary query/export action.
+- Result summary or metric row.
 - Table or empty state.
 
-Large explanatory paragraphs should be reduced where the controls already make the workflow clear.
+Long explanatory copy should be reduced where the controls already explain the workflow.
 
-### Product Report And Ongoing Product Pages
+### Product Report And Ongoing Product
 
-These pages should preserve existing data behavior but normalize the interface:
+These pages should preserve existing behavior while normalizing the interface:
 
-- Shared toolbar for filters and actions.
-- Consistent panels and tables.
-- Clear status badges.
+- Shared filter/action panel.
+- Consistent panels, table wrappers, and badges.
 - Horizontal scroll for wide data.
-- No duplicated beige/brown legacy styling.
+- No legacy beige/brown styling.
 
-### Product Observation Page
+### Product Observation
 
-The observation page can remain functionally the same but should be visually reorganized:
+The observation workspace should be visually reorganized without changing the workflow:
 
 - Tabs become a segmented control.
-- The all-products view keeps search, refresh prices, and generate observations actions in a single toolbar.
-- Calendar, today, and poster tabs use consistent panels and empty states.
-- Wide observation tables keep horizontal scroll and sticky first column where useful.
-- Poster grid remains page-specific but should use the shared card, badge, and action visual language.
+- All-products view keeps search, price refresh, and observation generation in one toolbar.
+- Calendar, today, and poster views use shared panels and empty states.
+- Wide observation tables scroll horizontally and may use a sticky first column where useful.
+- Poster grid keeps its page-specific structure but adopts the shared card, badge, and action language.
 
-## Visual Design
-
-### Typography
+## Typography
 
 Use local/system fonts only:
 
@@ -166,92 +166,102 @@ font-family: "Inter", "Punctuation SC", ui-sans-serif, system-ui, -apple-system,
   "Noto Sans SC", sans-serif;
 ```
 
-Use monospace for codes and identifiers:
+Use monospace for identifiers and codes:
 
 ```css
 font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
   Consolas, "Liberation Mono", monospace;
 ```
 
-### Color
+Do not scale font sizes with viewport width. Letter spacing should stay at `0` except for deliberate small uppercase labels.
 
-Use a light SaaS palette:
+## Color
 
-- Page background: cool near-white or light gray.
-- Surfaces: white.
+Use a warm premium console palette:
+
+- Page background: warm off-white near `#fbfaf5`.
+- Sidebar: slightly deeper warm surface.
+- Cards and panels: white or near-white.
 - Primary text: near-black.
 - Secondary text: neutral gray.
-- Border: soft gray.
-- Primary accent: blue or blue-cyan.
-- Success: green.
+- Border: soft warm gray.
+- Primary accent: confident blue.
+- Secondary accent: restrained green/cyan for healthy operational states.
 - Warning: amber.
 - Danger: red.
 
-Avoid beige, brown, orange-heavy themes, large gradients, decorative blobs, and one-note purple/blue-purple palettes.
+Avoid:
 
-### Layout
-
-- Sidebar width should be stable on desktop.
-- Top bar should be compact and consistent.
-- Page content should support wide operational tables.
-- Repeated cards should use border radius of 8px or less.
-- Controls should have stable dimensions so labels, icons, and hover states do not shift layout.
-- Mobile views should collapse the sidebar and keep toolbars readable through wrapping or stacking.
+- Orange/brown dominance.
+- Heavy beige themes.
+- Purple or purple-blue gradients.
+- Decorative gradient blobs or bokeh.
+- One-note palettes.
 
 ## Data Flow
 
 No data flow changes are planned.
 
-Existing page scripts should continue using the same endpoints, including:
+Existing page scripts should keep the same endpoints, including:
 
-- Auth status, Feishu login, and logout.
+- Feishu auth status, login, and logout.
 - Database sync and sync status endpoints.
+- Product report endpoints.
 - Observation list, calendar, today, refresh, and generate endpoints.
 - Poster list and generation endpoints.
-- Existing report, user, customer, channel, and nominal buyer endpoints.
+- User profile, customer churn, channel analysis, ongoing product, and nominal buyer endpoints.
 
-The refactor should not rename API fields, change request methods, or alter response assumptions.
+The redesign must not rename API fields, alter request methods, or change response assumptions.
 
 ## Error Handling
 
-Error and state display should be consistent:
+Use consistent state display:
 
-- Request errors use inline red danger text or a compact error callout.
-- Successful actions use green success text or status callout.
-- Empty states explain the next available action.
-- Loading states appear locally where work is happening.
-- Disabled actions clearly indicate unavailable prerequisites.
+- Request errors: compact danger callout or inline red message.
+- Successful actions: compact success callout or green status.
+- Loading states: local to the panel/action doing work.
+- Empty states: explain the next action.
+- Disabled actions: visibly disabled and clearly tied to missing prerequisites.
 
-No new error-handling logic is required unless the current page already has unreadable text or unclear feedback in the touched area.
-
-## Testing And Verification
+## Verification
 
 Verification should include:
 
-- Install `lucide-vue-next`.
-- Run `npm run build` from `frontend`.
+- `npm run build` from `frontend`.
 - Start the Vite dev server.
-- Browser-check desktop and mobile viewports.
+- Use Playwright with system Chrome at `C:/Program Files/Google/Chrome/Application/chrome.exe`.
+- Capture/check desktop and mobile screenshots.
 - Spot-check these routes:
   - `/`
   - `/data-preparation`
   - `/product-completion`
   - `/product-report`
   - `/user-profile`
-- Confirm Chinese text is readable in touched pages.
-- Confirm existing API actions still call the same methods.
-- Confirm wide tables scroll horizontally and do not overlap surrounding UI.
-- Confirm mobile navigation opens and closes cleanly.
+  - `/customer-churn`
+  - `/channel-analysis`
+  - `/nominal-buyer`
+  - `/ongoing-product`
+- Confirm Chinese UI text is readable in touched pages.
+- Confirm wide tables scroll horizontally.
+- Confirm mobile navigation opens and closes correctly.
+- Use Chrome DevTools MCP if deeper DOM, console, performance, or network inspection is needed.
 
 ## Implementation Notes
 
-Implementation should be incremental:
+Implement incrementally:
 
-1. Add the icon dependency and establish shared design tokens.
-2. Rebuild the application shell and navigation.
-3. Redesign the home dashboard.
-4. Normalize shared controls, panels, forms, tabs, tables, badges, and state messages.
-5. Update each business page template and visible text while keeping scripts stable.
+1. Establish shared visual tokens and UI classes in `frontend/assets/main.css`.
+2. Rebuild the application shell and sidebar.
+3. Redesign the homepage dashboard.
+4. Normalize shared controls, panels, tables, badges, and states.
+5. Update each business page template and visible text while keeping script logic stable.
 6. Run build and browser verification.
 
-Avoid unrelated backend work or feature expansion. If a page has complex existing logic, preserve the script section as much as possible and limit edits to template structure, visible text, class names, imports for icons, and scoped styles.
+If a page has complex logic, preserve its script section as much as possible. Prefer changes to template structure, class names, visible labels, icon imports, and scoped CSS.
+
+## Spec Self-Review
+
+- Completeness scan: no unresolved drafting markers remain.
+- Scope check: this is a single frontend redesign effort; backend and API changes are explicitly out of scope.
+- Consistency check: the visual direction matches selected option B and the current dependency state.
+- Ambiguity check: "high-end" is defined as warm, polished, controlled, dense enough for operations, and not marketing-like.
