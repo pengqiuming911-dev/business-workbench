@@ -2,7 +2,8 @@
 const express = require('express')
 const cors = require('cors')
 const axios = require('axios')
-const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, queryCoInvestUsers, getDistinctIndustries, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, computeUserPeakBalances, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate, upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster } = require('./db')
+const dbModule = require('./db')
+const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, queryCoInvestUsers, getDistinctIndustries, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, computeUserPeakBalances, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate, upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster, logActivity, queryActivityLogs } = dbModule
 const { fetchAllPrices } = require('./services/priceService')
 const { getObservationDates, getNextObservationDate, getObservationDatesForMonth, evaluateObservation, parseRatio, parseFirstKnockoutRatio } = require('./services/observationService')
 const { generatePosterData, formatChineseDate, computeDividendCount, computeCumulativeDividendRate } = require('./services/posterService')
@@ -662,6 +663,7 @@ app.post('/api/db/sync', async (req, res) => {
 
     const totalCount = productRows.length + transactionRows.length
     logSync(totalCount)
+    logActivity('sync', 'Transaction table synced', `${totalCount} rows`)
     res.json({ ok: true, rowCount: totalCount, productCount: productRows.length, transactionCount: transactionRows.length })
   } catch (err) {
     const detail = err.response?.data || err.message
@@ -766,6 +768,7 @@ app.post('/api/db/sync-coinvest', async (req, res) => {
 
     importCoInvestUsers(rows)
     logCoInvestSync(rows.length)
+    logActivity('sync', 'Co-invest users synced', `${rows.length} rows`)
     console.log(`合投用户同步完成，共写入 ${rows.length} 条`)
     res.json({ ok: true, rowCount: rows.length })
   } catch (err) {
@@ -1031,6 +1034,7 @@ app.post('/api/drive/sync-product-docs', async (req, res) => {
 
     console.log(`同步完成！共同步 ${syncedDocs.length} 个文档到数据库`)
 
+    logActivity('sync', 'Product docs synced', `${syncedDocs.length} docs, ${folderCount.count} folders`)
     res.json({
       ok: true,
       message: `同步成功，共 ${syncedDocs.length} 个文档`,
@@ -1384,34 +1388,36 @@ app.post('/api/posters/generate', async (req, res) => {
   try {
     const targetDate = req.body?.date || new Date().toISOString().slice(0, 10)
     const products = queryOngoingProducts()
-    const todayProducts = []
+    const matchedProducts = []
 
     for (const p of products) {
-      const obsDates = getObservationDates(p)
-      const hasDate = obsDates.some(d => d.date === targetDate)
-      if (hasDate) todayProducts.push(p)
+      const obsDates = getObservationDates(p, targetDate)
+      if (obsDates.some(d => d.date === targetDate)) matchedProducts.push(p)
     }
 
-    if (todayProducts.length === 0) {
+    if (matchedProducts.length === 0) {
       return res.json({ ok: true, generated: 0, message: `${targetDate} 无产品需要观察` })
     }
 
-    let generated = 0
     let knockoutCount = 0
     let dividendCount = 0
 
-    for (const product of todayProducts) {
+    for (const product of matchedProducts) {
       if (!product.code) continue
 
-      const obsDates = getObservationDates(product)
-      const targetObs = obsDates.find(d => d.date === targetDate)
-      if (!targetObs) continue
+      const obsDates = getObservationDates(product, targetDate)
+      const targetObsInfo = obsDates.find(d => d.date === targetDate)
+      if (!targetObsInfo) continue
 
-      const posterData = generatePosterData(product, targetDate, targetObs.monthsSinceEntry)
+      const observations = queryObservationsByProduct(product.id)
+      const targetObsRecord = observations.find(o => o.observation_date === targetDate)
+      if (!targetObsRecord) continue
+
+      const posterData = generatePosterData(product, targetDate, targetObsInfo.monthsSinceEntry)
       if (!posterData) continue
 
-      const isKnockout = posterData.knockout_value !== null
-      const isDividend = posterData.has_dividend_observation && posterData.dividend_barrier_value !== null
+      const isKnockout = posterData.knockout_value !== null && targetObsRecord.is_knocked_out === '是'
+      const isDividend = posterData.has_dividend_observation && posterData.dividend_barrier_value !== null && targetObsRecord.is_dividend === '是'
 
       if (isKnockout) {
         knockoutCount++
@@ -1421,11 +1427,11 @@ app.post('/api/posters/generate', async (req, res) => {
           observation_date: targetDate,
           product_name: product.name || '',
           date_display: formatChineseDate(targetDate),
-          months_since_entry: targetObs.monthsSinceEntry,
+          months_since_entry: targetObsInfo.monthsSinceEntry,
           underlying_name: posterData.underlying_name,
           absolute_return: posterData.absolute_return,
           annualized_return: posterData.annualized_return,
-          duration_months: targetObs.monthsSinceEntry,
+          duration_months: targetObsInfo.monthsSinceEntry,
           parachute_value: posterData.parachute_value,
           knockout_value: posterData.knockout_value,
           dividend_barrier_value: null,
@@ -1446,7 +1452,7 @@ app.post('/api/posters/generate', async (req, res) => {
           observation_date: targetDate,
           product_name: product.name || '',
           date_display: formatChineseDate(targetDate),
-          months_since_entry: targetObs.monthsSinceEntry,
+          months_since_entry: targetObsInfo.monthsSinceEntry,
           underlying_name: posterData.underlying_name,
           absolute_return: 0,
           annualized_return: posterData.annualized_return,
@@ -1463,7 +1469,7 @@ app.post('/api/posters/generate', async (req, res) => {
       }
     }
 
-    generated = knockoutCount + dividendCount
+    const generated = knockoutCount + dividendCount
     res.json({
       ok: true,
       generated,
@@ -1627,6 +1633,91 @@ async function generateAutoPosters() {
     console.error('[喜报生成] 失败:', err.message)
   }
 }
+
+// ─────────────────────────────────────────
+// Dashboard stats
+// ─────────────────────────────────────────
+app.get('/api/dashboard/stats', (req, res) => {
+  try {
+    const db = dbModule.db
+    const totalProducts = db.exec('SELECT COUNT(*) FROM products')[0]?.values[0][0] || 0
+    const activeProducts = db.exec("SELECT COUNT(*) FROM products WHERE holding_status LIKE '%存续%' OR holding_status LIKE '%持有%'")[0]?.values[0][0] || 0
+    const totalCustomers = db.exec('SELECT COUNT(DISTINCT customer_name) FROM customers')[0]?.values[0][0] || 0
+    const totalChannels = db.exec('SELECT COUNT(DISTINCT channel_name) FROM channels')[0]?.values[0][0] || 0
+    res.json({ totalProducts, activeProducts, totalCustomers, totalChannels })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// Dashboard charts
+// ─────────────────────────────────────────
+app.get('/api/dashboard/charts', (req, res) => {
+  try {
+    const db = dbModule.db
+    const trendRows = db.exec(`
+      SELECT strftime('%Y-%m', transaction_date) as month,
+             SUM(subscribe_amount) as amount,
+             COUNT(*) as count
+      FROM transactions
+      GROUP BY month ORDER BY month
+    `)[0]?.values || []
+    const monthlyTrend = trendRows.map(r => ({ month: r[0], amount: r[1] || 0, count: r[2] }))
+
+    const chanRows = db.exec(`
+      SELECT c.channel_name, SUM(t.subscribe_amount) as amount
+      FROM channels c
+      LEFT JOIN transactions t ON t.counterparty = c.channel_name
+      GROUP BY c.channel_name ORDER BY amount DESC LIMIT 8
+    `)[0]?.values || []
+    const channelDistribution = chanRows.map(r => ({ channel: r[0], amount: r[1] || 0 }))
+
+    res.json({ monthlyTrend, channelDistribution })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// Global search
+// ─────────────────────────────────────────
+app.get('/api/search', (req, res) => {
+  try {
+    const db = dbModule.db
+    const q = (req.query.q || '').trim()
+    if (!q) return res.json({ results: [] })
+    const like = `%${q}%`
+    const results = []
+
+    const custs = db.exec('SELECT id, customer_name FROM customers WHERE customer_name LIKE ? LIMIT 5', [like])[0]?.values || []
+    custs.forEach(r => results.push({ type: 'customer', id: r[0], name: r[1], path: '/user-profile' }))
+
+    const prods = db.exec('SELECT id, name FROM products WHERE name LIKE ? LIMIT 5', [like])[0]?.values || []
+    prods.forEach(r => results.push({ type: 'product', id: r[0], name: r[1], path: '/ongoing-product' }))
+
+    const chans = db.exec('SELECT id, channel_name FROM channels WHERE channel_name LIKE ? LIMIT 5', [like])[0]?.values || []
+    chans.forEach(r => results.push({ type: 'channel', id: r[0], name: r[1], path: '/channel-analysis' }))
+
+    res.json({ results })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// Activity logs
+// ─────────────────────────────────────────
+app.get('/api/activity-logs', (req, res) => {
+  try {
+    const type = req.query.type || null
+    const limit = parseInt(req.query.limit) || 50
+    const logs = queryActivityLogs(type, limit)
+    res.json({ logs })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
 
 cron.schedule('30 11 * * 1-5', scheduledPriceUpdate, { timezone: CRON_TIMEZONE })
 cron.schedule('0 15 * * 1-5', scheduledPriceUpdate, { timezone: CRON_TIMEZONE })

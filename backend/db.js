@@ -176,8 +176,17 @@ async function initDatabase() {
       UNIQUE(product_id, poster_type, observation_date),
       FOREIGN KEY (product_id) REFERENCES products(id)
     );
+
+    CREATE TABLE IF NOT EXISTS activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      action TEXT NOT NULL,
+      detail TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `)
 
+  module.exports.db = db
   saveDatabase()
   console.log('数据库初始化完成')
 }
@@ -651,6 +660,32 @@ function deletePoster(product_id, poster_type, observation_date) {
   saveDatabase()
 }
 
+// ──── 活动日志 ────
+
+function logActivity(type, action, detail) {
+  runStatement('INSERT INTO activity_logs (type, action, detail) VALUES (?, ?, ?)', [type, action, detail || null])
+  saveDatabase()
+}
+
+function queryActivityLogs(type, limit) {
+  let sql = 'SELECT * FROM activity_logs'
+  const params = []
+  if (type) {
+    sql += ' WHERE type = ?'
+    params.push(type)
+  }
+  sql += ' ORDER BY created_at DESC LIMIT ?'
+  params.push(limit || 50)
+  const result = queryAll(sql, params)
+  return result.map(r => ({
+    id: r.id,
+    type: r.type,
+    action: r.action,
+    detail: r.detail,
+    createdAt: r.created_at,
+  }))
+}
+
 module.exports = {
   initDatabase,
   importProducts, logSync, getLastSync, queryProducts,
@@ -665,4 +700,5 @@ module.exports = {
   upsertPrice, queryLatestPrice, queryPriceByDate,
   getLastObservationUpdate,
   upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster,
+  logActivity, queryActivityLogs,
 }
