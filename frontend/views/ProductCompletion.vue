@@ -1,46 +1,42 @@
 <template>
-  <SubPageLayout
-    title="产品派息/敲出观察"
-    description="展示存续产品的派息与敲出观察情况，并生成对应日期的喜报海报。"
-    wide
-  >
-    <div class="section">
-      <div class="tab-bar">
-        <button class="tab-btn" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">全量</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'calendar' }" @click="activeTab = 'calendar'; loadCalendarData()">观察日历</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'today' }" @click="activeTab = 'today'; loadTodayData()">今日观察</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'posters' }" @click="activeTab = 'posters'; loadPosters()">🎉 喜报</button>
-      </div>
+  <WorkbenchLayout>
+    <h1 class="text-page-title">派息/敲出观察</h1>
 
-      <div v-if="activeTab === 'all'">
-        <p class="desc">展示存续产品（持有中）的派息与敲出观察情况。数据来源为航班服务交易总表 · 产品表。</p>
+    <div class="tab-bar">
+      <button class="btn tab-btn" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">全量</button>
+      <button class="btn tab-btn" :class="{ active: activeTab === 'calendar' }" @click="activeTab = 'calendar'; loadCalendarData()">观察日历</button>
+      <button class="btn tab-btn" :class="{ active: activeTab === 'today' }" @click="activeTab = 'today'; loadTodayData()">今日观察</button>
+      <button class="btn tab-btn" :class="{ active: activeTab === 'posters' }" @click="activeTab = 'posters'; loadPosters()">🎉 喜报</button>
+    </div>
 
-        <div class="panel">
-          <h3 class="panel-title">操作</h3>
-          <div class="form-row">
-            <label>数据来源</label>
-            <div class="file-source">
-              <span class="file-badge">📊 航班服务交易总表 · 产品表</span>
-              <span class="file-from">本地数据库</span>
-            </div>
+    <div v-if="activeTab === 'all'">
+      <p class="text-body" style="margin-bottom: 24px;">展示存续产品（持有中）的派息与敲出观察情况。数据来源为航班服务交易总表 · 产品表。</p>
+
+      <PanelCard title="操作">
+        <div class="form-row">
+          <label>数据来源</label>
+          <div class="file-source">
+            <span class="text-card-title">📊 航班服务交易总表 · 产品表</span>
+            <span class="badge badge-blue">本地数据库</span>
           </div>
-          <div class="form-row">
-            <label>搜索</label>
-            <input v-model="searchText" type="text" class="input" placeholder="按产品名称或航班编号搜索..." />
-          </div>
-          <button class="btn btn-primary" :disabled="refreshing" @click="refreshPrices">
-            {{ refreshing ? '刷新中...' : '刷新标的价格' }}
-          </button>
-          <button class="btn btn-secondary" :disabled="generating" @click="generateObservations">
-            {{ generating ? '生成中...' : '生成观察记录' }}
-          </button>
-          <span v-if="lastUpdated" class="update-time">最后更新: {{ lastUpdated }}</span>
-          <span v-if="errorMsg" class="error">{{ errorMsg }}</span>
-          <span v-if="successMsg" class="success">{{ successMsg }}</span>
         </div>
+        <div class="form-row">
+          <label>搜索</label>
+          <input v-model="searchText" type="text" class="input" placeholder="按产品名称或航班编号搜索..." />
+        </div>
+        <button class="btn btn-primary" :disabled="refreshing" @click="refreshPrices">
+          {{ refreshing ? '刷新中...' : '刷新标的价格' }}
+        </button>
+        <button class="btn btn-secondary" :disabled="generating" @click="generateObservations">
+          {{ generating ? '生成中...' : '生成观察记录' }}
+        </button>
+        <span v-if="lastUpdated" class="text-label" style="margin-left: 16px;">最后更新: {{ lastUpdated }}</span>
+        <span v-if="errorMsg" class="error-msg" style="margin-left: 12px;">{{ errorMsg }}</span>
+        <span v-if="successMsg" class="success-msg" style="margin-left: 12px;">{{ successMsg }}</span>
+      </PanelCard>
 
-        <div v-if="filteredProducts.length" class="report-panel">
-          <h3 class="section-title">存续产品观察概览</h3>
+      <div v-if="filteredProducts.length">
+        <PanelCard title="存续产品观察概览">
           <div class="table-wrap">
             <table class="overview-table">
               <thead>
@@ -72,7 +68,7 @@
                     </td>
                     <td class="col-left">{{ p.name }}</td>
                     <td class="col-left">{{ p.manager }}</td>
-                    <td class="col-left"><span class="status-badge">{{ p.holding_status }}</span></td>
+                    <td class="col-left"><span class="badge badge-green">{{ p.holding_status }}</span></td>
                     <td class="col-left code-cell">{{ p.code }}</td>
                     <td class="col-right">{{ formatPrice(p.entry_price, p) }}</td>
                     <td class="col-left">{{ p.issue_date || '--' }}</td>
@@ -127,27 +123,27 @@
             </table>
           </div>
           <p class="table-summary">共 {{ filteredProducts.length }} 个存续产品</p>
-        </div>
-        <div v-else-if="loaded && !filteredProducts.length" class="empty-state">
-          <p>暂无存续产品数据，请先在「数据准备」页面同步飞书数据。</p>
-        </div>
+        </PanelCard>
       </div>
+      <div v-else-if="loaded && !filteredProducts.length" class="empty-state">
+        <p>暂无存续产品数据，请先在「数据准备」页面同步飞书数据。</p>
+      </div>
+    </div>
 
-      <div v-if="activeTab === 'calendar'">
-        <p class="desc">按月份查看存续产品观察日，并在对应日期展示需要观察的产品名称。</p>
+    <div v-if="activeTab === 'calendar'">
+      <p class="text-body" style="margin-bottom: 24px;">按月份查看存续产品观察日，并在对应日期展示需要观察的产品名称。</p>
 
-        <div class="panel">
-          <h3 class="panel-title">日历筛选</h3>
-          <div class="form-row">
-            <label>月份</label>
-            <input v-model="calendarMonth" type="month" class="input month-input" @change="loadCalendarData" />
-            <span v-if="calendarError" class="error">{{ calendarError }}</span>
-          </div>
+      <PanelCard title="日历筛选">
+        <div class="form-row">
+          <label>月份</label>
+          <input v-model="calendarMonth" type="month" class="input month-input" @change="loadCalendarData" />
+          <span v-if="calendarError" class="error-msg" style="margin-left: 12px;">{{ calendarError }}</span>
         </div>
+      </PanelCard>
 
-        <div v-if="calendarLoading" class="empty-state"><p>加载中...</p></div>
-        <div v-else class="report-panel calendar-panel">
-          <h3 class="section-title">观察日历（{{ calendarTitle }}）</h3>
+      <div v-if="calendarLoading" class="loading-state"><p>加载中...</p></div>
+      <div v-else>
+        <PanelCard title="观察日历（{{ calendarTitle }}）">
           <div class="calendar-weekdays">
             <div v-for="day in weekDays" :key="day" class="calendar-weekday">{{ day }}</div>
           </div>
@@ -167,14 +163,15 @@
             </div>
           </div>
           <p class="table-summary">本月共 {{ calendarProductCount }} 个产品观察安排</p>
-        </div>
+        </PanelCard>
       </div>
+    </div>
 
-      <div v-if="activeTab === 'today'">
-        <p class="desc">展示今日需要观察派息或敲出的存续产品。今日日期: {{ todayDate }}</p>
-        <div v-if="todayLoading" class="empty-state"><p>加载中...</p></div>
-        <div v-else-if="todayProducts.length" class="report-panel">
-          <h3 class="section-title">今日观察（{{ todayDate }}）</h3>
+    <div v-if="activeTab === 'today'">
+      <p class="text-body" style="margin-bottom: 24px;">展示今日需要观察派息或敲出的存续产品。今日日期: {{ todayDate }}</p>
+      <div v-if="todayLoading" class="loading-state"><p>加载中...</p></div>
+      <div v-else-if="todayProducts.length">
+        <PanelCard title="今日观察（{{ todayDate }}）">
           <div class="table-wrap">
             <table class="overview-table">
               <thead>
@@ -214,37 +211,37 @@
             </table>
           </div>
           <p class="table-summary">今日共 {{ todayProducts.length }} 个产品需观察</p>
-        </div>
-        <div v-else-if="todayLoaded" class="empty-state">
-          <p>今日无产品需要观察派息/敲出。</p>
-        </div>
+        </PanelCard>
       </div>
+      <div v-else-if="todayLoaded" class="empty-state">
+        <p>今日无产品需要观察派息/敲出。</p>
+      </div>
+    </div>
 
-      <div v-if="activeTab === 'posters'">
-        <p class="desc">自动生成敲出/派息喜报海报。可选择日期查询或生成对应日期的喜报。</p>
+    <div v-if="activeTab === 'posters'">
+      <p class="text-body" style="margin-bottom: 24px;">自动生成敲出/派息喜报海报。可选择日期查询或生成对应日期的喜报。</p>
 
-        <div class="panel">
-          <h3 class="panel-title">喜报操作</h3>
-          <div class="form-row">
-            <label>筛选日期</label>
-            <input v-model="filterDate" type="date" class="input" style="width: 160px; flex: none;" @change="loadPosters" />
-          </div>
-          <div class="form-row">
-            <button class="btn btn-primary" :disabled="posterGenerating" @click="generatePosters">
-              {{ posterGenerating ? '生成中...' : '生成喜报' }}
-            </button>
-            <button class="btn btn-secondary" @click="resetFilterDate">重置为今日</button>
-            <span v-if="posterMsg" class="success">{{ posterMsg }}</span>
-            <span v-if="posterError" class="error">{{ posterError }}</span>
-          </div>
+      <PanelCard title="喜报操作">
+        <div class="form-row">
+          <label>筛选日期</label>
+          <input v-model="filterDate" type="date" class="input" style="width: 160px; flex: none;" @change="loadPosters" />
         </div>
-
-        <div v-if="posterLoading" class="empty-state"><p>加载中...</p></div>
-        <div v-else-if="posterList.length === 0 && posterLoaded" class="empty-state">
-          <p>{{ filterDate }} 暂无喜报。可点击"生成喜报"为该日期生成。</p>
+        <div class="form-row">
+          <button class="btn btn-primary" :disabled="posterGenerating" @click="generatePosters">
+            {{ posterGenerating ? '生成中...' : '生成喜报' }}
+          </button>
+          <button class="btn btn-secondary" @click="resetFilterDate">重置为今日</button>
+          <span v-if="posterMsg" class="success-msg" style="margin-left: 12px;">{{ posterMsg }}</span>
+          <span v-if="posterError" class="error-msg" style="margin-left: 12px;">{{ posterError }}</span>
         </div>
-        <div v-else-if="posterList.length > 0" class="report-panel">
-          <h3 class="section-title">喜报（{{ filterDate }}）· 共 {{ posterList.length }} 张</h3>
+      </PanelCard>
+
+      <div v-if="posterLoading" class="loading-state"><p>加载中...</p></div>
+      <div v-else-if="posterList.length === 0 && posterLoaded" class="empty-state">
+        <p>{{ filterDate }} 暂无喜报。可点击"生成喜报"为该日期生成。</p>
+      </div>
+      <div v-else-if="posterList.length > 0">
+        <PanelCard title="喜报（{{ filterDate }}）· 共 {{ posterList.length }} 张">
           <div class="poster-grid">
             <div v-for="p in posterList" :key="p.id" class="poster-card">
               <div class="poster-card-header">
@@ -260,15 +257,16 @@
               />
             </div>
           </div>
-        </div>
+        </PanelCard>
       </div>
     </div>
-  </SubPageLayout>
+  </WorkbenchLayout>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import SubPageLayout from '../components/SubPageLayout.vue'
+import WorkbenchLayout from '../components/WorkbenchLayout.vue'
+import PanelCard from '../components/PanelCard.vue'
 import PosterTemplate from '../components/PosterTemplate.vue'
 
 const activeTab = ref('all')
@@ -536,112 +534,46 @@ function dividendClass(status) {
 </script>
 
 <style scoped>
-.desc { color: #6B5C4E; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
+:deep(.workbench-main) {
+  max-width: none;
+}
 
 .tab-bar {
   display: flex;
-  gap: 2px;
-  margin-bottom: 20px;
-  background: #fff;
-  border: 1px solid #E8DDD0;
-  border-radius: 8px;
+  gap: 4px;
+  margin-bottom: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
   padding: 4px;
   width: fit-content;
 }
 
 .tab-btn {
-  padding: 8px 20px;
   border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
   background: transparent;
-  color: #6B5C4E;
-  transition: all 0.15s;
+  color: var(--ink-soft);
 }
 
-.tab-btn:hover { background: #F5F0E8; }
+.tab-btn:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
 
 .tab-btn.active {
-  background: #D97757;
+  background: var(--brand);
   color: #fff;
 }
 
-.panel {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 20px;
-  border: 1px solid #E8DDD0;
-}
-
-.panel-title { font-size: 15px; font-weight: 600; color: #1A1109; margin-bottom: 16px; }
-
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.form-row > label:first-child {
-  font-size: 13px;
-  color: #6B5C4E;
-  white-space: nowrap;
-  width: 70px;
-  flex-shrink: 0;
-}
-
-.input {
-  flex: 1;
-  border: 1px solid #E8DDD0;
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
-  outline: none;
-  background: #fff;
-  color: #1A1109;
-}
-
-.input:focus { border-color: #8B7355; }
-
 .file-source { flex: 1; display: flex; align-items: center; gap: 10px; }
-.file-badge { font-size: 13px; color: #1A1109; font-weight: 500; }
-.file-from { font-size: 12px; color: #A8967E; background: #F5F0E8; padding: 2px 8px; border-radius: 10px; }
+
 .month-input { width: 180px; flex: none; }
 
-.btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; font-weight: 500; margin-right: 8px; }
-.btn-primary { background: #C62828; color: #fff; }
-.btn-primary:hover:not(:disabled) { background: #B71C1C; }
-.btn-primary:disabled { background: #EF9A9A; cursor: not-allowed; }
-.btn-secondary { background: #8B7355; color: #fff; }
-.btn-secondary:hover:not(:disabled) { background: #7A6348; }
-.btn-secondary:disabled { background: #C4B5A5; cursor: not-allowed; }
-
-.update-time { margin-left: 16px; color: #8B7355; font-size: 12px; }
-.error { margin-left: 12px; color: #C62828; font-size: 13px; }
-.success { margin-left: 12px; color: #2E7D45; font-size: 13px; }
-
-.report-panel {
-  background: #fff;
-  border-radius: 12px;
-  padding: 28px;
-  border: 1px solid #E8DDD0;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #1A1109;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid #F0EAE0;
-}
-
-.table-wrap {
-  overflow-x: auto;
-  margin-bottom: 12px;
+.table-summary {
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: right;
+  padding-top: 8px;
 }
 
 .overview-table {
@@ -653,10 +585,10 @@ function dividendClass(status) {
 
 .overview-table th {
   padding: 10px 12px;
-  border-bottom: 1px solid #E8DDD0;
-  color: #8B7355;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--ink-soft);
   font-weight: 600;
-  background: #FAF7F4;
+  background: var(--surface-muted);
   font-size: 11px;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -669,12 +601,12 @@ function dividendClass(status) {
   cursor: pointer;
   transition: background 0.15s;
 }
-.data-row:hover { background: #FAF7F4; }
+.data-row:hover { background: var(--surface-muted); }
 
 .overview-table td {
   padding: 11px 12px;
-  border-bottom: 1px solid #F0EAE0;
-  color: #1A1109;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--ink-strong);
   white-space: nowrap;
 }
 
@@ -685,15 +617,15 @@ function dividendClass(status) {
 .sticky-col {
   position: sticky;
   left: 0;
-  background: #fff;
+  background: var(--bg-card);
   z-index: 2;
 }
-.data-row:hover .sticky-col { background: #FAF7F4; }
-.overview-table th.sticky-col { z-index: 3; background: #FAF7F4; }
+.data-row:hover .sticky-col { background: var(--surface-muted); }
+.overview-table th.sticky-col { z-index: 3; background: var(--surface-muted); }
 
 .chevron {
   font-size: 14px;
-  color: #A8967E;
+  color: var(--ink-soft);
   transition: transform 0.2s;
   display: inline-block;
   line-height: 1;
@@ -701,63 +633,51 @@ function dividendClass(status) {
 }
 .chevron.open { transform: rotate(90deg); }
 
-.code-cell { font-family: monospace; font-size: 11px; color: #6B5C4E; }
-.next-date { color: #C62828; font-weight: 600; }
-
-.status-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #E8F4EC;
-  color: #2E7D45;
-}
+.code-cell { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); }
+.next-date { color: var(--danger); font-weight: 600; }
 
 .result-yes-knockout {
-  color: #C62828;
+  color: var(--danger);
   font-weight: 600;
-  background: #FEF3E2;
+  background: var(--danger-soft);
   border-radius: 4px;
   padding: 2px 6px;
 }
 
 .result-yes-dividend {
-  color: #2E7D45;
+  color: var(--success);
   font-weight: 600;
-  background: #E8F4EC;
+  background: var(--success-soft);
   border-radius: 4px;
   padding: 2px 6px;
 }
 
-.result-no {
-  color: #8B7355;
-}
+.result-no { color: var(--ink-soft); }
 
 .result-na {
-  color: #A8967E;
+  color: var(--ink-soft);
   font-style: italic;
   font-size: 11px;
 }
 
 .detail-row td {
   padding: 0;
-  border-bottom: 1px solid #F0EAE0;
+  border-bottom: 1px solid var(--border-soft);
 }
 
-.detail-cell {
-  background: #FAFAF8;
-}
+.detail-cell { background: var(--surface-muted); }
 
 .detail-label {
   font-size: 11px;
   font-weight: 600;
-  color: #8B7355;
+  color: var(--ink-soft);
   letter-spacing: 0.04em;
   padding: 12px 16px 8px;
 }
 
 .detail-empty {
   font-size: 12px;
-  color: #A8967E;
+  color: var(--ink-soft);
   padding: 12px 16px;
 }
 
@@ -770,8 +690,8 @@ function dividendClass(status) {
 
 .detail-table th {
   padding: 6px 12px;
-  border-bottom: 1px solid #E8DDD0;
-  color: #8B7355;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--ink-soft);
   font-weight: 600;
   background: transparent;
   text-align: left;
@@ -779,48 +699,9 @@ function dividendClass(status) {
 
 .detail-table td {
   padding: 6px 12px;
-  border-bottom: 1px solid #F0EAE0;
-  color: #3D3028;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--ink);
 }
-
-.table-summary {
-  font-size: 12px;
-  color: #8B7355;
-  text-align: right;
-  padding-top: 8px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 48px 24px;
-  color: #A8967E;
-  font-size: 14px;
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #E8DDD0;
-}
-
-/* Workbench theme overrides */
-.desc { color: var(--ink-soft); }
-
-.tab-bar, .panel, .report-panel, .empty-state { border-color: var(--border-soft); border-radius: var(--radius); background: var(--surface); }
-.tab-btn, .form-row > label:first-child, .file-from, .update-time, .table-summary,
-.detail-label, .detail-empty, .code-cell, .result-no, .result-na { color: var(--ink-soft); }
-.tab-btn:hover, .data-row:hover { background: var(--surface-muted); }
-.tab-btn.active, .btn-primary { background: var(--brand); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--brand-hover); }
-.btn-secondary { border: 1px solid var(--border); color: var(--ink); background: #fff; }
-.btn-secondary:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
-.panel-title, .section-title, .file-badge, .overview-table td { color: var(--ink-strong); }
-.input { border-color: var(--border); border-radius: var(--radius); color: var(--ink); }
-.input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
-.file-from, .overview-table th, .overview-table th.sticky-col, .detail-cell, .data-row:hover .sticky-col { background: var(--surface-muted); }
-.sticky-col { background: var(--surface); }
-.overview-table th, .overview-table td, .detail-row td, .detail-table th, .detail-table td { border-color: var(--border-soft); }
-.status-badge, .result-yes-dividend { color: var(--success); background: var(--success-soft); }
-.result-yes-knockout { color: var(--danger); background: var(--danger-soft); }
-
-.calendar-panel { padding: 24px; }
 
 .calendar-weekdays {
   display: grid;
@@ -854,7 +735,7 @@ function dividendClass(status) {
   padding: 10px;
   border-right: 1px solid var(--border-soft);
   border-bottom: 1px solid var(--border-soft);
-  background: var(--surface);
+  background: var(--bg-card);
 }
 
 .calendar-cell.muted { background: var(--surface-muted); }
@@ -894,7 +775,7 @@ function dividendClass(status) {
 }
 
 .poster-card {
-  background: var(--surface);
+  background: var(--bg-card);
   border-radius: var(--radius);
   padding: 20px;
   border: 1px solid var(--border-soft);
@@ -902,9 +783,7 @@ function dividendClass(status) {
   transition: box-shadow 0.2s;
 }
 
-.poster-card:hover {
-  box-shadow: var(--shadow-soft);
-}
+.poster-card:hover { box-shadow: var(--shadow-soft); }
 
 .poster-card-header {
   display: flex;

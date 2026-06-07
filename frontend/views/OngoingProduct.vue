@@ -1,163 +1,156 @@
 <template>
-  <SubPageLayout
-    title="存续产品分析"
-    description="指定开始和结束年月，查看进场时间、金额、人次、人数及新客/增购/复购分布。"
-    wide
-  >
-    <div class="section">
-      <p class="desc">指定开始/结束年月，查看进场时间分布、每月进场金额、交易人次与人数、新客/增购/复购分布。</p>
+  <WorkbenchLayout>
+    <h1 class="text-page-title">存续产品分析</h1>
+    <p class="text-body" style="margin-bottom: 24px;">指定开始/结束年月，查看进场时间分布、每月进场金额、交易人次与人数、新客/增购/复购分布。</p>
 
-      <div class="panel">
-        <h3 class="panel-title">参数设置</h3>
-        <div class="form-row">
-          <label>数据文件</label>
-          <label class="file-label">
-            <span>{{ fileName || '点击选择航班交易服务总表.xlsx' }}</span>
-            <input type="file" accept=".xlsx,.xls" @change="onFileChange" class="file-input" />
-          </label>
-        </div>
-        <div class="form-row">
-          <label>开始年月</label>
-          <input v-model="startMonth" type="month" class="input" />
-        </div>
-        <div class="form-row">
-          <label>结束年月</label>
-          <input v-model="endMonth" type="month" class="input" />
-        </div>
-        <button class="btn btn-primary" :disabled="!fileLoaded || loading" @click="run">
-          {{ loading ? '计算中...' : '生成分析' }}
-        </button>
-        <span v-if="errorMsg" class="error">{{ errorMsg }}</span>
+    <PanelCard title="参数设置">
+      <div class="form-row">
+        <label>数据文件</label>
+        <label class="file-label">
+          <span>{{ fileName || '点击选择航班交易服务总表.xlsx' }}</span>
+          <input type="file" accept=".xlsx,.xls" @change="onFileChange" class="file-input" />
+        </label>
       </div>
+      <div class="form-row">
+        <label>开始年月</label>
+        <input v-model="startMonth" type="month" class="input" />
+      </div>
+      <div class="form-row">
+        <label>结束年月</label>
+        <input v-model="endMonth" type="month" class="input" />
+      </div>
+      <button class="btn btn-primary" :disabled="!fileLoaded || loading" @click="run">
+        {{ loading ? '计算中...' : '生成分析' }}
+      </button>
+      <span v-if="errorMsg" class="error-msg" style="margin-left: 12px;">{{ errorMsg }}</span>
+    </PanelCard>
 
-      <template v-if="result">
-        <!-- 总览 -->
-        <div class="report-panel">
-          <h3 class="section-title">总览</h3>
-          <div class="summary-grid">
-            <div class="s-card">
-              <div class="s-val">{{ result.totProds }}</div>
-              <div class="s-lbl">产品数量（航班）</div>
-            </div>
-            <div class="s-card">
-              <div class="s-val">{{ fmt(result.totAmt) }}</div>
-              <div class="s-lbl">总金额（万元）</div>
-            </div>
-            <div class="s-card">
-              <div class="s-val">{{ result.totVisits }}</div>
-              <div class="s-lbl">交易人次</div>
-            </div>
-            <div class="s-card">
-              <div class="s-val">{{ result.totPeople }}</div>
-              <div class="s-lbl">客户人数</div>
-            </div>
+    <template v-if="result">
+      <PanelCard title="总览">
+        <div class="summary-grid">
+          <div class="s-card">
+            <div class="s-val">{{ result.totProds }}</div>
+            <div class="s-lbl">产品数量（航班）</div>
+          </div>
+          <div class="s-card">
+            <div class="s-val">{{ fmt(result.totAmt) }}</div>
+            <div class="s-lbl">总金额（万元）</div>
+          </div>
+          <div class="s-card">
+            <div class="s-val">{{ result.totVisits }}</div>
+            <div class="s-lbl">交易人次</div>
+          </div>
+          <div class="s-card">
+            <div class="s-val">{{ result.totPeople }}</div>
+            <div class="s-lbl">客户人数</div>
           </div>
         </div>
+      </PanelCard>
 
-        <!-- 1. 进场时间分布 -->
-        <div class="report-panel">
-          <h3 class="section-title">1. 进场时间分布</h3>
-          <p class="section-desc">统计区间内按进场（航班日期）年月的产品数量、金额、人次。</p>
+      <PanelCard title="1. 进场时间分布">
+        <p class="text-label" style="margin-bottom: 14px;">统计区间内按进场（航班日期）年月的产品数量、金额、人次。</p>
+        <div class="table-wrap">
           <table class="data-table">
             <thead>
               <tr>
                 <th>年月</th>
-                <th class="num">产品数量</th>
-                <th class="num">金额（万元）</th>
-                <th class="num">人次</th>
+                <th style="text-align: right;">产品数量</th>
+                <th style="text-align: right;">金额（万元）</th>
+                <th style="text-align: right;">人次</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in result.monthRows" :key="row.ym">
                 <td>{{ row.ym }}</td>
-                <td class="num">{{ row.prods }}</td>
-                <td class="num">{{ fmt(row.amt) }}</td>
-                <td class="num">{{ row.visits }}</td>
+                <td style="text-align: right;">{{ row.prods }}</td>
+                <td style="text-align: right;">{{ fmt(row.amt) }}</td>
+                <td style="text-align: right;">{{ row.visits }}</td>
               </tr>
             </tbody>
             <tfoot>
               <tr class="total-row">
                 <td>合计</td>
-                <td class="num">{{ result.totProds }}</td>
-                <td class="num">{{ fmt(result.totAmt) }}</td>
-                <td class="num">{{ result.totVisits }}</td>
+                <td style="text-align: right;">{{ result.totProds }}</td>
+                <td style="text-align: right;">{{ fmt(result.totAmt) }}</td>
+                <td style="text-align: right;">{{ result.totVisits }}</td>
               </tr>
             </tfoot>
           </table>
         </div>
+      </PanelCard>
 
-        <!-- 2. 交易人次与人数 -->
-        <div class="report-panel">
-          <h3 class="section-title">2. 交易人次与人数</h3>
-          <p class="section-desc">人次为每月交易笔数，人数为每月参与的唯一客户数（按姓名去重）。</p>
+      <PanelCard title="2. 交易人次与人数">
+        <p class="text-label" style="margin-bottom: 14px;">人次为每月交易笔数，人数为每月参与的唯一客户数（按姓名去重）。</p>
+        <div class="table-wrap">
           <table class="data-table">
             <thead>
               <tr>
                 <th>年月</th>
-                <th class="num">人次</th>
-                <th class="num">人数（去重）</th>
-                <th class="num">人均笔数</th>
+                <th style="text-align: right;">人次</th>
+                <th style="text-align: right;">人数（去重）</th>
+                <th style="text-align: right;">人均笔数</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in result.monthRows" :key="row.ym">
                 <td>{{ row.ym }}</td>
-                <td class="num">{{ row.visits }}</td>
-                <td class="num">{{ row.people }}</td>
-                <td class="num">{{ row.people ? (row.visits / row.people).toFixed(1) : '-' }}</td>
+                <td style="text-align: right;">{{ row.visits }}</td>
+                <td style="text-align: right;">{{ row.people }}</td>
+                <td style="text-align: right;">{{ row.people ? (row.visits / row.people).toFixed(1) : '-' }}</td>
               </tr>
             </tbody>
             <tfoot>
               <tr class="total-row">
                 <td>合计</td>
-                <td class="num">{{ result.totVisits }}</td>
-                <td class="num">{{ result.totPeople }}</td>
-                <td class="num">{{ result.totPeople ? (result.totVisits / result.totPeople).toFixed(1) : '-' }}</td>
+                <td style="text-align: right;">{{ result.totVisits }}</td>
+                <td style="text-align: right;">{{ result.totPeople }}</td>
+                <td style="text-align: right;">{{ result.totPeople ? (result.totVisits / result.totPeople).toFixed(1) : '-' }}</td>
               </tr>
             </tfoot>
           </table>
         </div>
+      </PanelCard>
 
-        <!-- 3. 新客/增购/复购分布 -->
-        <div class="report-panel">
-          <h3 class="section-title">3. 新客 / 增购 / 复购分布</h3>
-          <p class="section-desc">按交易类型统计金额与笔数。</p>
+      <PanelCard title="3. 新客 / 增购 / 复购分布">
+        <p class="text-label" style="margin-bottom: 14px;">按交易类型统计金额与笔数。</p>
+        <div class="table-wrap">
           <table class="data-table">
             <thead>
               <tr>
                 <th>类型</th>
-                <th class="num">笔数</th>
-                <th class="num">金额（万元）</th>
-                <th class="num">金额占比</th>
+                <th style="text-align: right;">笔数</th>
+                <th style="text-align: right;">金额（万元）</th>
+                <th style="text-align: right;">金额占比</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in result.typeRows" :key="row.type">
                 <td>{{ row.type }}</td>
-                <td class="num">{{ row.cnt }}</td>
-                <td class="num">{{ fmt(row.amt) }}</td>
-                <td class="num">{{ result.totAmt ? (row.amt / result.totAmt * 100).toFixed(1) + '%' : '-' }}</td>
+                <td style="text-align: right;">{{ row.cnt }}</td>
+                <td style="text-align: right;">{{ fmt(row.amt) }}</td>
+                <td style="text-align: right;">{{ result.totAmt ? (row.amt / result.totAmt * 100).toFixed(1) + '%' : '-' }}</td>
               </tr>
             </tbody>
             <tfoot>
               <tr class="total-row">
                 <td>合计</td>
-                <td class="num">{{ result.totVisits }}</td>
-                <td class="num">{{ fmt(result.totAmt) }}</td>
-                <td class="num">100%</td>
+                <td style="text-align: right;">{{ result.totVisits }}</td>
+                <td style="text-align: right;">{{ fmt(result.totAmt) }}</td>
+                <td style="text-align: right;">100%</td>
               </tr>
             </tfoot>
           </table>
         </div>
-      </template>
-    </div>
-  </SubPageLayout>
+      </PanelCard>
+    </template>
+  </WorkbenchLayout>
 </template>
 
 <script setup>
 import { ref } from 'vue'
 import * as XLSX from 'xlsx'
-import SubPageLayout from '../components/SubPageLayout.vue'
+import WorkbenchLayout from '../components/WorkbenchLayout.vue'
+import PanelCard from '../components/PanelCard.vue'
 
 const startMonth = ref('')
 const endMonth = ref('')
@@ -167,7 +160,6 @@ const loading = ref(false)
 const errorMsg = ref('')
 const result = ref(null)
 
-// 原始行数据 [航班编号, 姓名, 金额, 类型, 存续状态, year, month]
 let rows = []
 
 function onFileChange(e) {
@@ -180,9 +172,8 @@ function onFileChange(e) {
   reader.onload = (ev) => {
     try {
       const wb = XLSX.read(ev.target.result, { type: 'array' })
-      // 优先读 '交易表' sheet，否则取第一个
       const sheetName = wb.SheetNames.includes('交易表') ? '交易表' : wb.SheetNames[0]
-      const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null })
+      const raw = XLSX.utils.sheetTo_json(wb.Sheets[sheetName], { header: 1, defval: null })
       rows = []
       for (let i = 1; i < raw.length; i++) {
         const r = raw[i]
@@ -195,13 +186,13 @@ function onFileChange(e) {
           month = parseInt(m[2])
         }
         rows.push([
-          r[1] || '',    // 0: 航班编号
-          r[3] || '',    // 1: 姓名
-          r[6] || 0,     // 2: 金额
-          r[7] || '',    // 3: 类型
-          r[21] || '',   // 4: 存续状态
-          year,          // 5: year
-          month,         // 6: month
+          r[1] || '',
+          r[3] || '',
+          r[6] || 0,
+          r[7] || '',
+          r[21] || '',
+          year,
+          month,
         ])
       }
       fileLoaded.value = true
@@ -239,7 +230,6 @@ function run() {
     return
   }
 
-  // 按年月聚合
   const MM = {}
   for (const r of filtered) {
     const k = `${r[5]}-${pad(r[6])}`
@@ -257,7 +247,6 @@ function run() {
     people: MM[k].names.size,
   }))
 
-  // 按类型聚合
   const TM = {}
   for (const r of filtered) {
     const t = r[3] || '未知'
@@ -287,90 +276,30 @@ function fmt(val) {
 </script>
 
 <style scoped>
-.desc { color: #6B5C4E; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
-
-.panel {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 20px;
-  border: 1px solid #E8DDD0;
+:deep(.workbench-main) {
+  max-width: none;
 }
-
-.panel-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.form-row > label:first-child {
-  font-size: 13px;
-  white-space: nowrap;
-  width: 90px;
-  flex-shrink: 0;
-}
-
-.input {
-  flex: 1;
-  border: 1px solid #E8DDD0;
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
-  outline: none;
-  background: #fff;
-}
-
-.input:focus { border-color: #D97757; }
 
 .file-label {
   flex: 1;
   display: flex;
   align-items: center;
-  border: 1px solid #E8DDD0;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   font-size: 13px;
   cursor: pointer;
-  color: #6B5C4E;
+  color: var(--ink-soft);
   background: #fff;
   transition: border-color 0.2s;
 }
 
-.file-label:hover { border-color: #D97757; }
+.file-label:hover {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
 .file-input { display: none; }
-
-.btn {
-  padding: 8px 20px;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  border: none;
-}
-
-.btn-primary { background: #D97757; color: #fff; }
-.btn-primary:disabled { background: #E9B99A; cursor: not-allowed; }
-
-.error { margin-left: 12px; color: #e53935; font-size: 13px; }
-
-.report-panel {
-  background: #fff;
-  border-radius: 12px;
-  padding: 28px 28px 20px;
-  margin-bottom: 20px;
-  border: 1px solid #E8DDD0;
-}
-
-.section-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: #D97757;
-  margin-bottom: 8px;
-}
-
-.section-desc { font-size: 13px; color: #6B5C4E; margin-bottom: 14px; }
 
 .summary-grid {
   display: grid;
@@ -380,110 +309,24 @@ function fmt(val) {
 }
 
 .s-card {
-  background: #F5F0E8;
-  border: 1px solid #E8DDD0;
-  border-radius: 6px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
   padding: 14px 16px;
   text-align: center;
 }
 
-.s-val { font-size: 24px; font-weight: 700; color: #D97757; }
-.s-lbl { font-size: 12px; color: #6B5C4E; margin-top: 4px; }
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.data-table th {
-  padding: 10px 14px;
-  border-bottom: 2px solid #E8DDD0;
-  color: #D97757;
-  font-weight: 600;
-  background: #fff;
-  text-align: left;
-}
-
-.data-table td {
-  padding: 10px 14px;
-  border-bottom: 1px solid #EDE5DA;
-  color: #D97757;
-}
-
-.num { text-align: right; }
+.s-val { font-size: 24px; font-weight: 700; color: var(--brand); }
+.s-lbl { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
 
 .total-row td {
   font-weight: 700;
-  border-top: 2px solid #E8DDD0;
+  border-top: 2px solid var(--border-soft);
   border-bottom: none;
-  background: #F5F0E8;
-}
-
-/* Workbench theme overrides */
-.desc,
-.section-desc,
-.s-lbl {
-  color: var(--ink-soft);
-}
-
-.panel,
-.report-panel,
-.s-card {
-  border-color: var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.panel-title,
-.data-table td {
-  color: var(--ink-strong);
-}
-
-.section-title,
-.s-val,
-.data-table th {
-  color: var(--brand);
-}
-
-.input,
-.file-label {
-  border-color: var(--border);
-  border-radius: var(--radius);
-  color: var(--ink);
-}
-
-.input:focus,
-.file-label:hover {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--brand-soft);
-}
-
-.btn-primary {
-  background: var(--brand);
-  color: #fff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--brand-hover);
-}
-
-.btn-primary:disabled {
-  background: var(--brand);
-}
-
-.error {
-  color: var(--danger);
-}
-
-.s-card,
-.total-row td {
   background: var(--surface-muted);
 }
 
-.data-table th,
-.data-table td,
-.total-row td {
-  border-color: var(--border-soft);
+@media (max-width: 720px) {
+  .summary-grid { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
