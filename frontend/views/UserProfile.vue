@@ -1,61 +1,53 @@
 <template>
-  <SubPageLayout
-    title="用户画像"
-    description="查询合投用户画像，支持按实际购买人、名义购买人、专户客户、竞品客户和行业筛选。"
-    wide
-  >
-    <div class="section">
-      <p class="desc">查询合投用户画像，支持按实际购买人、名义购买人、是否专户客户、客户是否竞品群、客户行业等条件筛选。</p>
+  <WorkbenchLayout>
+    <h1 class="text-page-title">用户画像</h1>
+    <p class="text-body">查询合投用户画像，支持按实际购买人、名义购买人、是否专户客户、客户是否竞品群、客户行业等条件筛选。</p>
 
-      <!-- 搜索面板 -->
-      <div class="panel">
-        <h3 class="panel-title">搜索条件</h3>
-        <div class="form-grid">
-          <div class="form-row">
-            <label>实际购买人</label>
-            <input v-model="filters.actual_buyer" type="text" placeholder="模糊匹配" class="input" @keyup.enter="search" />
-          </div>
-          <div class="form-row">
-            <label>名义购买人</label>
-            <input v-model="filters.nominal_buyer" type="text" placeholder="模糊匹配" class="input" @keyup.enter="search" />
-          </div>
-          <div class="form-row">
-            <label>是否专户客户</label>
-            <select v-model="filters.is_dedicated" class="input">
-              <option value="">全部</option>
-              <option value="是">是</option>
-              <option value="否">否</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label>客户是否竞品群</label>
-            <select v-model="filters.is_competitor" class="input">
-              <option value="">全部</option>
-              <option value="是">是</option>
-              <option value="否">否</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label>客户行业</label>
-            <select v-model="filters.industry" class="input">
-              <option value="">全部</option>
-              <option v-for="ind in industries" :key="ind" :value="ind">{{ ind }}</option>
-            </select>
-          </div>
-        </div>
-        <div class="search-actions">
-          <button class="btn btn-primary" :disabled="loading" @click="search">
-            {{ loading ? '查询中...' : '搜索' }}
-          </button>
-          <button class="btn btn-outline" @click="reset">重置</button>
-          <span v-if="errorMsg" class="error">{{ errorMsg }}</span>
-          <span class="result-count" v-if="!loading && rows.length > 0">共 {{ rows.length }} 条</span>
-        </div>
+    <PanelCard title="搜索条件">
+      <div class="form-row">
+        <label>实际购买人</label>
+        <input v-model="filters.actual_buyer" type="text" placeholder="模糊匹配" class="input" @keyup.enter="search" />
       </div>
+      <div class="form-row">
+        <label>名义购买人</label>
+        <input v-model="filters.nominal_buyer" type="text" placeholder="模糊匹配" class="input" @keyup.enter="search" />
+      </div>
+      <div class="form-row">
+        <label>是否专户客户</label>
+        <select v-model="filters.is_dedicated" class="input">
+          <option value="">全部</option>
+          <option value="是">是</option>
+          <option value="否">否</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>客户是否竞品群</label>
+        <select v-model="filters.is_competitor" class="input">
+          <option value="">全部</option>
+          <option value="是">是</option>
+          <option value="否">否</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>客户行业</label>
+        <select v-model="filters.industry" class="input">
+          <option value="">全部</option>
+          <option v-for="ind in industries" :key="ind" :value="ind">{{ ind }}</option>
+        </select>
+      </div>
+      <div class="search-actions">
+        <button class="btn btn-primary" :disabled="loading" @click="search">
+          {{ loading ? '查询中...' : '搜索' }}
+        </button>
+        <button class="btn btn-outline" @click="reset">重置</button>
+        <span v-if="errorMsg" class="error-msg">{{ errorMsg }}</span>
+        <span class="result-count" v-if="!loading && rows.length > 0">共 {{ rows.length }} 条</span>
+      </div>
+    </PanelCard>
 
-      <!-- 结果表格 -->
-      <div v-if="rows.length" class="panel table-panel">
-        <table class="table">
+    <PanelCard v-if="rows.length" title="结果">
+      <div class="table-wrap">
+        <table class="data-table">
           <thead>
             <tr>
               <th>实际购买人</th>
@@ -92,29 +84,30 @@
               <td>{{ row.risk_tolerance || '-' }}</td>
               <td>
                 <span v-if="row.peak_balance != null">{{ fmtAmt(row.peak_balance) }}</span>
-                <span v-else class="pending">待接入</span>
+                <span v-else class="text-muted">待接入</span>
               </td>
               <td>
                 <span v-if="row.peak_diff != null" :class="row.peak_diff >= 0 ? 'positive' : 'negative'">
                   {{ row.peak_diff >= 0 ? '+' : '' }}{{ fmtAmt(row.peak_diff) }}
                 </span>
-                <span v-else class="pending">待接入</span>
+                <span v-else class="text-muted">待接入</span>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+    </PanelCard>
 
-      <div v-else-if="!loading && searched" class="empty">
-        未找到匹配的用户，请调整搜索条件
-      </div>
+    <div v-else-if="!loading && searched" class="empty-state">
+      未找到匹配的用户，请调整搜索条件
     </div>
-  </SubPageLayout>
+  </WorkbenchLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import SubPageLayout from '../components/SubPageLayout.vue'
+import WorkbenchLayout from '../components/WorkbenchLayout.vue'
+import PanelCard from '../components/PanelCard.vue'
 
 const filters = ref({
   actual_buyer: '',
@@ -178,17 +171,8 @@ function fmtAmt(v) {
 </script>
 
 <style scoped>
-.table-panel {
-  overflow-x: auto;
-}
-
-.positive {
-  color: var(--success);
-  font-weight: 700;
-}
-
-.negative {
-  color: var(--danger);
-  font-weight: 700;
-}
+.search-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.result-count { font-size: 13px; color: var(--ink-soft); }
+.positive { color: var(--success); font-weight: 700; }
+.negative { color: var(--danger); font-weight: 700; }
 </style>
