@@ -1,45 +1,54 @@
 <template>
   <aside class="sidebar" :class="{ collapsed: collapsed, overlay: overlayOpen }">
-    <div class="sidebar-brand">
-      <RouterLink to="/" class="brand-link" @click="emit('navigate')">
-        <span class="brand-mark">BW</span>
-        <span v-if="!collapsed" class="brand-text">
-          <strong>业务工作台</strong>
-          <em>航班服务数据分析平台</em>
-        </span>
-      </RouterLink>
-    </div>
+    <div class="sidebar-inner">
+      <div class="sidebar-brand">
+        <RouterLink to="/" class="brand-link" @click="emit('navigate')">
+          <span class="brand-mark">
+            <GitBranch :size="31" :stroke-width="3" />
+          </span>
+          <span v-if="!collapsed" class="brand-name">业务工作台</span>
+        </RouterLink>
+      </div>
 
-    <nav class="sidebar-nav">
-      <RouterLink
-        v-for="item in navItems"
-        :key="item.path"
-        :to="item.path"
-        class="sidebar-link"
-        :class="{ active: currentPath === item.path }"
-        @click="emit('navigate')"
-      >
-        <component :is="item.icon" :size="18" :stroke-width="1.8" />
-        <span v-if="!collapsed" class="sidebar-link-text">
-          <strong>{{ item.title }}</strong>
-          <em>{{ item.desc }}</em>
-        </span>
-      </RouterLink>
-    </nav>
+      <div v-if="!collapsed" class="workspace-select">
+        <span class="workspace-avatar">业</span>
+        <span class="workspace-name">航班服务业务空间</span>
+        <ChevronDown :size="16" />
+      </div>
 
-    <div class="sidebar-footer">
-      <div class="sidebar-divider"></div>
-      <RouterLink
-        to="/activity-log"
-        class="sidebar-link"
-        :class="{ active: currentPath === '/activity-log' }"
-        @click="emit('navigate')"
-      >
-        <ScrollText :size="18" :stroke-width="1.8" />
-        <span v-if="!collapsed" class="sidebar-link-text">
-          <strong>操作日志</strong>
-        </span>
-      </RouterLink>
+      <nav class="sidebar-nav" aria-label="主导航">
+        <RouterLink
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="sidebar-link"
+          :class="{ active: currentPath === item.path }"
+          @click="emit('navigate')"
+        >
+          <component :is="item.icon" :size="21" :stroke-width="2.2" />
+          <span v-if="!collapsed" class="sidebar-link-text">{{ item.title }}</span>
+        </RouterLink>
+      </nav>
+
+      <div class="sidebar-footer">
+        <RouterLink
+          to="/activity-log"
+          class="sidebar-link"
+          :class="{ active: currentPath === '/activity-log' }"
+          @click="emit('navigate')"
+        >
+          <ScrollText :size="21" :stroke-width="2.1" />
+          <span v-if="!collapsed" class="sidebar-link-text">操作日志</span>
+        </RouterLink>
+
+        <div v-if="!collapsed" class="account-card">
+          <span class="account-avatar">q</span>
+          <strong>qiuming peng</strong>
+          <button class="account-exit" type="button" aria-label="退出登录">
+            <LogOut :size="19" :stroke-width="2" />
+          </button>
+        </div>
+      </div>
     </div>
   </aside>
 
@@ -50,11 +59,22 @@
 import { computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import {
-  LayoutDashboard, Database, UserRound, UserX,
-  FileText, Eye, BarChart3, PieChart, Users, ScrollText
+  Award,
+  BarChart3,
+  ChevronDown,
+  Database,
+  FileText,
+  GitBranch,
+  Home,
+  LogOut,
+  PieChart,
+  ScrollText,
+  TrendingDown,
+  UserRound,
+  Users,
 } from '@lucide/vue'
 
-const props = defineProps({
+defineProps({
   collapsed: { type: Boolean, default: false },
   overlayOpen: { type: Boolean, default: false },
 })
@@ -65,167 +85,249 @@ const route = useRoute()
 const currentPath = computed(() => route.path)
 
 const navItems = [
-  { path: '/', title: 'Dashboard', desc: '数据总览', icon: LayoutDashboard },
-  { path: '/data-preparation', title: '数据准备', desc: '同步飞书数据', icon: Database },
-  { path: '/user-profile', title: '用户画像', desc: '查询用户特征', icon: UserRound },
-  { path: '/customer-churn', title: '客户流失', desc: '未复购客户', icon: UserX },
-  { path: '/product-report', title: '产品报告', desc: '运行材料', icon: FileText },
-  { path: '/product-completion', title: '派息/敲出观察', desc: '跟踪观察日', icon: Eye },
-  { path: '/ongoing-product', title: '存续分析', desc: '持有产品', icon: BarChart3 },
-  { path: '/channel-analysis', title: '渠道分析', desc: '渠道表现', icon: PieChart },
-  { path: '/nominal-buyer', title: '名义购买人', desc: '管理人匹配', icon: Users },
+  { path: '/', title: '业务总览', icon: Home },
+  { path: '/data-preparation', title: '数据准备', icon: Database },
+  { path: '/product-completion', title: '观察日历', icon: Award },
+  { path: '/product-report', title: '产品报告', icon: FileText },
+  { path: '/ongoing-product', title: '存续分析', icon: BarChart3 },
+  { path: '/user-profile', title: '用户画像', icon: UserRound },
+  { path: '/channel-analysis', title: '渠道分析', icon: PieChart },
+  { path: '/customer-churn', title: '流失分析', icon: TrendingDown },
+  { path: '/nominal-buyer', title: '名义购买人', icon: Users },
 ]
 </script>
 
 <style scoped>
 .sidebar {
   position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 240px;
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-soft);
-  display: flex;
-  flex-direction: column;
+  inset: 16px auto 16px 16px;
+  width: 232px;
   z-index: 100;
-  transition: transform 250ms ease, width 250ms ease;
+  transition: transform 220ms ease, width 220ms ease;
 }
 
 .sidebar.collapsed {
-  width: 64px;
+  width: 72px;
+}
+
+.sidebar-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
 
 .sidebar-brand {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
   padding: 16px;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-warm);
 }
 
 .brand-link {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .brand-mark {
-  display: flex;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: var(--brand);
+  flex: 0 0 auto;
   color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-  flex-shrink: 0;
+  background: var(--ink-strong);
+  border-radius: 8px;
 }
 
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overflow: hidden;
-}
-
-.brand-text strong {
-  font-size: 14px;
-  font-weight: 700;
+.brand-name {
   color: var(--ink-strong);
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
-.brand-text em {
-  font-size: 11px;
-  font-style: normal;
-  color: var(--ink-soft);
+.workspace-select {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px;
+  padding: 0 12px;
+  color: var(--brand);
+  border: 1px solid rgba(38, 119, 255, 0.24);
+  border-radius: var(--radius);
+  background: var(--brand-soft);
+}
+
+.workspace-avatar,
+.account-avatar {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: #fff;
+  background: #ff7900;
+  font-weight: 800;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.workspace-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 680;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 8px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  padding: 8px 10px 12px;
+  border-top: 1px solid var(--border-warm);
 }
 
 .sidebar-link {
+  min-height: 42px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  transition: all 150ms ease-out;
-  position: relative;
+  gap: 11px;
+  color: var(--nav-muted);
   text-decoration: none;
+  border-radius: var(--radius);
+  font-weight: 680;
+  padding: 0 10px;
+  transition: color 150ms ease, background 150ms ease;
 }
 
 .sidebar-link:hover {
+  color: var(--ink-strong);
   background: var(--bg-hover);
 }
 
 .sidebar-link.active {
-  background: var(--bg-active);
   color: var(--brand);
+  background: var(--bg-active);
 }
 
-.sidebar-link.active::before {
-  content: '';
-  position: absolute;
-  left: -8px;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--brand);
+.sidebar-link.active svg:first-child {
+  color: var(--brand);
+  fill: currentColor;
+  stroke-width: 1.8;
 }
 
 .sidebar-link-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overflow: hidden;
-}
-
-.sidebar-link-text strong {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.sidebar-link-text em {
-  font-size: 11px;
-  font-style: normal;
-  color: var(--ink-soft);
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
 }
 
 .sidebar-footer {
-  padding: 8px;
-  border-top: 1px solid var(--border-soft);
+  padding: 10px;
+  border-top: 1px solid var(--border-warm);
 }
 
-.sidebar-divider {
-  height: 1px;
-  margin-bottom: 6px;
+.account-card {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.account-card strong {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-exit {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e0e3e7;
+  border-radius: var(--radius);
+  color: #2c3038;
+  background: transparent;
+}
+
+.sidebar.collapsed .sidebar-brand,
+.sidebar.collapsed .sidebar-nav,
+.sidebar.collapsed .sidebar-footer {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.sidebar.collapsed .brand-name,
+.sidebar.collapsed .workspace-select,
+.sidebar.collapsed .account-card {
+  display: none;
+}
+
+.sidebar.collapsed .brand-mark {
+  width: 40px;
+  height: 40px;
+}
+
+.sidebar.collapsed .sidebar-link {
+  justify-content: center;
+  gap: 0;
+  padding: 0;
 }
 
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
   z-index: 99;
+  background: rgba(24, 24, 20, 0.35);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .sidebar {
-    transform: translateX(-100%);
-    width: 240px;
+    inset: 10px auto 10px 10px;
+    width: min(292px, calc(100vw - 20px));
+    transform: translateX(calc(-100% - 18px));
   }
+
   .sidebar.overlay {
     transform: translateX(0);
   }
+
   .sidebar.collapsed {
-    width: 240px;
+    width: min(292px, calc(100vw - 20px));
+  }
+
+  .sidebar.collapsed .brand-name,
+  .sidebar.collapsed .workspace-select,
+  .sidebar.collapsed .account-card {
+    display: flex;
+  }
+
+  .sidebar.collapsed .sidebar-link {
+    justify-content: flex-start;
+    gap: 16px;
+    padding: 0 10px;
   }
 }
 </style>
