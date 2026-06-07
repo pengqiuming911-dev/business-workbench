@@ -10,3 +10,7 @@ defineProps({
   title: { type: String, default: '' },
 })
 </script>
+
+<style scoped>
+/* Depends on .panel-card and .panel-card-header defined in global main.css */
+</style>

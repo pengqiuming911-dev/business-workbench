@@ -58,7 +58,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@lucide/vue'
 
@@ -75,6 +75,7 @@ const loading = ref(false)
 const activeIndex = ref(0)
 const recents = ref([])
 let debounceTimer = null
+let abortController = null
 
 const groupedResults = computed(() => {
   const groups = {}
@@ -143,6 +144,7 @@ function loadRecents() {
 watch(query, (q) => {
   activeIndex.value = 0
   if (debounceTimer) clearTimeout(debounceTimer)
+  if (abortController) abortController.abort()
   if (!q || q.trim().length === 0) {
     results.value = []
     loading.value = false
@@ -150,12 +152,17 @@ watch(query, (q) => {
   }
   loading.value = true
   debounceTimer = setTimeout(async () => {
+    abortController = new AbortController()
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`)
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`, {
+        signal: abortController.signal
+      })
       const data = await res.json()
       results.value = data.results || []
-    } catch {
-      results.value = []
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        results.value = []
+      }
     } finally {
       loading.value = false
     }
@@ -171,6 +178,11 @@ watch(() => props.open, async (isOpen) => {
 })
 
 onMounted(loadRecents)
+
+onBeforeUnmount(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (abortController) abortController.abort()
+})
 </script>
 
 <style scoped>

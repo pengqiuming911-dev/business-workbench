@@ -2,7 +2,7 @@
   <div class="panel-card stat-card">
     <p class="stat-label">{{ title }}</p>
     <p class="stat-value">{{ displayValue }}</p>
-    <div v-if="trend !== null && trend !== undefined" class="stat-trend" :class="trendClass">
+    <div v-if="trend != null" class="stat-trend" :class="trendClass">
       <TrendingUp v-if="trend > 0" :size="14" />
       <TrendingDown v-else-if="trend < 0" :size="14" />
       <span class="trend-value">{{ trend > 0 ? '+' : '' }}{{ formatTrend(trend) }}%</span>
@@ -40,6 +40,7 @@ function formatTrend(v) {
 </script>
 
 <style scoped>
+/* Depends on .panel-card defined in global main.css */
 .stat-card {
   display: flex;
   flex-direction: column;
