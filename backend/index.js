@@ -3,14 +3,15 @@ const express = require('express')
 const cors = require('cors')
 const axios = require('axios')
 const dbModule = require('./db')
-const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, queryCoInvestUsers, getDistinctIndustries, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, computeUserPeakBalances, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate, upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster, logActivity, queryActivityLogs } = dbModule
+const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate, upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster, logActivity, queryActivityLogs, getPushConfig, upsertPushConfig, updatePushResult } = dbModule
 const { fetchAllPrices } = require('./services/priceService')
-const { getObservationDates, getNextObservationDate, getObservationDatesForMonth, evaluateObservation, parseRatio, parseFirstKnockoutRatio } = require('./services/observationService')
+const { getObservationDates, getNextObservationDate, getObservationDatesForMonth, evaluateObservation, parseRatio, parseFirstKnockoutRatio, computeKnockoutPrice, computeDividendLine } = require('./services/observationService')
 const { generatePosterData, formatChineseDate, computeDividendCount, computeCumulativeDividendRate } = require('./services/posterService')
 const {
   buildTodayObservationNotification,
   sendObservationEmail,
 } = require('./services/observationNotificationService')
+const { executeObservationPush } = require('./services/feishuPushService')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -501,10 +502,11 @@ async function readSheet(sheetId, rowCount, colCount) {
   }
 
   const BATCH = 500
+  const MAX_ROWS = 10000
   let allValues = null
 
-  for (let startRow = 1; startRow <= rowCount + 1; startRow += BATCH) {
-    const endRow = Math.min(startRow + BATCH - 1, rowCount + 1)
+  for (let startRow = 1; startRow <= MAX_ROWS; startRow += BATCH) {
+    const endRow = Math.min(startRow + BATCH - 1, MAX_ROWS)
     const range = `${sheetId}!A${startRow}:${colLetter(colCount)}${endRow}`
     const valRes = await axios.get(
       `https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/${SHEET_TOKEN}/values/${encodeURIComponent(range)}?valueRenderOption=UnformattedValue`,
@@ -613,7 +615,7 @@ app.post('/api/db/sync', async (req, res) => {
       const ongoingCodes = [...new Set(ongoingProducts.map(p => p.code).filter(Boolean))]
       if (ongoingCodes.length > 0) {
         const { results: autoPrices, failed: autoFailed } = await fetchAllPrices(ongoingCodes)
-        const today = new Date().toISOString().slice(0, 10)
+        const today = getLocalDate()
         for (const code of ongoingCodes) {
           if (autoPrices[code] !== undefined) upsertPrice(code, today, autoPrices[code])
         }
@@ -787,77 +789,6 @@ app.get('/api/db/sync-coinvest-status', (req, res) => {
   res.json(last || { synced_at: null, row_count: 0 })
 })
 
-// ─────────────────────────────────────────
-// GET /api/db/user-profiles
-// 用户画像查询：支持多条件搜索合投用户
-// ─────────────────────────────────────────
-app.get('/api/db/user-profiles', (req, res) => {
-  const { actual_buyer, nominal_buyer, is_dedicated, is_competitor, industry } = req.query
-
-  try {
-    const users = queryCoInvestUsers({
-      actualBuyer: actual_buyer || '',
-      nominalBuyer: nominal_buyer || '',
-      isDedicated: is_dedicated || '',
-      isCompetitor: is_competitor || '',
-      industry: industry || ''
-    })
-
-    // 计算所有客户的历史存量峰值和峰值差额
-    const peakData = computeUserPeakBalances()
-
-    // 从 raw JSON 中解析客户是否竞品群
-    const result = users.map(u => {
-      let raw = {}
-      try { raw = JSON.parse(u.raw || '{}') } catch {}
-
-      // 从 raw JSON 解析额外字段
-      const boughtBefore = raw['衍选成交前购买过结构化产品'] != null ? String(raw['衍选成交前购买过结构化产品']) : ''
-      const assetRange = raw['境内资产规模区间/万RMB'] != null ? String(raw['境内资产规模区间/万RMB']) : ''
-
-      // 获取该客户的峰值数据
-      const buyer = u.actual_buyer || ''
-      const userPeak = peakData[buyer] || {}
-
-      return {
-        id: u.id,
-        actual_buyer: u.actual_buyer,
-        nominal_buyer: u.user_name,
-        is_competitor: u.is_competitor || '',
-        is_dedicated_account: u.is_dedicated_account || '',
-        bought_before_yanxuan: boughtBefore,
-        asset_range: assetRange,
-        total_assets: u.total_assets,
-        risk_tolerance: u.risk_tolerance,
-        industry: u.industry,
-        wechat: u.wechat,
-        phone: u.phone,
-        lead_source: u.lead_source,
-        // 历史存量峰值和峰值差额
-        peak_balance: userPeak.peak_balance ?? null,
-        peak_diff: userPeak.peak_diff ?? null,
-      }
-    })
-
-    res.json({ rows: result, total: result.length })
-  } catch (err) {
-    console.error('查询用户画像失败:', err.message)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// ─────────────────────────────────────────
-// GET /api/db/industries
-// 获取所有客户行业（下拉用）
-// ─────────────────────────────────────────
-app.get('/api/db/industries', (req, res) => {
-  try {
-    const industries = getDistinctIndustries()
-    res.json({ rows: industries })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
 
 // 临时调试：查看合投用户表字段名
 app.get('/api/debug/coinvest-fields', async (req, res) => {
@@ -1089,6 +1020,7 @@ app.get('/api/drive/product-docs/sync-status', (req, res) => {
 app.get('/api/observations', (req, res) => {
   try {
     const { search, code } = req.query
+    const today = getLocalDate()
     let products = queryOngoingProducts()
     if (search) {
       const q = search.toLowerCase()
@@ -1104,6 +1036,7 @@ app.get('/api/observations', (req, res) => {
 
     const result = products.map(p => {
       const observations = queryObservationsByProduct(p.id)
+      const mergedObservations = mergeScheduledObservations(p, observations, today)
       return {
         id: p.id,
         name: p.name,
@@ -1120,16 +1053,8 @@ app.get('/api/observations', (req, res) => {
         holiday_adjust: p.holiday_adjust,
         lock_days: p.lock_days,
         duration_months: p.duration_months,
-        next_observation_date: getNextObservationDate(p),
-        observations: observations.map(o => ({
-          date: o.observation_date,
-          knockout_price: o.knockout_price,
-          dividend_line: o.dividend_line,
-          underlying_price: o.underlying_price,
-          is_knocked_out: o.is_knocked_out,
-          is_dividend: o.is_dividend,
-          months_since_entry: o.months_since_entry,
-        })),
+        next_observation_date: getNextObservationDate(p, today),
+        observations: mergedObservations,
       }
     })
 
@@ -1145,7 +1070,7 @@ app.get('/api/observations', (req, res) => {
 
 app.get('/api/observations/calendar', (req, res) => {
   try {
-    const month = req.query.month || new Date().toISOString().slice(0, 7)
+    const month = req.query.month || getLocalDate().slice(0, 7)
     if (!/^\d{4}-\d{2}$/.test(month)) {
       return res.status(400).json({ error: '月份格式应为 YYYY-MM' })
     }
@@ -1157,12 +1082,19 @@ app.get('/api/observations/calendar', (req, res) => {
       const monthDates = getObservationDatesForMonth(product, month)
       for (const obs of monthDates) {
         if (!dates.has(obs.date)) dates.set(obs.date, [])
+        const knockoutPrice = computeKnockoutPrice(product, obs.monthsSinceEntry)
+        const dividendLine = computeDividendLine(product)
         dates.get(obs.date).push({
           id: product.id,
           name: product.name,
           manager: product.manager,
           code: product.code,
           months_since_entry: obs.monthsSinceEntry,
+          entry_price: product.entry_price,
+          knockout_price: knockoutPrice,
+          dividend_line: dividendLine,
+          is_knockout_observable: knockoutPrice !== null,
+          has_dividend_observation: parseRatio(product.monthly_coupon) > 0,
         })
       }
     }
@@ -1182,16 +1114,17 @@ app.get('/api/observations/calendar', (req, res) => {
 
 app.get('/api/observations/today', (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getLocalDate()
     const products = queryOngoingProducts()
 
     const result = products.map(p => {
-      const obsDates = getObservationDates(p)
-      const hasObservationToday = obsDates.some(d => d.date === today)
+      const obsDates = getObservationDates(p, today)
+      const todayObsDate = obsDates.find(d => d.date === today)
 
-      if (!hasObservationToday) return null
+      if (!todayObsDate) return null
 
       const observations = queryObservationsByProduct(p.id)
+      const mergedObservations = mergeScheduledObservations(p, observations, today)
       return {
         id: p.id,
         name: p.name,
@@ -1209,15 +1142,7 @@ app.get('/api/observations/today', (req, res) => {
         lock_days: p.lock_days,
         duration_months: p.duration_months,
         next_observation_date: getNextObservationDate(p, today),
-        observations: observations.map(o => ({
-          date: o.observation_date,
-          knockout_price: o.knockout_price,
-          dividend_line: o.dividend_line,
-          underlying_price: o.underlying_price,
-          is_knocked_out: o.is_knocked_out,
-          is_dividend: o.is_dividend,
-          months_since_entry: o.months_since_entry,
-        })),
+        observations: mergedObservations,
       }
     }).filter(Boolean)
 
@@ -1249,7 +1174,7 @@ app.post('/api/observations/generate', async (req, res) => {
     console.log(`[generate] 价格获取完成: 成功 ${Object.keys(prices).length}, 失败 ${failed.length}`)
     if (failed.length > 0) console.log(`[generate] 失败的代码:`, failed)
 
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getLocalDate()
     for (const code of codes) {
       if (prices[code] !== undefined) {
         upsertPrice(code, today, prices[code])
@@ -1313,7 +1238,7 @@ app.post('/api/observations/refresh-prices', async (req, res) => {
     const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
 
     const { results: prices, failed } = await fetchAllPrices(codes)
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getLocalDate()
 
     let refreshed = 0
     for (const code of codes) {
@@ -1365,8 +1290,8 @@ app.get('/api/observations/products', (req, res) => {
 // ─────────────────────────────────────────
 app.get('/api/posters/today', (req, res) => {
   try {
-    const date = req.query.date || new Date().toISOString().slice(0, 10)
-    const today = new Date().toISOString().slice(0, 10)
+    const date = req.query.date || getLocalDate()
+    const today = getLocalDate()
     const posters = queryPostersByDate(date)
     res.json({ posters, today, queryDate: date })
   } catch (err) {
@@ -1386,7 +1311,7 @@ app.get('/api/posters', (req, res) => {
 
 app.post('/api/posters/generate', async (req, res) => {
   try {
-    const targetDate = req.body?.date || new Date().toISOString().slice(0, 10)
+    const targetDate = req.body?.date || getLocalDate()
     const products = queryOngoingProducts()
     const matchedProducts = []
 
@@ -1489,16 +1414,65 @@ app.post('/api/posters/generate', async (req, res) => {
 const cron = require('node-cron')
 const CRON_TIMEZONE = process.env.CRON_TIMEZONE || 'Asia/Shanghai'
 
+function getLocalDate(timeZone = CRON_TIMEZONE) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+function buildPendingObservation(date, monthsSinceEntry) {
+  return {
+    date,
+    knockout_price: null,
+    dividend_line: null,
+    underlying_price: null,
+    is_knocked_out: '--',
+    is_dividend: '--',
+    months_since_entry: monthsSinceEntry,
+  }
+}
+
+function mapObservationRecord(record) {
+  return {
+    date: record.observation_date,
+    knockout_price: record.knockout_price,
+    dividend_line: record.dividend_line,
+    underlying_price: record.underlying_price,
+    is_knocked_out: record.is_knocked_out,
+    is_dividend: record.is_dividend,
+    months_since_entry: record.months_since_entry,
+  }
+}
+
+function mergeScheduledObservations(product, records, today) {
+  const mapped = records.map(mapObservationRecord)
+  const existingDates = new Set(mapped.map(record => record.date))
+
+  for (const obs of getObservationDates(product, today)) {
+    if (!existingDates.has(obs.date)) {
+      mapped.push(buildPendingObservation(obs.date, obs.monthsSinceEntry))
+    }
+  }
+
+  return mapped.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+}
+
 async function refreshTodayObservations() {
   const products = queryOngoingProducts()
   const codes = [...new Set(products.map(p => p.code).filter(Boolean))]
   if (codes.length === 0) {
-    return { products, codes, prices: {}, failed: [], today: new Date().toISOString().slice(0, 10), updatedObs: 0 }
+    return { products, codes, prices: {}, failed: [], today: getLocalDate(), updatedObs: 0 }
   }
 
   console.log(`[定时任务] 开始更新 ${codes.length} 个标的价格...`)
   const { results: prices, failed } = await fetchAllPrices(codes)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getLocalDate()
 
   for (const code of codes) {
     if (prices[code] !== undefined) {
@@ -1557,7 +1531,7 @@ async function scheduledObservationEmail() {
 
 async function generateAutoPosters() {
   try {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getLocalDate()
     const products = queryOngoingProducts()
     let knocked = 0
     let dividends = 0
@@ -1635,6 +1609,76 @@ async function generateAutoPosters() {
 }
 
 // ─────────────────────────────────────────
+// Push Config API
+// ─────────────────────────────────────────
+app.get('/api/push-config', (req, res) => {
+  try {
+    const config = getPushConfig()
+    res.json({
+      webhook_url: config.webhook_url,
+      cron_hour: config.cron_hour,
+      cron_minute: config.cron_minute,
+      enabled: !!config.enabled,
+      last_push_time: config.last_push_time,
+      last_push_result: config.last_push_result,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.put('/api/push-config', (req, res) => {
+  try {
+    const { webhook_url, cron_hour, cron_minute, enabled } = req.body
+    if (webhook_url !== undefined && typeof webhook_url !== 'string') {
+      return res.status(400).json({ error: 'webhook_url must be a string' })
+    }
+    if (cron_hour !== undefined && (!Number.isInteger(cron_hour) || cron_hour < 0 || cron_hour > 23)) {
+      return res.status(400).json({ error: 'cron_hour must be integer 0-23' })
+    }
+    if (cron_minute !== undefined && (!Number.isInteger(cron_minute) || cron_minute < 0 || cron_minute > 59)) {
+      return res.status(400).json({ error: 'cron_minute must be integer 0-59' })
+    }
+
+    upsertPushConfig({
+      webhook_url: webhook_url || '',
+      cron_hour: cron_hour != null ? cron_hour : 9,
+      cron_minute: cron_minute != null ? cron_minute : 0,
+      enabled: !!enabled,
+    })
+
+    rescheduleFeishuPush()
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/push/test', async (req, res) => {
+  try {
+    const config = getPushConfig()
+    if (!config.webhook_url) {
+      return res.status(400).json({ error: 'webhook URL not configured' })
+    }
+
+    const result = await executeObservationPush({
+      webhookUrl: config.webhook_url,
+      refreshTodayObservations,
+      buildTodayObservationNotification,
+    })
+
+    const now = new Date().toISOString()
+    updatePushResult(now, result.sent ? `success (${result.count} products)` : result.reason)
+
+    res.json(result)
+  } catch (err) {
+    const now = new Date().toISOString()
+    updatePushResult(now, `error: ${err.message}`)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─────────────────────────────────────────
 // Dashboard stats
 // ─────────────────────────────────────────
 app.get('/api/dashboard/stats', (req, res) => {
@@ -1690,14 +1734,8 @@ app.get('/api/search', (req, res) => {
     const like = `%${q}%`
     const results = []
 
-    const custs = db.exec('SELECT id, customer_name FROM customers WHERE customer_name LIKE ? LIMIT 5', [like])[0]?.values || []
-    custs.forEach(r => results.push({ type: 'customer', id: r[0], name: r[1], path: '/user-profile' }))
-
     const prods = db.exec('SELECT id, name FROM products WHERE name LIKE ? LIMIT 5', [like])[0]?.values || []
     prods.forEach(r => results.push({ type: 'product', id: r[0], name: r[1], path: '/ongoing-product' }))
-
-    const chans = db.exec('SELECT id, channel_name FROM channels WHERE channel_name LIKE ? LIMIT 5', [like])[0]?.values || []
-    chans.forEach(r => results.push({ type: 'channel', id: r[0], name: r[1], path: '/channel-analysis' }))
 
     res.json({ results })
   } catch (e) {
@@ -1725,10 +1763,61 @@ cron.schedule('30 15 * * 1-5', scheduledPriceUpdate, { timezone: CRON_TIMEZONE }
 cron.schedule('5 15 * * 1-5', generateAutoPosters, { timezone: CRON_TIMEZONE })
 cron.schedule('0 10 * * *', scheduledObservationEmail, { timezone: CRON_TIMEZONE })
 cron.schedule('10 15 * * *', scheduledObservationEmail, { timezone: CRON_TIMEZONE })
+
+// Dynamic Feishu push task
+let feishuPushTask = null
+
+async function feishuPushCronHandler() {
+  try {
+    const config = getPushConfig()
+    if (!config.webhook_url) {
+      console.log('[飞书推送] 未配置 webhook URL，跳过')
+      return
+    }
+
+    const result = await executeObservationPush({
+      webhookUrl: config.webhook_url,
+      refreshTodayObservations,
+      buildTodayObservationNotification,
+    })
+
+    const now = new Date().toISOString()
+    if (result.sent) {
+      console.log(`[飞书推送] 已发送今日观察提醒: ${result.count} 个产品`)
+      updatePushResult(now, `success (${result.count} products)`)
+    } else {
+      console.log(`[飞书推送] 未发送: ${result.reason}`)
+      updatePushResult(now, result.reason)
+    }
+  } catch (err) {
+    const now = new Date().toISOString()
+    console.error('[飞书推送] 失败:', err.message)
+    updatePushResult(now, `error: ${err.message}`)
+  }
+}
+
+function rescheduleFeishuPush() {
+  if (feishuPushTask) {
+    feishuPushTask.stop()
+    feishuPushTask = null
+  }
+
+  const config = getPushConfig()
+  if (!config.enabled || !config.webhook_url) {
+    console.log(`[飞书推送] 定时任务未启用 (${CRON_TIMEZONE})`)
+    return
+  }
+
+  const cronExpr = `${config.cron_minute} ${config.cron_hour} * * *`
+  feishuPushTask = cron.schedule(cronExpr, feishuPushCronHandler, { timezone: CRON_TIMEZONE })
+  console.log(`[飞书推送] 定时任务已注册: 每日 ${String(config.cron_hour).padStart(2, '0')}:${String(config.cron_minute).padStart(2, '0')} (${CRON_TIMEZONE})`)
+}
+
 console.log(`定时任务已注册: 工作日 11:30, 15:00, 15:30 更新价格；15:05 自动生成喜报；每日 10:00, 15:10 邮件提醒 (${CRON_TIMEZONE})`)
 
 // 先初始化数据库，再启动服务器
 initDatabase().then(() => {
+  rescheduleFeishuPush()
   app.listen(PORT, () => {
     console.log(`飞书中转服务已启动: http://localhost:${PORT}`)
     if (!FEISHU_APP_ID || FEISHU_APP_ID === 'your_app_id_here') {
