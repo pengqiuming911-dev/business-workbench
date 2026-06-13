@@ -1808,9 +1808,9 @@ function rescheduleFeishuPush() {
     return
   }
 
-  const cronExpr = `${config.cron_minute} ${config.cron_hour} * * *`
+  const cronExpr = `${config.cron_minute} ${config.cron_hour} * * 1-5`
   feishuPushTask = cron.schedule(cronExpr, feishuPushCronHandler, { timezone: CRON_TIMEZONE })
-  console.log(`[飞书推送] 定时任务已注册: 每日 ${String(config.cron_hour).padStart(2, '0')}:${String(config.cron_minute).padStart(2, '0')} (${CRON_TIMEZONE})`)
+  console.log(`[飞书推送] 定时任务已注册: 工作日 ${String(config.cron_hour).padStart(2, '0')}:${String(config.cron_minute).padStart(2, '0')} (${CRON_TIMEZONE})`)
 }
 
 console.log(`定时任务已注册: 工作日 11:30, 15:00, 15:30 更新价格；15:05 自动生成喜报；每日 10:00, 15:10 邮件提醒 (${CRON_TIMEZONE})`)

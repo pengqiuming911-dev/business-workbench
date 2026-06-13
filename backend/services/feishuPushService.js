@@ -63,7 +63,9 @@ async function executeObservationPush({ webhookUrl, refreshTodayObservations, bu
   })
 
   if (notification.products.length === 0) {
-    return { sent: false, reason: 'no-observation-today', count: 0 }
+    const text = `今日产品派息/敲出观察提醒\n观察日期：${refreshed.today}\n\n今日无产品需要观察。`
+    await sendFeishuPush(webhookUrl, text)
+    return { sent: true, reason: 'no-observation-today', count: 0 }
   }
 
   const text = notification.text
