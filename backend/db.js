@@ -184,6 +184,17 @@ async function initDatabase() {
       detail TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS push_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      webhook_url TEXT NOT NULL DEFAULT '',
+      cron_hour INTEGER NOT NULL DEFAULT 9,
+      cron_minute INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      last_push_time TEXT DEFAULT NULL,
+      last_push_result TEXT DEFAULT NULL,
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
   `)
 
   module.exports.db = db
@@ -686,6 +697,57 @@ function queryActivityLogs(type, limit) {
   }))
 }
 
+// ──── Push Config ────
+
+function getPushConfig() {
+  const row = queryOne('SELECT * FROM push_config WHERE id = 1')
+  if (!row) {
+    return {
+      webhook_url: process.env.FEISHU_PUSH_WEBHOOK || '',
+      cron_hour: 9,
+      cron_minute: 0,
+      enabled: 0,
+      last_push_time: null,
+      last_push_result: null,
+    }
+  }
+  return {
+    webhook_url: row.webhook_url,
+    cron_hour: row.cron_hour,
+    cron_minute: row.cron_minute,
+    enabled: row.enabled,
+    last_push_time: row.last_push_time,
+    last_push_result: row.last_push_result,
+  }
+}
+
+function upsertPushConfig({ webhook_url, cron_hour, cron_minute, enabled }) {
+  const existing = queryOne('SELECT id FROM push_config WHERE id = 1')
+  const now = new Date().toISOString()
+  if (existing) {
+    runStatement(
+      'UPDATE push_config SET webhook_url = ?, cron_hour = ?, cron_minute = ?, enabled = ?, updated_at = ? WHERE id = 1',
+      [webhook_url, cron_hour, cron_minute, enabled ? 1 : 0, now]
+    )
+  } else {
+    runStatement(
+      'INSERT INTO push_config (id, webhook_url, cron_hour, cron_minute, enabled, updated_at) VALUES (1, ?, ?, ?, ?, ?)',
+      [webhook_url, cron_hour, cron_minute, enabled ? 1 : 0, now]
+    )
+  }
+  saveDatabase()
+}
+
+function updatePushResult(last_push_time, last_push_result) {
+  const existing = queryOne('SELECT id FROM push_config WHERE id = 1')
+  if (!existing) return
+  runStatement(
+    'UPDATE push_config SET last_push_time = ?, last_push_result = ? WHERE id = 1',
+    [last_push_time, last_push_result]
+  )
+  saveDatabase()
+}
+
 module.exports = {
   initDatabase,
   importProducts, logSync, getLastSync, queryProducts,
@@ -701,4 +763,5 @@ module.exports = {
   getLastObservationUpdate,
   upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster,
   logActivity, queryActivityLogs,
+  getPushConfig, upsertPushConfig, updatePushResult,
 }
