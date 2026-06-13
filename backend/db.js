@@ -195,6 +195,24 @@ async function initDatabase() {
       last_push_result TEXT DEFAULT NULL,
       updated_at TEXT NOT NULL DEFAULT ''
     );
+
+    CREATE TABLE IF NOT EXISTS agent_conversations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL DEFAULT '新对话',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      tool_calls TEXT DEFAULT NULL,
+      tool_call_id TEXT DEFAULT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (conversation_id) REFERENCES agent_conversations(id) ON DELETE CASCADE
+    );
   `)
 
   module.exports.db = db
@@ -748,6 +766,65 @@ function updatePushResult(last_push_time, last_push_result) {
   saveDatabase()
 }
 
+// ──── Agent Conversations ────
+
+function getAgentConversations() {
+  return queryAll('SELECT * FROM agent_conversations ORDER BY updated_at DESC')
+}
+
+function getAgentConversation(id) {
+  return queryOne('SELECT * FROM agent_conversations WHERE id = ?', [id])
+}
+
+function createAgentConversation(title) {
+  const now = new Date().toISOString()
+  runStatement(
+    'INSERT INTO agent_conversations (title, created_at, updated_at) VALUES (?, ?, ?)',
+    [title || '新对话', now, now]
+  )
+  const inserted = queryOne('SELECT last_insert_rowid() as id')
+  saveDatabase()
+  return inserted.id
+}
+
+function updateAgentConversationTitle(id, title) {
+  const now = new Date().toISOString()
+  runStatement(
+    'UPDATE agent_conversations SET title = ?, updated_at = ? WHERE id = ?',
+    [title, now, id]
+  )
+  saveDatabase()
+}
+
+function touchConversation(id) {
+  const now = new Date().toISOString()
+  runStatement('UPDATE agent_conversations SET updated_at = ? WHERE id = ?', [now, id])
+  saveDatabase()
+}
+
+function deleteAgentConversation(id) {
+  runStatement('DELETE FROM agent_messages WHERE conversation_id = ?', [id])
+  runStatement('DELETE FROM agent_conversations WHERE id = ?', [id])
+  saveDatabase()
+}
+
+function getAgentMessages(conversationId) {
+  return queryAll(
+    'SELECT * FROM agent_messages WHERE conversation_id = ? ORDER BY created_at ASC',
+    [conversationId]
+  )
+}
+
+function addAgentMessage({ conversation_id, role, content, tool_calls, tool_call_id }) {
+  const now = new Date().toISOString()
+  runStatement(
+    'INSERT INTO agent_messages (conversation_id, role, content, tool_calls, tool_call_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [conversation_id, role, content || '', tool_calls ? JSON.stringify(tool_calls) : null, tool_call_id || null, now]
+  )
+  runStatement('UPDATE agent_conversations SET updated_at = ? WHERE id = ?', [now, conversation_id])
+  saveDatabase()
+}
+
 module.exports = {
   initDatabase,
   importProducts, logSync, getLastSync, queryProducts,
@@ -764,4 +841,7 @@ module.exports = {
   upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster,
   logActivity, queryActivityLogs,
   getPushConfig, upsertPushConfig, updatePushResult,
+  getAgentConversations, getAgentConversation, createAgentConversation,
+  updateAgentConversationTitle, deleteAgentConversation,
+  getAgentMessages, addAgentMessage,
 }
