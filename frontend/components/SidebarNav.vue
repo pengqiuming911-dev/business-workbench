@@ -67,11 +67,8 @@ import {
   GitBranch,
   Home,
   LogOut,
-  PieChart,
   ScrollText,
-  TrendingDown,
-  UserRound,
-  Users,
+  Send,
 } from '@lucide/vue'
 
 defineProps({
@@ -90,10 +87,7 @@ const navItems = [
   { path: '/product-completion', title: '观察日历', icon: Award },
   { path: '/product-report', title: '产品报告', icon: FileText },
   { path: '/ongoing-product', title: '存续分析', icon: BarChart3 },
-  { path: '/user-profile', title: '用户画像', icon: UserRound },
-  { path: '/channel-analysis', title: '渠道分析', icon: PieChart },
-  { path: '/customer-churn', title: '流失分析', icon: TrendingDown },
-  { path: '/nominal-buyer', title: '名义购买人', icon: Users },
+  { path: '/push-settings', title: '推送设置', icon: Send },
 ]
 </script>
 
