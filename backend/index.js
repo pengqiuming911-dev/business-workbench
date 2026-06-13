@@ -3,7 +3,7 @@ const express = require('express')
 const cors = require('cors')
 const axios = require('axios')
 const dbModule = require('./db')
-const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate, upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster, logActivity, queryActivityLogs, getPushConfig, upsertPushConfig, updatePushResult } = dbModule
+const { initDatabase, importProducts, logSync, getLastSync, queryProducts, importCoInvestUsers, logCoInvestSync, getLastCoInvestSync, getCustomerProductLinks, importCustomerProductLinks, importTransactions, importChannels, importDirectCustomerSources, importCustomers, importProductDocs, logProductDocsSync, getLastProductDocsSync, getAllProductDocs, getProductDocsByMonth, queryOngoingProducts, upsertObserv, queryObservationsByProduct, upsertPrice, queryLatestPrice, queryPriceByDate, getLastObservationUpdate, upsertPoster, queryPostersByDate, queryPostersByProduct, queryAllPosters, deletePoster, logActivity, queryActivityLogs, getPushConfig, upsertPushConfig, updatePushResult, getAgentConversations, getAgentConversation, createAgentConversation, updateAgentConversationTitle, deleteAgentConversation, getAgentMessages, addAgentMessage } = dbModule
 const { fetchAllPrices } = require('./services/priceService')
 const { getObservationDates, getNextObservationDate, getObservationDatesForMonth, evaluateObservation, parseRatio, parseFirstKnockoutRatio, computeKnockoutPrice, computeDividendLine } = require('./services/observationService')
 const { generatePosterData, formatChineseDate, computeDividendCount, computeCumulativeDividendRate } = require('./services/posterService')
@@ -12,6 +12,7 @@ const {
   sendObservationEmail,
 } = require('./services/observationNotificationService')
 const { executeObservationPush } = require('./services/feishuPushService')
+const { streamChat } = require('./services/agentService')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -1754,6 +1755,121 @@ app.get('/api/activity-logs', (req, res) => {
     res.json({ logs })
   } catch (e) {
     res.status(500).json({ error: e.message })
+  }
+})
+
+// ─────────────────────────────────────────
+// Agent Chat (SSE)
+// ─────────────────────────────────────────
+app.get('/api/agent/conversations', (req, res) => {
+  try {
+    const conversations = getAgentConversations()
+    res.json(conversations)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/agent/conversations', (req, res) => {
+  try {
+    const title = req.body.title || '新对话'
+    const id = createAgentConversation(title)
+    res.json({ id, title, created_at: new Date().toISOString() })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.delete('/api/agent/conversations/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id)
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' })
+    deleteAgentConversation(id)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/agent/conversations/:id/messages', (req, res) => {
+  try {
+    const id = parseInt(req.params.id)
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' })
+    const messages = getAgentMessages(id)
+    res.json(messages)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/agent/chat', async (req, res) => {
+  const { conversation_id, message } = req.body
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'message is required' })
+  }
+  if (!process.env.DEEPSEEK_API_KEY) {
+    return res.status(500).json({ error: 'DEEPSEEK_API_KEY not configured' })
+  }
+
+  let convId = conversation_id
+  try {
+    if (!convId) {
+      convId = createAgentConversation(message.slice(0, 30))
+    }
+    addAgentMessage({ conversation_id: convId, role: 'user', content: message })
+    if (getAgentMessages(convId).length <= 1) {
+      updateAgentConversationTitle(convId, message.slice(0, 30))
+    }
+  } catch (e) {
+    return res.status(500).json({ error: e.message })
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+
+  res.write(`data: ${JSON.stringify({ type: 'conversation_id', conversation_id: convId })}\n\n`)
+
+  const abortController = new AbortController()
+  let clientDisconnected = false
+
+  req.on('close', () => {
+    clientDisconnected = true
+    abortController.abort()
+  })
+
+  try {
+    await streamChat({
+      conversationId: convId,
+      userMessage: message,
+      abortSignal: abortController.signal,
+      onDelta(text) {
+        if (!clientDisconnected) res.write(`data: ${JSON.stringify({ type: 'delta', text })}\n\n`)
+      },
+      onToolCall(name) {
+        if (!clientDisconnected) res.write(`data: ${JSON.stringify({ type: 'tool_call', name })}\n\n`)
+      },
+      onDone(usage) {
+        if (!clientDisconnected) {
+          res.write(`data: ${JSON.stringify({ type: 'done', usage })}\n\n`)
+          res.end()
+        }
+      },
+      onError(err) {
+        if (!clientDisconnected) {
+          res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`)
+          res.end()
+        }
+      },
+    })
+  } catch (err) {
+    if (!clientDisconnected) {
+      try {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`)
+        res.end()
+      } catch {}
+    }
   }
 })
 
