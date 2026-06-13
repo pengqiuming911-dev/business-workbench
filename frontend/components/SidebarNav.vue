@@ -61,6 +61,7 @@ import { useRoute, RouterLink } from 'vue-router'
 import {
   Award,
   BarChart3,
+  Bot,
   ChevronDown,
   Database,
   FileText,
@@ -88,6 +89,7 @@ const navItems = [
   { path: '/product-report', title: '产品报告', icon: FileText },
   { path: '/ongoing-product', title: '存续分析', icon: BarChart3 },
   { path: '/push-settings', title: '推送设置', icon: Send },
+  { path: '/agent', title: '智能助手', icon: Bot },
 ]
 </script>
 

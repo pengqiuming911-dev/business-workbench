@@ -9,6 +9,7 @@ const routes = [
   { path: '/ongoing-product', component: () => import('../views/OngoingProduct.vue') },
   { path: '/push-settings', component: () => import('../views/PushSettings.vue') },
   { path: '/activity-log', component: () => import('../views/ActivityLog.vue') },
+  { path: '/agent', component: () => import('../views/AgentChat.vue') },
 ]
 
 export default createRouter({
