@@ -8,42 +8,73 @@ on:
 env:
   APP_DIR: /var/www/business-workbench
   GO_VERSION: '1.22'
+  NODE_VERSION: '20'
+  SERVICE_NAME: business-workbench
+  PORT: '3001'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: true
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
-        
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
-        cache: 'npm'
-        
-    - name: Install frontend dependencies
+        node-version: ${{ env.NODE_VERSION }}
+        cache: npm
+        cache-dependency-path: |
+          package-lock.json
+          frontend/package-lock.json
+
+    - name: Install dependencies
       run: |
-        npm install
-        cd frontend && npm install
-        
+        npm ci
+        npm --prefix frontend ci
+
     - name: Build frontend
-      run: |
-        cd frontend
-        npm run build
-        
+      run: npm --prefix frontend run build
+
     - name: Build Go backend (linux/amd64)
       run: |
+        mkdir -p dist/release/backend-go dist/release/frontend
         cd backend-go
-        GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
-        
-    - name: Deploy via SSH
+        GOOS=linux GOARCH=amd64 go build -o ../dist/release/server ./cmd/server
+
+    - name: Prepare release bundle
+      run: |
+        cp -R frontend/dist dist/release/frontend/
+        if [ -d backend-go/public ]; then
+          cp -R backend-go/public dist/release/backend-go/
+        fi
+        cp scripts/deploy/remote-deploy.sh dist/remote-deploy.sh
+        chmod +x dist/remote-deploy.sh
+        tar -czf dist/release.tar.gz -C dist/release .
+
+    - name: Upload release bundle and deploy script
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        source: "dist/release.tar.gz,dist/remote-deploy.sh"
+        target: "/tmp/"
+        strip_components: 1
+
+    - name: Ensure server directories and shared env
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
@@ -51,19 +82,15 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: ${{ secrets.SERVER_PORT || 22 }}
         script: |
-          sudo cp -r ${{ env.APP_DIR }} ${{ env.APP_DIR }}.backup.$(date +%Y%m%d_%H%M%S) || true
-          
-          sudo mkdir -p ${{ env.APP_DIR }}
-          sudo mkdir -p ${{ env.APP_DIR }}/frontend
-          sudo mkdir -p ${{ env.APP_DIR }}/backend-go
-          sudo mkdir -p ${{ env.APP_DIR }}/backend-go/public
-          
-          cat > ${{ env.APP_DIR }}/backend-go/.env << 'EOF'
+          set -e
+          mkdir -p ${{ env.APP_DIR }}/shared
+          mkdir -p ${{ env.APP_DIR }}/releases
+          cat > ${{ env.APP_DIR }}/shared/.env << 'EOF'
           FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}
           FEISHU_REDIRECT_URI=${{ secrets.FEISHU_REDIRECT_URI }}
           FRONTEND_URL=${{ secrets.FRONTEND_URL }}
-          PORT=3001
+          PORT=${{ env.PORT }}
           DATABASE_PATH=data.sqlite
           DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
           DEEPSEEK_API_URL=${{ secrets.DEEPSEEK_API_URL }}
@@ -75,34 +102,14 @@ jobs:
           SMTP_USER=${{ secrets.SMTP_USER }}
           SMTP_PASS=${{ secrets.SMTP_PASS }}
           SMTP_FROM=${{ secrets.SMTP_FROM }}
+          CRON_TIMEZONE=Asia/Shanghai
           EOF
-          chmod 600 ${{ env.APP_DIR }}/backend-go/.env
-          
-          echo "Environment variables injected from GitHub Secrets"
-          
-    - name: Upload frontend dist
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        port: ${{ secrets.SERVER_PORT || 22 }}
-        source: "frontend/dist/*"
-        target: "${{ env.APP_DIR }}/frontend/"
-        strip_components: 2
-        
-    - name: Upload Go binary and assets
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        port: ${{ secrets.SERVER_PORT || 22 }}
-        source: "dist/server,backend-go/public/*"
-        target: "${{ env.APP_DIR }}/"
-        strip_components: 1
-        
-    - name: Restart backend and verify
+          chmod 600 ${{ env.APP_DIR }}/shared/.env
+          if [ ! -f ${{ env.APP_DIR }}/shared/data.sqlite ] && [ -f ${{ env.APP_DIR }}/backend-go/data.sqlite ]; then
+            cp ${{ env.APP_DIR }}/backend-go/data.sqlite ${{ env.APP_DIR }}/shared/data.sqlite
+          fi
+
+    - name: Run remote deployment
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
@@ -110,33 +117,23 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: ${{ secrets.SERVER_PORT || 22 }}
         script: |
-          sudo chmod +x ${{ env.APP_DIR }}/server
-          
-          if systemctl is-active --quiet business-workbench; then
-            sudo systemctl restart business-workbench
-          else
-            sudo bash -c "cat > /etc/systemd/system/business-workbench.service << 'UNIT'
-          [Unit]
-          Description=Business Workbench Go Backend
-          After=network.target
-          
-          [Service]
-          Type=simple
-          WorkingDirectory=${{ env.APP_DIR }}/backend-go
-          ExecStart=${{ env.APP_DIR }}/server
-          Restart=on-failure
-          RestartSec=5
-          
-          [Install]
-          WantedBy=multi-user.target
-          UNIT"
-            sudo systemctl daemon-reload
-            sudo systemctl enable business-workbench
-            sudo systemctl start business-workbench
-          fi
-          
-          sleep 3
-          sudo systemctl status business-workbench
-          sudo systemctl status nginx --no-pager
-          
-          echo "Deployment completed successfully!"
+          set -e
+          chmod +x /tmp/remote-deploy.sh
+          APP_DIR=${{ env.APP_DIR }} \
+          SERVICE_NAME=${{ env.SERVICE_NAME }} \
+          PORT=${{ env.PORT }} \
+          RELEASE_NAME=main-${{ github.run_number }}-${{ github.sha }} \
+          RELEASE_TARBALL=/tmp/release.tar.gz \
+          bash /tmp/remote-deploy.sh
+
+    - name: Verify public health endpoint
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        script: |
+          set -e
+          curl -fsS http://127.0.0.1:${{ env.PORT }}/api/health
+          sudo nginx -t
