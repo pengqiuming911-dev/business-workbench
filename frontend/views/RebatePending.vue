@@ -1,6 +1,6 @@
 <template>
   <div class="rebate-pending-page">
-    <div class="page-header">
+    <div v-if="!embedded" class="page-header">
       <h1 class="text-page-title">待返费分析</h1>
       <p class="text-body">分析待返费订单，管理返费状态</p>
     </div>
@@ -363,6 +363,10 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Search, Download, CheckSquare } from '@lucide/vue'
+
+defineProps({
+  embedded: { type: Boolean, default: false },
+})
 
 // --- Constants ---
 const feeCategories = ['申购费', '管理费', '业绩报酬']

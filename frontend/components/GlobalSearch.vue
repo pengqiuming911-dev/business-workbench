@@ -10,7 +10,7 @@
               v-model="query"
               type="text"
               class="search-input"
-              placeholder="搜索客户、产品、渠道..."
+              placeholder="搜索客户、产品..."
               @keydown.escape="close"
               @keydown.down.prevent="moveDown"
               @keydown.up.prevent="moveUp"

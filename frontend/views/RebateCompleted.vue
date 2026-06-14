@@ -1,6 +1,6 @@
 <template>
   <div class="rebate-completed-page">
-    <div class="page-header">
+    <div v-if="!embedded" class="page-header">
       <h1 class="text-page-title">已返费分析</h1>
       <p class="text-body">查看和管理已完成返费的订单记录</p>
     </div>
@@ -389,6 +389,10 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { Search, Plus, Upload, Download, Trash2, X } from '@lucide/vue'
+
+defineProps({
+  embedded: { type: Boolean, default: false },
+})
 
 // --- Reactive state ---
 const loading = ref(false)
