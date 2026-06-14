@@ -8,10 +8,12 @@
         <input v-model="filters.issueDateEnd" type="date" class="input input-sm" />
       </div>
       <div class="filter-group">
-        <label>产品状态</label>
+        <label>持有状态</label>
         <select v-model="filters.holdingStatus" class="input input-sm">
           <option value="">全部</option>
-          <option v-for="opt in filterOptions.holdingStatuses" :key="opt" :value="opt">{{ opt }}</option>
+          <option v-for="opt in filterOptions.holdingStatuses" :key="opt" :value="opt">
+            {{ normalizeHoldingStatus(opt) }}
+          </option>
         </select>
       </div>
       <div class="filter-group">
@@ -22,7 +24,7 @@
         </select>
       </div>
       <div class="filter-group">
-        <label>完结时间</label>
+        <label>完结日期</label>
         <input v-model="filters.completeDateStart" type="date" class="input input-sm" />
         <span class="filter-sep">至</span>
         <input v-model="filters.completeDateEnd" type="date" class="input input-sm" />
@@ -34,16 +36,18 @@
     </div>
 
     <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
-      <span class="chevron" :class="{ open: showAdvanced }">›</span>
+      <span class="chevron" :class="{ open: showAdvanced }">▸</span>
       高级筛选
     </div>
 
     <div v-show="showAdvanced" class="filter-bar advanced-bar">
       <div class="filter-group">
-        <label>标的</label>
+        <label>挂钩标的</label>
         <select v-model="filters.code" class="input input-sm">
           <option value="">全部</option>
-          <option v-for="opt in filterOptions.codes" :key="opt" :value="opt">{{ opt }}</option>
+          <option v-for="opt in filterOptions.codes" :key="opt" :value="opt">
+            {{ stripParentheses(opt) }}
+          </option>
         </select>
       </div>
       <div class="filter-group">
@@ -70,7 +74,7 @@
     </div>
 
     <div class="data-source-badge">
-      <span class="text-label">📊 航班服务交易总表 · 产品表</span>
+      <span class="text-label">数据源：航班服务交易总表 / 产品表</span>
       <span class="badge badge-blue">本地数据库</span>
     </div>
 
@@ -87,7 +91,7 @@
               <th>申购日期</th>
               <th>存续时间（月）</th>
               <th>结构类型</th>
-              <th>标的</th>
+              <th>挂钩标的</th>
               <th>锁定期</th>
               <th>保证金比例</th>
               <th>敲入</th>
@@ -98,7 +102,7 @@
               <th>托管券商</th>
               <th>交易对手</th>
               <th>期限</th>
-              <th>完结时间</th>
+              <th>完结日期</th>
               <th>降落伞</th>
               <th>派息障碍</th>
               <th>月票息（税费后）</th>
@@ -111,11 +115,11 @@
           <tbody>
             <tr v-for="item in items" :key="item.id">
               <td class="sticky-col">{{ item.id }}</td>
-              <td>{{ item.manager }}</td>
+              <td>{{ item.manager || '--' }}</td>
               <td class="name-cell" :title="item.name">{{ truncateName(item.name) }}</td>
               <td class="status-cell">
                 <span class="badge" :class="isActiveStatus(item.holding_status) ? 'badge-green' : 'badge-amber'">
-                  {{ item.holding_status }}
+                  {{ normalizeHoldingStatus(item.holding_status) }}
                 </span>
               </td>
               <td>{{ item.issue_date || '--' }}</td>
@@ -159,7 +163,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const loading = ref(false)
 const loaded = ref(false)
@@ -195,24 +199,31 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize))
 
 function truncateName(val) {
   if (!val) return '--'
-  return val.length > 10 ? val.slice(0, 10) + '…' : val
+  return val.length > 10 ? `${val.slice(0, 10)}...` : val
 }
 
 function isCompletedStatus(val) {
-  return typeof val === 'string' && val.includes('完结')
+  if (typeof val !== 'string') return false
+  return ['完结', '已完结', '瀹岀粨', '宸插畬缁'].some(keyword => val.includes(keyword))
 }
 
 function isActiveStatus(val) {
   return !isCompletedStatus(val)
 }
 
+function normalizeHoldingStatus(val) {
+  if (!val) return '--'
+  if (isCompletedStatus(val)) return '已完结'
+  return val
+}
+
 function stripParentheses(val) {
   if (!val) return '--'
-  return val.replace(/[（(].*?[）)]/g, '').trim() || val
+  return val.replace(/[（(].*?[)）]/g, '').trim() || val
 }
 
 function formatDuration(item) {
-  if (item.holding_status === '完结') {
+  if (isCompletedStatus(item.holding_status)) {
     return item.duration_months ?? '--'
   }
   if (item.duration_months != null) return item.duration_months
@@ -228,7 +239,7 @@ async function loadFilterOptions() {
     filterOptions.value = {
       holdingStatuses: data.holding_statuses || [],
       managers: data.managers || [],
-      codes: (data.codes || []).map(c => c.replace(/[（(].*?[）)]/g, '').trim()),
+      codes: data.codes || [],
       structureTypes: data.structure_types || [],
       lockMonths: data.lock_months || [],
       marginRatios: data.margin_ratios || [],
