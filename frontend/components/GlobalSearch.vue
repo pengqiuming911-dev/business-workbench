@@ -190,28 +190,30 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 15vh;
+  padding-top: 14vh;
 }
 
 .search-modal {
   width: 100%;
-  max-width: 520px;
+  max-width: 540px;
   background: #fff;
-  border-radius: 14px;
-  box-shadow: var(--shadow-lg);
+  border-radius: 18px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15), 0 12px 24px -6px rgba(15, 23, 42, 0.08);
   overflow: hidden;
-  border: 1px solid var(--border-soft);
+  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .search-input-wrap {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 12px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -222,33 +224,35 @@ onBeforeUnmount(() => {
   border: none;
   outline: none;
   font-size: 16px;
+  font-weight: 500;
   color: var(--ink-strong);
   background: transparent;
+  letter-spacing: -0.01em;
 }
-.search-input::placeholder { color: var(--ink-faint); }
+.search-input::placeholder { color: var(--ink-faint); font-weight: 400; }
 
 .search-esc {
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 6px;
+  padding: 3px 8px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--ink-soft);
   background: var(--bg-hover);
 }
 
 .search-status {
-  padding: 24px;
+  padding: 28px;
   text-align: center;
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .search-section { padding: 8px 0; }
 
 .section-label {
-  padding: 6px 16px;
+  padding: 8px 18px;
   font-size: 11px;
   font-weight: 700;
   color: var(--ink-soft);
@@ -256,26 +260,27 @@ onBeforeUnmount(() => {
   letter-spacing: 0.06em;
 }
 
-.search-results { padding: 8px 0; max-height: 320px; overflow-y: auto; }
+.search-results { padding: 8px 0; max-height: 340px; overflow-y: auto; }
 
 .search-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: 12px;
+  padding: 11px 18px;
   cursor: pointer;
-  transition: background 150ms;
+  transition: background 160ms ease;
 }
 .search-item:hover, .search-item.active { background: var(--bg-hover); }
 
 .item-type {
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 999px;
   background: var(--bg-active);
   color: var(--ink-soft);
   flex-shrink: 0;
+  letter-spacing: 0.02em;
 }
 .item-type.type-customer { background: var(--success-soft); color: var(--success); }
 .item-type.type-product { background: var(--brand-soft); color: var(--brand); }
@@ -283,6 +288,7 @@ onBeforeUnmount(() => {
 
 .item-name {
   font-size: 14px;
+  font-weight: 500;
   color: var(--ink-strong);
   overflow: hidden;
   text-overflow: ellipsis;

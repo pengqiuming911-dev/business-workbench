@@ -19,9 +19,9 @@ import (
 	"business-workbench/backend-go/internal/retriever"
 )
 
-const maxToolRounds = 5
+const maxToolRounds = 12
 
-const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。"
+const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。"
 
 type Service struct {
 	cfg    config.Config
@@ -663,11 +663,11 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "search_products",
-				"description": "根据关键词搜索产品名称，返回匹配产品的 id、名称、存续状态和标的代码。",
+				"description": "根据关键词搜索产品，同时匹配产品名称（name）和标的代码（code），返回匹配产品的 id、名称、存续状态和标的代码。标的关键词如「恒科」「中证1000」「沪深300」等应在此搜索。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"keyword": map[string]any{"type": "string", "description": "产品名称关键词"},
+						"keyword": map[string]any{"type": "string", "description": "产品名称或标的代码关键词"},
 					},
 					"required": []string{"keyword"},
 				},

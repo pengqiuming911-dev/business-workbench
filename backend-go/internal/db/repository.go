@@ -478,9 +478,10 @@ func (s *Store) SearchProducts(q string) ([]map[string]any, error) {
 }
 
 func (s *Store) SearchProductsForAgent(keyword string) ([]map[string]any, error) {
+	like := LikeContains(keyword)
 	rows, err := s.DB.Query(
-		"SELECT id, name, holding_status, code FROM products WHERE name LIKE ? LIMIT 10",
-		LikeContains(keyword),
+		"SELECT id, name, holding_status, code FROM products WHERE name LIKE ? OR code LIKE ? LIMIT 20",
+		like, like,
 	)
 	if err != nil {
 		return nil, err
@@ -1043,61 +1044,58 @@ func (s *Store) scanProducts(query string, args ...any) ([]model.Product, error)
 	}
 	defer rows.Close()
 
+	cols, _ := rows.Columns()
 	result := []model.Product{}
 	for rows.Next() {
-		var p model.Product
-		var isMain, lockDays, lockMonths sql.NullInt64
-		var subscribe, outstanding, firstKnockout, entry, monthlyDecrease sql.NullFloat64
-		var dividendBarrier, monthlyCoupon, coupon1, coupon2, coupon3 sql.NullFloat64
-		var duration, absoluteReturn sql.NullFloat64
-		var durationDays sql.NullInt64
-		var marginRatio sql.NullFloat64
-		var name, issueDate, completeDate sql.NullString
-		var manager, holdingStatus, structureType, code sql.NullString
-		var term, parachute, holidayAdjust, raw sql.NullString
-		var knockIn, knockedIn, custodian, counterparty sql.NullString
-		if err := rows.Scan(
-			&p.ID, &name, &isMain, &issueDate, &completeDate, &subscribe, &outstanding,
-			&manager, &holdingStatus, &structureType, &code, &lockDays, &lockMonths,
-			&firstKnockout, &entry, &monthlyDecrease, &term, &parachute,
-			&dividendBarrier, &monthlyCoupon, &coupon1, &coupon2, &coupon3, &duration,
-			&absoluteReturn, &holidayAdjust, &raw,
-			&knockIn, &durationDays, &knockedIn, &marginRatio, &custodian, &counterparty,
-		); err != nil {
+		values := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range values {
+			ptrs[i] = &values[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
 			return nil, err
 		}
-		p.Name = name.String
-		p.IssueDate = issueDate.String
-		p.CompleteDate = completeDate.String
-		p.Manager = manager.String
-		p.HoldingStatus = holdingStatus.String
-		p.StructureType = structureType.String
-		p.Code = code.String
-		p.Term = term.String
-		p.Parachute = parachute.String
-		p.HolidayAdjust = holidayAdjust.String
-		p.Raw = raw.String
-		p.KnockIn = knockIn.String
-		p.KnockedIn = knockedIn.String
-		p.Custodian = custodian.String
-		p.Counterparty = counterparty.String
-		p.IsMain = intPtr(isMain)
-		p.LockDays = intPtr(lockDays)
-		p.LockMonths = intPtr(lockMonths)
-		p.SubscribeAmount = floatPtr(subscribe)
-		p.OutstandingAmount = floatPtr(outstanding)
-		p.FirstKnockoutRatio = floatPtr(firstKnockout)
-		p.EntryPrice = floatPtr(entry)
-		p.MonthlyDecrease = floatPtr(monthlyDecrease)
-		p.DividendBarrier = floatPtr(dividendBarrier)
-		p.MonthlyCoupon = floatPtr(monthlyCoupon)
-		p.Coupon1st = floatPtr(coupon1)
-		p.Coupon2nd = floatPtr(coupon2)
-		p.Coupon3rd = floatPtr(coupon3)
-		p.DurationMonths = floatPtr(duration)
-		p.AbsoluteReturn = floatPtr(absoluteReturn)
-		p.DurationDays = intPtr(durationDays)
-		p.MarginRatio = floatPtr(marginRatio)
+		v := func(name string) any {
+			if i := colIndex(cols, name); i >= 0 {
+				return values[i]
+			}
+			return nil
+		}
+		p := model.Product{
+			ID:         toString(v("id")),
+			Name:          toString(v("name")),
+			IssueDate:     toString(v("issue_date")),
+			CompleteDate:  toString(v("complete_date")),
+			Manager:       toString(v("manager")),
+			HoldingStatus: toString(v("holding_status")),
+			StructureType: toString(v("structure_type")),
+			Code:          toString(v("code")),
+			Term:          toString(v("term")),
+			Parachute:     toString(v("parachute")),
+			HolidayAdjust: toString(v("holiday_adjust")),
+			Raw:           toString(v("raw")),
+			KnockIn:       toString(v("knock_in")),
+			KnockedIn:     toString(v("knocked_in")),
+			Custodian:     toString(v("custodian")),
+			Counterparty:  toString(v("counterparty")),
+			IsMain:          toIntPtr(v("is_main")),
+			LockDays:        toIntPtr(v("lock_days")),
+			LockMonths:      toIntPtr(v("lock_months")),
+			SubscribeAmount:   toFloatPtr(v("subscribe_amount")),
+			OutstandingAmount: toFloatPtr(v("outstanding_amount")),
+			FirstKnockoutRatio: toFloatPtr(v("first_knockout_ratio")),
+			EntryPrice:         toFloatPtr(v("entry_price")),
+			MonthlyDecrease:    toFloatPtr(v("monthly_decrease")),
+			DividendBarrier:    toFloatPtr(v("dividend_barrier")),
+			MonthlyCoupon:      toFloatPtr(v("monthly_coupon")),
+			Coupon1st:          toFloatPtr(v("coupon_1st")),
+			Coupon2nd:          toFloatPtr(v("coupon_2nd")),
+			Coupon3rd:          toFloatPtr(v("coupon_3rd")),
+			DurationMonths:     toFloatPtr(v("duration_months")),
+			AbsoluteReturn:     toFloatPtr(v("absolute_return")),
+			DurationDays:       toIntPtr(v("duration_days")),
+			MarginRatio:        toFloatPtr(v("margin_ratio")),
+		}
 		result = append(result, p)
 	}
 	return result, rows.Err()
@@ -1477,6 +1475,33 @@ func toFloatPtr(v any) *float64 {
 	case string:
 		var out float64
 		if _, err := fmt.Sscanf(val, "%f", &out); err == nil {
+			return &out
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func toIntPtr(v any) *int {
+	switch val := v.(type) {
+	case nil:
+		return nil
+	case int64:
+		i := int(val)
+		return &i
+	case float64:
+		i := int(val)
+		return &i
+	case []byte:
+		var out int
+		if _, err := fmt.Sscanf(string(val), "%d", &out); err == nil {
+			return &out
+		}
+		return nil
+	case string:
+		var out int
+		if _, err := fmt.Sscanf(val, "%d", &out); err == nil {
 			return &out
 		}
 		return nil

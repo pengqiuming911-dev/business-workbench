@@ -38,12 +38,13 @@ const activeTab = ref('product')
 .tab-bar {
   display: flex;
   gap: 4px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: 5px;
   width: fit-content;
+  box-shadow: var(--shadow-sm);
 }
 
 .tab-btn {
@@ -51,15 +52,16 @@ const activeTab = ref('product')
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 20px;
+  padding: 0 22px;
   border: none;
-  border-radius: var(--radius);
+  border-radius: 10px;
   background: transparent;
   color: var(--ink-soft);
-  font-size: 14px;
-  font-weight: 750;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 200ms ease, color 200ms ease;
 }
 
 .tab-btn:hover {
@@ -70,5 +72,6 @@ const activeTab = ref('product')
 .tab-btn.active {
   background: var(--brand);
   color: #fff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
 }
 </style>

@@ -289,11 +289,12 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 16px;
   align-items: flex-end;
-  margin-bottom: 16px;
-  padding: 20px 24px;
+  margin-bottom: 18px;
+  padding: 22px 26px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
 
 .filter-group {
@@ -304,22 +305,23 @@ onMounted(async () => {
 
 .filter-group label {
   color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 750;
+  font-size: 12.5px;
+  font-weight: 600;
   white-space: nowrap;
+  letter-spacing: 0.01em;
 }
 
 .input-sm {
   height: 36px;
   min-height: 36px;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 13px;
   width: auto;
   min-width: 120px;
 }
 
 .filter-sep {
-  color: var(--ink-soft);
+  color: var(--ink-faint);
   font-size: 13px;
 }
 
@@ -335,10 +337,11 @@ onMounted(async () => {
   gap: 6px;
   color: var(--brand);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   user-select: none;
+  transition: color 180ms ease;
 }
 
 .advanced-toggle:hover {
@@ -363,35 +366,35 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .product-table {
   min-width: 3200px;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .product-table th {
-  padding: 10px 12px;
+  padding: 11px 14px;
   font-size: 11px;
   font-weight: 700;
   text-transform: none;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   white-space: nowrap;
-  background: var(--bg-hover);
+  background: rgba(241, 245, 249, 0.5);
   border-bottom: 1px solid var(--border-soft);
 }
 
 .product-table td {
-  padding: 10px 12px;
+  padding: 11px 14px;
   white-space: nowrap;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .product-table tr:hover td {
-  background: var(--bg-hover);
+  background: rgba(241, 245, 249, 0.5);
 }
 
 .sticky-col {
@@ -402,19 +405,19 @@ onMounted(async () => {
 }
 
 .product-table tr:hover .sticky-col {
-  background: var(--bg-hover);
+  background: rgba(241, 245, 249, 0.5);
 }
 
 .product-table th.sticky-col {
   z-index: 3;
-  background: var(--bg-hover);
+  background: rgba(241, 245, 249, 0.5);
 }
 
 .pagination {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 16px;
+  margin-top: 18px;
   padding: 0 4px;
 }
 

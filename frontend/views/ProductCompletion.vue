@@ -541,28 +541,37 @@ function dividendClass(status) {
 .tab-bar {
   display: flex;
   gap: 4px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: 5px;
   width: fit-content;
+  box-shadow: var(--shadow-sm);
 }
 
 .tab-btn {
   border: none;
   background: transparent;
   color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 10px;
+  padding: 0 18px;
+  min-height: 38px;
+  transition: background 200ms ease, color 200ms ease;
 }
 
 .tab-btn:hover {
-  background: var(--surface-muted);
+  background: var(--bg-hover);
   color: var(--ink);
 }
 
 .tab-btn.active {
   background: var(--brand);
   color: #fff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
 }
 
 .file-source { flex: 1; display: flex; align-items: center; gap: 10px; }
@@ -573,24 +582,25 @@ function dividendClass(status) {
   font-size: 12px;
   color: var(--ink-soft);
   text-align: right;
-  padding-top: 8px;
+  padding-top: 10px;
+  font-weight: 500;
 }
 
 .overview-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 12.5px;
   min-width: 1400px;
 }
 
 .overview-table th {
-  padding: 10px 12px;
+  padding: 11px 14px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-soft);
-  font-weight: 600;
-  background: var(--surface-muted);
+  font-weight: 700;
+  background: rgba(241, 245, 249, 0.5);
   font-size: 11px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   white-space: nowrap;
   position: sticky;
   top: 0;
@@ -599,12 +609,12 @@ function dividendClass(status) {
 
 .data-row {
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 180ms ease;
 }
-.data-row:hover { background: var(--surface-muted); }
+.data-row:hover { background: rgba(241, 245, 249, 0.5); }
 
 .overview-table td {
-  padding: 11px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
   white-space: nowrap;
@@ -620,8 +630,8 @@ function dividendClass(status) {
   background: var(--bg-card);
   z-index: 2;
 }
-.data-row:hover .sticky-col { background: var(--surface-muted); }
-.overview-table th.sticky-col { z-index: 3; background: var(--surface-muted); }
+.data-row:hover .sticky-col { background: rgba(241, 245, 249, 0.5); }
+.overview-table th.sticky-col { z-index: 3; background: rgba(241, 245, 249, 0.5); }
 
 .chevron {
   font-size: 14px;
@@ -640,16 +650,18 @@ function dividendClass(status) {
   color: var(--danger);
   font-weight: 600;
   background: var(--danger-soft);
-  border-radius: 4px;
-  padding: 2px 6px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11.5px;
 }
 
 .result-yes-dividend {
   color: var(--success);
   font-weight: 600;
   background: var(--success-soft);
-  border-radius: 4px;
-  padding: 2px 6px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11.5px;
 }
 
 .result-no { color: var(--ink-soft); }
@@ -665,40 +677,41 @@ function dividendClass(status) {
   border-bottom: 1px solid var(--border-soft);
 }
 
-.detail-cell { background: var(--surface-muted); }
+.detail-cell { background: rgba(241, 245, 249, 0.4); }
 
 .detail-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink-soft);
   letter-spacing: 0.04em;
-  padding: 12px 16px 8px;
+  padding: 14px 18px 10px;
 }
 
 .detail-empty {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink-soft);
-  padding: 12px 16px;
+  padding: 14px 18px;
 }
 
 .detail-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
-  margin: 0 16px 12px;
+  font-size: 11.5px;
+  margin: 0 18px 14px;
 }
 
 .detail-table th {
-  padding: 6px 12px;
+  padding: 7px 14px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-soft);
-  font-weight: 600;
+  font-weight: 700;
   background: transparent;
   text-align: left;
+  letter-spacing: 0.02em;
 }
 
 .detail-table td {
-  padding: 6px 12px;
+  padding: 7px 14px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink);
 }
@@ -708,16 +721,17 @@ function dividendClass(status) {
   grid-template-columns: repeat(7, minmax(120px, 1fr));
   border: 1px solid var(--border-soft);
   border-bottom: none;
-  background: var(--surface-muted);
+  background: rgba(241, 245, 249, 0.3);
 }
 
 .calendar-weekday {
-  padding: 10px 12px;
+  padding: 11px 12px;
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 700;
   text-align: center;
   border-right: 1px solid var(--border-soft);
+  letter-spacing: 0.02em;
 }
 
 .calendar-weekday:last-child { border-right: none; }
@@ -732,36 +746,37 @@ function dividendClass(status) {
 
 .calendar-cell {
   min-height: 118px;
-  padding: 10px;
+  padding: 11px;
   border-right: 1px solid var(--border-soft);
   border-bottom: 1px solid var(--border-soft);
   background: var(--bg-card);
 }
 
-.calendar-cell.muted { background: var(--surface-muted); }
-.calendar-cell.has-products { background: var(--brand-soft); }
+.calendar-cell.muted { background: rgba(241, 245, 249, 0.4); }
+.calendar-cell.has-products { background: rgba(219, 234, 254, 0.4); }
 
 .calendar-day {
   height: 20px;
   color: var(--ink-strong);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   margin-bottom: 8px;
 }
 
 .calendar-products {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .calendar-product {
-  padding: 4px 6px;
-  border-radius: var(--radius);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
   background: var(--brand-soft);
   color: var(--brand);
   font-size: 11px;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -777,24 +792,24 @@ function dividendClass(status) {
 .poster-card {
   background: var(--bg-card);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px;
   border: 1px solid var(--border-soft);
-  box-shadow: none;
-  transition: box-shadow 0.2s;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 200ms ease;
 }
 
-.poster-card:hover { box-shadow: var(--shadow-soft); }
+.poster-card:hover { box-shadow: var(--shadow-md); }
 
 .poster-card-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .poster-type-badge {
-  padding: 4px 12px;
-  border-radius: 12px;
+  padding: 4px 14px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
 }
@@ -812,6 +827,6 @@ function dividendClass(status) {
 .poster-product {
   font-size: 13px;
   color: var(--ink-soft);
-  font-weight: 700;
+  font-weight: 600;
 }
 </style>

@@ -73,49 +73,55 @@ onUnmounted(() => {
 
 .workbench-content {
   min-height: 100vh;
-  margin-left: 280px;
-  transition: margin-left 220ms ease;
+  margin-left: 264px;
+  transition: margin-left 280ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .workbench-content.expanded {
-  margin-left: 96px;
+  margin-left: 86px;
 }
 
 .workbench-topbar {
   position: sticky;
   top: 0;
   z-index: 60;
-  min-height: 72px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  padding: 16px 32px 8px;
+  padding: 12px 32px 4px;
   pointer-events: none;
 }
 
 .sidebar-toggle {
   pointer-events: auto;
-  width: 50px;
-  height: 50px;
+  width: 46px;
+  height: 46px;
   display: none;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  color: #6a758b;
+  border-radius: 12px;
+  color: var(--ink-soft);
   background: #fff;
   box-shadow: var(--shadow-sm);
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
 }
 
 .workbench-main {
-  width: min(1240px, calc(100vw - 344px));
-  margin: 0 auto 0 32px;
+  width: min(1200px, calc(100vw - 328px));
+  margin: 0 auto 0 36px;
   padding: 0 0 72px;
 }
 
 @media (max-width: 1280px) {
   .workbench-content {
-    margin-left: 268px;
+    margin-left: 250px;
   }
 
   .workbench-main {
@@ -136,15 +142,15 @@ onUnmounted(() => {
   }
 
   .workbench-topbar {
-    min-height: 72px;
-    padding: 16px 14px 0;
+    min-height: 64px;
+    padding: 12px 14px 0;
   }
 
   .sidebar-toggle {
     display: inline-flex;
-    width: 48px;
-    min-height: 48px;
-    height: 48px;
+    width: 46px;
+    min-height: 46px;
+    height: 46px;
   }
 
   .workbench-main {

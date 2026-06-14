@@ -225,17 +225,18 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 18px;
+  margin-bottom: 24px;
 }
 
 .breadcrumbs {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .breadcrumbs strong {
@@ -245,18 +246,18 @@ onMounted(async () => {
 
 .home-header h1 {
   color: var(--ink-strong);
-  font-size: 32px;
-  font-weight: 720;
-  line-height: 1.2;
-  letter-spacing: 0;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
 }
 
 .home-header p {
   max-width: 640px;
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--ink-soft);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 14.5px;
+  line-height: 1.65;
 }
 
 .header-actions {
@@ -273,63 +274,77 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 16px;
+  padding: 0 18px;
   border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 750;
-  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms ease, transform 200ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms ease;
 }
 
 .primary-action {
   color: #fff;
   background: var(--brand);
   border: 1px solid var(--brand);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2), 0 4px 12px rgba(37, 99, 235, 0.1);
 }
 
 .secondary-action {
   color: var(--ink);
   border: 1px solid var(--border-soft);
   background: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
 .primary-action:hover,
-.secondary-action:hover,
-.module-tile:hover,
-.pipeline-step:hover {
+.secondary-action:hover {
   transform: translateY(-1px);
+}
+
+.primary-action:hover {
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2), 0 8px 20px rgba(37, 99, 235, 0.14);
+}
+
+.secondary-action:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .metric-card {
-  min-height: 96px;
+  min-height: 102px;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr);
   align-items: start;
-  column-gap: 12px;
-  padding: 18px;
+  column-gap: 14px;
+  padding: 20px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: var(--bg-card);
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.metric-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border);
 }
 
 .metric-icon,
 .module-tile > span,
 .step-icon {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  border-radius: var(--radius);
+  border-radius: 10px;
   color: var(--brand);
   background: var(--brand-soft);
 }
@@ -342,17 +357,20 @@ onMounted(async () => {
 .metric-label {
   display: block;
   color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .metric-card strong {
   display: block;
-  margin-top: 5px;
+  margin-top: 6px;
   color: var(--ink-strong);
   font-size: 26px;
-  font-weight: 760;
+  font-weight: 700;
   line-height: 1.05;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 
@@ -360,7 +378,7 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .workflow-panel,
@@ -370,35 +388,36 @@ onMounted(async () => {
   border-radius: var(--radius);
   background: var(--bg-card);
   box-shadow: var(--shadow-sm);
-  padding: 22px;
+  padding: 24px 26px;
 }
 
 .panel-heading {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .panel-heading h2 {
   color: var(--ink-strong);
   font-size: 18px;
-  font-weight: 720;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .panel-heading p {
   margin-top: 4px;
   color: var(--ink-soft);
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .panel-heading span,
 .panel-heading a {
   color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .pipeline {
@@ -410,34 +429,36 @@ onMounted(async () => {
 .pipeline-step {
   min-height: 74px;
   display: grid;
-  grid-template-columns: 28px 40px 1fr;
+  grid-template-columns: 28px 42px 1fr;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: 14px;
+  padding: 14px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: #fff;
-  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms ease, background 200ms ease, box-shadow 200ms ease;
 }
 
 .pipeline-step:hover {
-  border-color: rgba(37, 99, 235, 0.34);
-  background: #f8fbff;
+  border-color: rgba(37, 99, 235, 0.25);
+  background: #fafbff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
 }
 
 .step-index {
   color: var(--ink-faint);
   font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .pipeline-step strong,
 .module-tile strong {
   display: block;
   color: var(--ink-strong);
-  font-size: 15px;
-  font-weight: 750;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
 }
 
 .pipeline-step em,
@@ -445,9 +466,9 @@ onMounted(async () => {
   display: block;
   margin-top: 4px;
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: 12.5px;
   font-style: normal;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .module-grid {
@@ -460,18 +481,23 @@ onMounted(async () => {
   min-height: 88px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
+  gap: 14px;
+  padding: 18px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   color: var(--ink);
   background: #fff;
-  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease;
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
 }
 
 .module-tile:hover {
-  background: #f8fbff;
-  border-color: rgba(37, 99, 235, 0.34);
+  background: #fafbff;
+  border-color: rgba(37, 99, 235, 0.2);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.05);
+}
+
+.module-tile:hover {
+  transform: translateY(-1px);
 }
 
 .source-list {
@@ -485,8 +511,8 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 12px 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 14px;
+  gap: 14px;
+  padding: 16px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: #fff;
@@ -497,10 +523,12 @@ onMounted(async () => {
   height: 10px;
   border-radius: 999px;
   background: #cbd5e1;
+  box-shadow: 0 0 0 3px rgba(203, 213, 225, 0.2);
 }
 
 .source-dot.ready {
   background: var(--success);
+  box-shadow: 0 0 0 3px rgba(15, 159, 110, 0.15);
 }
 
 .source-row div {
@@ -512,8 +540,8 @@ onMounted(async () => {
 
 .source-row strong {
   color: var(--ink-strong);
-  font-size: 15px;
-  font-weight: 740;
+  font-size: 14.5px;
+  font-weight: 600;
 }
 
 .source-row em,
@@ -521,7 +549,7 @@ onMounted(async () => {
   color: var(--ink-soft);
   font-size: 12px;
   font-style: normal;
-  font-weight: 620;
+  font-weight: 500;
 }
 
 @media (max-width: 1280px) {
@@ -562,7 +590,7 @@ onMounted(async () => {
   }
 
   .pipeline-step {
-    grid-template-columns: 24px 40px 1fr;
+    grid-template-columns: 24px 42px 1fr;
   }
 
   .workbench-grid {

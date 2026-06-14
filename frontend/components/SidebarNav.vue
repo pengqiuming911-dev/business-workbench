@@ -4,7 +4,7 @@
       <div class="sidebar-brand">
         <RouterLink to="/" class="brand-link" @click="emit('navigate')">
           <span class="brand-mark">
-            <GitBranch :size="31" :stroke-width="3" />
+            <img src="../assets/business-workbench-logo.jpg" alt="业务工作台 Logo" class="brand-logo" />
           </span>
           <span v-if="!collapsed" class="brand-name">业务工作台</span>
         </RouterLink>
@@ -58,7 +58,6 @@ import {
   Bot,
   Database,
   FileText,
-  GitBranch,
   Home,
   LogOut,
   ScrollText,
@@ -89,10 +88,10 @@ const navItems = [
 <style scoped>
 .sidebar {
   position: fixed;
-  inset: 16px auto 16px 16px;
-  width: 232px;
+  inset: 14px auto 14px 14px;
+  width: 236px;
   z-index: 100;
-  transition: transform 220ms ease, width 220ms ease;
+  transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1), width 280ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar.collapsed {
@@ -106,58 +105,66 @@ const navItems = [
   overflow: hidden;
   background: var(--bg-sidebar);
   border: 1px solid var(--border-warm);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
 .sidebar-brand {
-  min-height: 76px;
+  min-height: 72px;
   display: flex;
   align-items: center;
-  padding: 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border-warm);
 }
 
 .brand-link {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .brand-mark {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  color: #fff;
-  background: var(--ink-strong);
-  border-radius: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(17, 24, 39, 0.12);
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .brand-name {
   color: var(--ink-strong);
-  font-size: 18px;
-  font-weight: 760;
+  font-size: 17px;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: 0;
+  letter-spacing: -0.02em;
 }
 
 .account-avatar {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
   border-radius: 999px;
   color: #fff;
-  background: #ff7900;
+  background: linear-gradient(135deg, #ff8a00, #ff6b00);
   font-weight: 800;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1;
+  box-shadow: 0 2px 8px rgba(255, 107, 0, 0.25);
 }
 
 .sidebar-nav {
@@ -166,20 +173,21 @@ const navItems = [
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
-  padding: 8px 10px 12px;
+  padding: 10px 10px 14px;
 }
 
 .sidebar-link {
-  min-height: 42px;
+  min-height: 44px;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   color: var(--nav-muted);
   text-decoration: none;
-  border-radius: var(--radius);
-  font-weight: 680;
-  padding: 0 10px;
-  transition: color 150ms ease, background 150ms ease;
+  border-radius: 10px;
+  font-weight: 600;
+  padding: 0 12px;
+  letter-spacing: 0.005em;
+  transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .sidebar-link:hover {
@@ -190,6 +198,7 @@ const navItems = [
 .sidebar-link.active {
   color: var(--brand);
   background: var(--bg-active);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
 }
 
 .sidebar-link.active svg:first-child {
@@ -201,7 +210,7 @@ const navItems = [
 .sidebar-link-text {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .sidebar-footer {
@@ -210,33 +219,42 @@ const navItems = [
 }
 
 .account-card {
-  min-height: 52px;
+  min-height: 50px;
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 8px;
+  padding: 0 4px;
 }
 
 .account-card strong {
   flex: 1;
   min-width: 0;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .account-exit {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #e0e3e7;
-  border-radius: var(--radius);
-  color: #2c3038;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  color: var(--ink-soft);
   background: transparent;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.account-exit:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+  color: var(--ink);
 }
 
 .sidebar.collapsed .sidebar-brand,
@@ -252,8 +270,8 @@ const navItems = [
 }
 
 .sidebar.collapsed .brand-mark {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
 }
 
 .sidebar.collapsed .sidebar-link {
@@ -266,7 +284,9 @@ const navItems = [
   position: fixed;
   inset: 0;
   z-index: 99;
-  background: rgba(24, 24, 20, 0.35);
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 @media (max-width: 860px) {

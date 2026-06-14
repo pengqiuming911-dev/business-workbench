@@ -200,12 +200,12 @@ function formatTime(iso) {
 </script>
 
 <style scoped>
-.auth-row { display: flex; align-items: center; gap: 12px; }
-.source-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.auth-row { display: flex; align-items: center; gap: 14px; }
+.source-row { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .source-icon { font-size: 28px; flex-shrink: 0; }
-.source-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.source-name { font-size: 14px; font-weight: 700; color: var(--ink-strong); }
-.source-desc { font-size: 12px; color: var(--ink-soft); }
+.source-info { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.source-name { font-size: 14.5px; font-weight: 600; color: var(--ink-strong); letter-spacing: -0.005em; }
+.source-desc { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
 .source-status { flex-shrink: 0; }
-.sync-actions { display: flex; align-items: center; gap: 12px; }
+.sync-actions { display: flex; align-items: center; gap: 14px; }
 </style>

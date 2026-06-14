@@ -227,8 +227,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--border-soft);
   flex-wrap: wrap;
 }
@@ -236,7 +236,7 @@ onMounted(async () => {
 .product-cards {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 18px;
 }
 
 .product-card {
@@ -244,21 +244,21 @@ onMounted(async () => {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: box-shadow 0.2s, border-color 0.2s;
+  transition: box-shadow 200ms ease, border-color 200ms ease;
 }
 
 .product-card:hover {
   border-color: var(--brand);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
   background: var(--brand);
   color: #fff;
-  padding: 11px 14px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .card-icon { font-size: 17px; }
@@ -266,19 +266,20 @@ onMounted(async () => {
 .card-title {
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.card-body { padding: 5px 0; }
+.card-body { padding: 6px 0; }
 
 .info-row {
   display: grid;
-  grid-template-columns: 76px 1fr;
+  grid-template-columns: 78px 1fr;
   align-items: start;
-  padding: 6px 14px;
-  gap: 8px;
+  padding: 7px 16px;
+  gap: 10px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -289,12 +290,13 @@ onMounted(async () => {
   color: var(--ink-soft);
   white-space: nowrap;
   padding-top: 2px;
+  font-weight: 600;
 }
 
 .info-val {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink-strong);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .info-val.multiline {
@@ -305,12 +307,13 @@ onMounted(async () => {
 }
 
 .raw-content {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink-soft);
   white-space: pre-wrap;
   max-height: 150px;
   overflow: auto;
-  padding: 14px;
+  padding: 16px;
+  line-height: 1.6;
 }
 
 @media (max-width: 1400px) {
