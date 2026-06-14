@@ -1,0 +1,142 @@
+name: Deploy to Aliyun Server
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  APP_DIR: /var/www/business-workbench
+  GO_VERSION: '1.22'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install frontend dependencies
+      run: |
+        npm install
+        cd frontend && npm install
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Build Go backend (linux/amd64)
+      run: |
+        cd backend-go
+        GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
+        
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        script: |
+          sudo cp -r ${{ env.APP_DIR }} ${{ env.APP_DIR }}.backup.$(date +%Y%m%d_%H%M%S) || true
+          
+          sudo mkdir -p ${{ env.APP_DIR }}
+          sudo mkdir -p ${{ env.APP_DIR }}/frontend
+          sudo mkdir -p ${{ env.APP_DIR }}/backend-go
+          sudo mkdir -p ${{ env.APP_DIR }}/backend-go/public
+          
+          cat > ${{ env.APP_DIR }}/backend-go/.env << 'EOF'
+          FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_REDIRECT_URI=${{ secrets.FEISHU_REDIRECT_URI }}
+          FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+          PORT=3001
+          DATABASE_PATH=data.sqlite
+          DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_API_URL=${{ secrets.DEEPSEEK_API_URL }}
+          DEEPSEEK_MODEL=${{ secrets.DEEPSEEK_MODEL }}
+          FEISHU_PUSH_WEBHOOK=${{ secrets.FEISHU_PUSH_WEBHOOK }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          SMTP_SECURE=${{ secrets.SMTP_SECURE }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASS=${{ secrets.SMTP_PASS }}
+          SMTP_FROM=${{ secrets.SMTP_FROM }}
+          EOF
+          chmod 600 ${{ env.APP_DIR }}/backend-go/.env
+          
+          echo "Environment variables injected from GitHub Secrets"
+          
+    - name: Upload frontend dist
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        source: "frontend/dist/*"
+        target: "${{ env.APP_DIR }}/frontend/"
+        strip_components: 2
+        
+    - name: Upload Go binary and assets
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        source: "dist/server,backend-go/public/*"
+        target: "${{ env.APP_DIR }}/"
+        strip_components: 1
+        
+    - name: Restart backend and verify
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        script: |
+          sudo chmod +x ${{ env.APP_DIR }}/server
+          
+          if systemctl is-active --quiet business-workbench; then
+            sudo systemctl restart business-workbench
+          else
+            sudo bash -c "cat > /etc/systemd/system/business-workbench.service << 'UNIT'
+          [Unit]
+          Description=Business Workbench Go Backend
+          After=network.target
+          
+          [Service]
+          Type=simple
+          WorkingDirectory=${{ env.APP_DIR }}/backend-go
+          ExecStart=${{ env.APP_DIR }}/server
+          Restart=on-failure
+          RestartSec=5
+          
+          [Install]
+          WantedBy=multi-user.target
+          UNIT"
+            sudo systemctl daemon-reload
+            sudo systemctl enable business-workbench
+            sudo systemctl start business-workbench
+          fi
+          
+          sleep 3
+          sudo systemctl status business-workbench
+          sudo systemctl status nginx --no-pager
+          
+          echo "Deployment completed successfully!"

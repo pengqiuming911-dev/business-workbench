@@ -1,45 +1,65 @@
 <template>
   <WorkbenchLayout wide>
-    <div class="agent-layout">
-      <div class="conversation-sidebar" :class="{ collapsed: sidebarCollapsed }">
-        <div class="sidebar-header">
-          <button class="btn btn-primary btn-sm new-chat-btn" @click="newConversation">
-            <Plus :size="16" /> 新对话
-          </button>
-          <button class="btn btn-outline btn-sm toggle-btn" @click="sidebarCollapsed = !sidebarCollapsed">
+    <div class="agent-shell">
+      <aside class="conversation-sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="sidebar-top">
+          <div v-if="!sidebarCollapsed" class="sidebar-title">智能体会话</div>
+          <button class="icon-btn" type="button" @click="sidebarCollapsed = !sidebarCollapsed">
             <component :is="sidebarCollapsed ? PanelRightOpen : PanelRightClose" :size="16" />
           </button>
         </div>
+
+        <button
+          v-if="!sidebarCollapsed"
+          class="new-chat-btn"
+          type="button"
+          @click="newConversation"
+        >
+          <Plus :size="16" />
+          <span>新建对话</span>
+        </button>
+
         <div v-if="!sidebarCollapsed" class="conversation-list">
-          <div
+          <button
             v-for="conv in conversations"
             :key="conv.id"
+            type="button"
             class="conversation-item"
             :class="{ active: currentConversationId === conv.id }"
             @click="selectConversation(conv.id)"
           >
-            <MessageSquare :size="15" />
-            <span class="conv-title">{{ conv.title }}</span>
-            <button class="conv-delete" @click.stop="deleteConversation(conv.id)" title="删除">
+            <div class="conversation-main">
+              <MessageSquare :size="15" />
+              <span class="conv-title">{{ conv.title }}</span>
+            </div>
+            <span class="conv-delete" @click.stop="deleteConversation(conv.id)">
               <Trash2 :size="13" />
-            </button>
-          </div>
+            </span>
+          </button>
+
           <div v-if="conversations.length === 0" class="empty-conversations">
             暂无对话记录
           </div>
         </div>
-      </div>
+      </aside>
 
-      <div class="chat-main">
+      <section class="chat-stage">
+        <header class="chat-topbar">
+          <div>
+            <div class="chat-kicker">Business Workbench AI</div>
+            <h1 class="chat-title">智能业务助手</h1>
+          </div>
+        </header>
+
         <div ref="messagesContainer" class="messages-area">
           <div v-if="messages.length === 0" class="welcome-state">
-            <Bot :size="48" :stroke-width="1.5" class="welcome-icon" />
-            <h2 class="text-section">智能业务助手</h2>
-            <p class="text-body" style="color:var(--ink-soft);max-width:400px;text-align:center">
-              我可以帮你查询产品信息、分析观察结果、解读产品文档，或回答业务相关问题。试试问我：
+            <h2 class="welcome-title">开始一段更清晰的业务对话</h2>
+            <p class="welcome-copy">
+              你可以查询产品信息、观察结果、产品文档，或者直接让助手帮你做业务分析。
             </p>
-            <div class="suggestion-chips">
-              <button v-for="s in suggestions" :key="s" class="suggestion-chip" @click="sendSuggestion(s)">
+
+            <div class="suggestion-grid">
+              <button v-for="s in suggestions" :key="s" class="suggestion-card" @click="sendSuggestion(s)">
                 {{ s }}
               </button>
             </div>
@@ -49,6 +69,7 @@
             <ChatMessage
               :role="msg.role"
               :content="msg.content"
+              :reasoning="msg.reasoning"
               :streaming="msg.streaming"
               :tool-calls="msg.tool_calls_display"
             />
@@ -59,34 +80,42 @@
           </div>
         </div>
 
-        <div class="input-area">
-          <form class="input-form" @submit.prevent="sendMessage">
-            <textarea
-              ref="inputRef"
-              v-model="inputText"
-              class="input chat-input"
-              rows="1"
-              placeholder="输入你的问题..."
-              @keydown="handleKeydown"
-              @input="autoResize"
-            ></textarea>
-            <button type="submit" class="btn btn-primary send-btn" :disabled="!inputText.trim() || isLoading">
-              <SendHorizontal :size="18" />
-            </button>
-          </form>
-        </div>
-      </div>
+        <footer class="composer-wrap">
+          <div class="composer-panel">
+            <form class="input-form" @submit.prevent="sendMessage">
+              <textarea
+                ref="inputRef"
+                v-model="inputText"
+                class="chat-input"
+                rows="1"
+                placeholder="给智能体发送消息"
+                @keydown="handleKeydown"
+                @input="autoResize"
+              ></textarea>
+              <button type="submit" class="send-btn" :disabled="!inputText.trim() || isLoading">
+                <SendHorizontal :size="18" />
+              </button>
+            </form>
+            <div class="composer-hint">Enter 发送，Shift + Enter 换行</div>
+          </div>
+        </footer>
+      </section>
     </div>
   </WorkbenchLayout>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import ChatMessage from '../components/ChatMessage.vue'
 import {
-  Bot, Plus, MessageSquare, Trash2, SendHorizontal,
-  PanelRightOpen, PanelRightClose,
+  Bot,
+  MessageSquare,
+  PanelRightClose,
+  PanelRightOpen,
+  Plus,
+  SendHorizontal,
+  Trash2,
 } from '@lucide/vue'
 
 const conversations = ref([])
@@ -102,8 +131,8 @@ const inputRef = ref(null)
 const suggestions = [
   '目前有多少存续产品？',
   '今天有哪些产品需要观察？',
-  '沪深300最新价格是多少？',
-  '什么是敲出？什么是派息？',
+  '帮我总结最近的产品观察结果',
+  '中证1000 相关产品有哪些？',
 ]
 
 async function loadConversations() {
@@ -119,10 +148,14 @@ async function selectConversation(id) {
     const res = await fetch(`/api/agent/conversations/${id}/messages`)
     if (res.ok) {
       const msgs = await res.json()
-      messages.value = msgs.map(m => ({
+      messages.value = msgs.map((m) => ({
         ...m,
         tool_calls: null,
-        tool_calls_display: m.tool_calls ? (typeof m.tool_calls === 'string' ? JSON.parse(m.tool_calls) : m.tool_calls) : null,
+        tool_calls_display: m.tool_calls
+          ? typeof m.tool_calls === 'string'
+            ? JSON.parse(m.tool_calls)
+            : m.tool_calls
+          : null,
         streaming: false,
       }))
     }
@@ -130,7 +163,7 @@ async function selectConversation(id) {
   scrollToBottom()
 }
 
-async function newConversation() {
+function newConversation() {
   currentConversationId.value = null
   messages.value = []
   inputText.value = ''
@@ -140,7 +173,7 @@ async function newConversation() {
 async function deleteConversation(id) {
   try {
     await fetch(`/api/agent/conversations/${id}`, { method: 'DELETE' })
-    conversations.value = conversations.value.filter(c => c.id !== id)
+    conversations.value = conversations.value.filter((c) => c.id !== id)
     if (currentConversationId.value === id) {
       currentConversationId.value = null
       messages.value = []
@@ -155,7 +188,7 @@ function sendSuggestion(text) {
 
 async function sendMessage() {
   const text = inputText.value.trim()
-  if (!text || isLoading) return
+  if (!text || isLoading.value) return
 
   inputText.value = ''
   isLoading.value = true
@@ -166,7 +199,15 @@ async function sendMessage() {
   scrollToBottom()
 
   const assistantMsgId = `assistant-${Date.now()}`
-  messages.value.push({ _tempId: assistantMsgId, role: 'assistant', content: '', streaming: true, tool_calls_display: [] })
+  messages.value.push({
+    _tempId: assistantMsgId,
+    role: 'assistant',
+    content: '正在思考...',
+    reasoning: '',
+    streaming: true,
+    tool_calls_display: [],
+    hasContent: false,
+  })
 
   try {
     const res = await fetch('/api/agent/chat', {
@@ -201,28 +242,47 @@ async function sendMessage() {
         if (!data) continue
 
         let event
-        try { event = JSON.parse(data) } catch { continue }
+        try {
+          event = JSON.parse(data)
+        } catch {
+          continue
+        }
 
         if (event.type === 'conversation_id') {
           currentConversationId.value = event.conversation_id
+        } else if (event.type === 'reasoning_delta') {
+          const msg = messages.value.find((m) => m._tempId === assistantMsgId)
+          if (msg) msg.reasoning = (msg.reasoning || '') + event.text
+          scrollToBottom()
         } else if (event.type === 'delta') {
-          const msg = messages.value.find(m => m._tempId === assistantMsgId)
-          if (msg) msg.content += event.text
+          const msg = messages.value.find((m) => m._tempId === assistantMsgId)
+          if (msg) {
+            if (!msg.hasContent) {
+              msg.content = ''
+              msg.hasContent = true
+            }
+            msg.content += event.text
+          }
           scrollToBottom()
         } else if (event.type === 'tool_call') {
-          const msg = messages.value.find(m => m._tempId === assistantMsgId)
+          const msg = messages.value.find((m) => m._tempId === assistantMsgId)
           if (msg) {
             if (!msg.tool_calls_display) msg.tool_calls_display = []
             msg.tool_calls_display.push({ function: { name: event.name } })
           }
         } else if (event.type === 'done') {
           streaming.value = false
-          const msg = messages.value.find(m => m._tempId === assistantMsgId)
-          if (msg) msg.streaming = false
-        } else if (event.type === 'error') {
-          const msg = messages.value.find(m => m._tempId === assistantMsgId)
+          const msg = messages.value.find((m) => m._tempId === assistantMsgId)
           if (msg) {
-            msg.content = `⚠ 错误：${event.error}`
+            msg.streaming = false
+            if (!msg.hasContent && !msg.content.trim()) {
+              msg.content = '已完成，但模型没有返回可展示的正文。'
+            }
+          }
+        } else if (event.type === 'error') {
+          const msg = messages.value.find((m) => m._tempId === assistantMsgId)
+          if (msg) {
+            msg.content = `错误：${event.error}`
             msg.streaming = false
           }
           streaming.value = false
@@ -230,15 +290,16 @@ async function sendMessage() {
       }
     }
   } catch (err) {
-    const msg = messages.value.find(m => m._tempId === assistantMsgId)
+    const msg = messages.value.find((m) => m._tempId === assistantMsgId)
     if (msg) {
-      msg.content = `⚠ 请求失败：${err.message}`
+      msg.content = `请求失败：${err.message}`
       msg.streaming = false
+      msg.hasContent = true
     }
   } finally {
     isLoading.value = false
     streaming.value = false
-    const msg = messages.value.find(m => m._tempId === assistantMsgId)
+    const msg = messages.value.find((m) => m._tempId === assistantMsgId)
     if (msg) msg.streaming = false
     await loadConversations()
   }
@@ -255,7 +316,7 @@ function autoResize() {
   const el = inputRef.value
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 150) + 'px'
+  el.style.height = `${Math.min(el.scrollHeight, 180)}px`
 }
 
 function scrollToBottom() {
@@ -272,85 +333,123 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.agent-layout {
-  display: flex;
-  height: calc(100vh - 80px);
-  gap: 0;
+.agent-shell {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  min-height: calc(100vh - 88px);
 }
 
 .conversation-sidebar {
-  width: 260px;
-  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  transition: width 200ms ease;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 252, 0.96));
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+  transition: width 180ms ease, opacity 180ms ease;
 }
 
 .conversation-sidebar.collapsed {
-  width: 48px;
+  width: 72px;
 }
 
-.sidebar-header {
+.sidebar-top {
   display: flex;
-  gap: 6px;
-  padding: 12px;
-  border-bottom: 1px solid var(--border-soft);
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 18px 12px;
+}
+
+.sidebar-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #3d4a5d;
+  letter-spacing: 0.01em;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+  color: #536176;
 }
 
 .new-chat-btn {
-  flex: 1;
+  margin: 0 18px 16px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-}
-
-.toggle-btn {
-  padding: 6px;
+  gap: 8px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #3f7cff, #2f6cf6);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 12px 30px rgba(47, 108, 246, 0.22);
 }
 
 .conversation-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0 12px 14px;
 }
 
 .conversation-item {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--ink);
-  transition: background 120ms;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 12px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  color: #5c697d;
+  text-align: left;
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 .conversation-item:hover {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.88);
+  color: #202a39;
+  transform: translateY(-1px);
 }
 
 .conversation-item.active {
-  background: var(--bg-active);
+  background: linear-gradient(135deg, rgba(63, 124, 255, 0.12), rgba(90, 149, 255, 0.08));
+  color: #1f3f86;
+}
+
+.conversation-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .conv-title {
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .conv-delete {
   opacity: 0;
-  background: none;
-  border: none;
-  color: var(--ink-faint);
-  cursor: pointer;
-  padding: 2px;
-  display: flex;
+  color: #8e98a9;
+  display: inline-flex;
+  align-items: center;
 }
 
 .conversation-item:hover .conv-delete {
@@ -358,96 +457,172 @@ onMounted(() => {
 }
 
 .empty-conversations {
+  padding: 28px 12px;
   text-align: center;
-  padding: 24px 12px;
-  color: var(--ink-faint);
+  color: #98a3b3;
   font-size: 13px;
 }
 
-.chat-main {
-  flex: 1;
+.chat-stage {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.92), rgba(245, 247, 250, 0.95) 58%, rgba(241, 244, 248, 0.98));
+  box-shadow: 0 28px 64px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.chat-topbar {
+  padding: 24px 30px 12px;
+}
+
+.chat-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8190a4;
+  margin-bottom: 6px;
+}
+
+.chat-title {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #152033;
 }
 
 .messages-area {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 32px;
+  padding: 10px 30px 12px;
 }
 
 .welcome-state {
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
-  gap: 12px;
+  padding: 52px 20px 64px;
+  text-align: center;
 }
 
-.welcome-icon {
-  color: var(--brand);
-  margin-bottom: 8px;
+.welcome-title {
+  font-size: clamp(32px, 4vw, 48px);
+  line-height: 1.06;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #161f2d;
+  max-width: 820px;
 }
 
-.suggestion-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
+.welcome-copy {
   margin-top: 16px;
+  max-width: 620px;
+  color: #6d7b90;
+  font-size: 16px;
+  line-height: 1.75;
 }
 
-.suggestion-chip {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+.suggestion-grid {
+  width: 100%;
+  max-width: 760px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.suggestion-card {
+  min-height: 74px;
+  padding: 18px 18px;
+  text-align: left;
+  border: 1px solid rgba(15, 23, 42, 0.07);
   border-radius: 20px;
-  padding: 8px 16px;
-  font-size: 13px;
-  color: var(--ink);
-  cursor: pointer;
-  transition: all 120ms;
+  background: rgba(255, 255, 255, 0.9);
+  color: #2a3546;
+  font-size: 14px;
+  line-height: 1.55;
+  font-weight: 600;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
-.suggestion-chip:hover {
-  background: var(--brand-soft);
-  border-color: var(--brand);
-  color: var(--brand);
+.suggestion-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(47, 108, 246, 0.18);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.05);
 }
 
-.input-area {
-  padding: 12px 32px 16px;
-  border-top: 1px solid var(--border-soft);
+.composer-wrap {
+  padding: 14px 24px 24px;
+}
+
+.composer-panel {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.06);
 }
 
 .input-form {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: flex-end;
 }
 
 .chat-input {
-  flex: 1;
+  width: 100%;
+  min-height: 52px;
+  max-height: 180px;
+  padding: 14px 16px;
+  border: none;
+  outline: none;
   resize: none;
-  min-height: 40px;
-  max-height: 150px;
-  line-height: 1.5;
+  background: transparent;
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.7;
   font-family: var(--font-sans);
 }
 
+.chat-input::placeholder {
+  color: #9aa4b4;
+}
+
 .send-btn {
-  height: 40px;
-  width: 40px;
-  padding: 0;
-  display: flex;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #3f7cff, #2f6cf6);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(47, 108, 246, 0.25);
+}
+
+.send-btn:disabled {
+  opacity: 0.44;
+  box-shadow: none;
+}
+
+.composer-hint {
+  padding: 8px 6px 2px;
+  color: #9aa4b4;
+  font-size: 12px;
 }
 
 .loading-indicator {
-  padding: 16px 0;
+  padding: 20px 0;
   display: flex;
   justify-content: center;
 }
@@ -456,26 +631,54 @@ onMounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--brand);
+  background: #2f6cf6;
   animation: pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(0.8); opacity: 0.4; }
-  50% { transform: scale(1.2); opacity: 1; }
+  0%, 100% {
+    transform: scale(0.8);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1080px) {
+  .agent-shell {
+    grid-template-columns: 1fr;
+  }
+
   .conversation-sidebar {
     display: none;
   }
+}
 
-  .messages-area {
-    padding: 12px 16px;
+@media (max-width: 720px) {
+  .chat-topbar {
+    padding: 20px 18px 8px;
   }
 
-  .input-area {
-    padding: 8px 16px 12px;
+  .messages-area {
+    padding: 8px 16px 10px;
+  }
+
+  .welcome-title {
+    font-size: 30px;
+  }
+
+  .welcome-copy {
+    font-size: 14px;
+  }
+
+  .suggestion-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .composer-wrap {
+    padding: 10px 12px 14px;
   }
 }
 </style>

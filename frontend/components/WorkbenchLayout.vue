@@ -15,10 +15,7 @@
         </button>
 
         <div class="topbar-actions">
-          <span class="status-pill">
-            <span class="status-dot"></span>
-            运行正常
-          </span>
+          <span class="status-pill">运行正常</span>
           <div class="social-pill" aria-label="外部链接">
             <GitFork :size="18" :stroke-width="2.1" />
             <Send :size="18" :stroke-width="2.1" />
@@ -40,7 +37,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import {
   GitFork,
   Mail,
@@ -157,20 +154,9 @@ onUnmounted(() => {
 }
 
 .status-pill {
-  gap: 10px;
   padding: 0 14px;
   font-size: 14px;
   font-weight: 700;
-}
-
-.status-dot {
-  width: 10px;
-  height: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: #00b881;
 }
 
 .social-pill {
@@ -249,6 +235,5 @@ onUnmounted(() => {
     margin: 0 auto;
     padding-bottom: 36px;
   }
-
 }
 </style>

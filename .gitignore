@@ -17,3 +17,8 @@ frontend/.env
 Thumbs.db
 .claude/
 .worktrees/
+.local-tools/
+.local-cache/
+.playwright-mcp/
+.superpowers/
+backend-go/.gocache/

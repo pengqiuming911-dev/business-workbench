@@ -2,11 +2,14 @@
   "name": "business-workbench",
   "private": true,
   "version": "1.0.0",
-  "description": "Monorepo dev launcher for backend+frontend",
+  "description": "Monorepo dev launcher for backend-go+frontend",
   "scripts": {
-    "setup": "npm --prefix backend install && npm --prefix frontend install",
+    "setup": "npm --prefix frontend install",
     "postinstall": "npm run setup",
-    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm --prefix backend run dev\" \"npm --prefix frontend run dev -- --open\""
+    "dev": "concurrently -k -n backend-go,frontend -c blue,green \"powershell -NoProfile -Command \\\"Set-Location 'backend-go'; $env:GOCACHE = Join-Path (Resolve-Path '..').Path '.local-cache\\\\go-build'; [void](New-Item -ItemType Directory -Force -Path $env:GOCACHE); ..\\\\.local-tools\\\\go\\\\bin\\\\go.exe run ./cmd/server\\\"\" \"npm --prefix frontend run dev -- --open\"",
+    "dev:go": "npm run dev",
+    "build": "npm --prefix frontend run build",
+    "typecheck": "npm --prefix frontend run typecheck"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

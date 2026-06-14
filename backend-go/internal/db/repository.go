@@ -1,0 +1,1508 @@
+package db
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"business-workbench/backend-go/internal/model"
+)
+
+func (s *Store) QueryProducts(startDate, endDate string) ([]model.Product, error) {
+	query := "SELECT * FROM products WHERE 1=1"
+	args := []any{}
+	if startDate != "" {
+		query += " AND issue_date >= ?"
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		query += " AND issue_date <= ?"
+		args = append(args, endDate)
+	}
+	query += " ORDER BY issue_date DESC"
+	return s.scanProducts(query, args...)
+}
+
+func (s *Store) ImportProducts(products []model.Product) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	incoming := map[string]bool{}
+	for _, product := range products {
+		incoming[product.ID] = true
+	}
+	rows, err := tx.Query("SELECT id FROM products")
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	existingIDs := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			_ = tx.Rollback()
+			return err
+		}
+		existingIDs = append(existingIDs, id)
+	}
+	if err := rows.Close(); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	for _, id := range existingIDs {
+		if !incoming[id] {
+			if _, err := tx.Exec("DELETE FROM products WHERE id = ?", id); err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT OR REPLACE INTO products
+			(id, name, is_main, issue_date, complete_date, subscribe_amount, outstanding_amount,
+			 manager, holding_status, structure_type, code, lock_days, lock_months,
+			 first_knockout_ratio, entry_price, monthly_decrease, term, parachute,
+			 dividend_barrier, monthly_coupon, coupon_1st, coupon_2nd, coupon_3rd,
+			 duration_months, absolute_return, holiday_adjust, raw,
+			 knock_in, duration_days, knocked_in, margin_ratio, custodian, counterparty)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, product := range products {
+		if _, err := stmt.Exec(
+			product.ID, nullableDBString(product.Name), nullableInt(product.IsMain), nullableDBString(product.IssueDate), nullableDBString(product.CompleteDate),
+			nullableFloat(product.SubscribeAmount), nullableFloat(product.OutstandingAmount),
+			nullableDBString(product.Manager), nullableDBString(product.HoldingStatus), nullableDBString(product.StructureType), nullableDBString(product.Code),
+			nullableInt(product.LockDays), nullableInt(product.LockMonths), nullableFloat(product.FirstKnockoutRatio),
+			nullableFloat(product.EntryPrice), nullableFloat(product.MonthlyDecrease), nullableDBString(product.Term), nullableDBString(product.Parachute),
+			nullableFloat(product.DividendBarrier), nullableFloat(product.MonthlyCoupon),
+			nullableFloat(product.Coupon1st), nullableFloat(product.Coupon2nd), nullableFloat(product.Coupon3rd),
+			nullableFloat(product.DurationMonths), nullableFloat(product.AbsoluteReturn), nullableDBString(product.HolidayAdjust), nullableDBString(product.Raw),
+			nullableDBString(product.KnockIn), nullableInt(product.DurationDays), nullableDBString(product.KnockedIn),
+			nullableFloat(product.MarginRatio), nullableDBString(product.Custodian), nullableDBString(product.Counterparty),
+		); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ImportTransactions(rows []map[string]any) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM transactions"); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	stmt, err := tx.Prepare(`
+		INSERT INTO transactions 
+			(transaction_date, flight_id, counterparty, subscribe_amount,
+			 product_name, customer_name, actual_buyer, amount,
+			 subscribe_fee_ratio, management_fee_ratio, performance_fee_ratio,
+			 rebate_target, flight_date, holding_status, complete_date,
+			 underlying, structure_type, lock_period,
+			 dividend_barrier, monthly_coupon, coupon_1st, raw)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, row := range rows {
+		if _, err := stmt.Exec(
+			row["transaction_date"], row["flight_id"], row["counterparty"], row["subscribe_amount"],
+			row["product_name"], row["customer_name"], row["actual_buyer"], row["amount"],
+			row["subscribe_fee_ratio"], row["management_fee_ratio"], row["performance_fee_ratio"],
+			row["rebate_target"], row["flight_date"], row["holding_status"], row["complete_date"],
+			row["underlying"], row["structure_type"], row["lock_period"],
+			row["dividend_barrier"], row["monthly_coupon"], row["coupon_1st"], row["raw"],
+		); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ImportCoInvestUsers(rows []map[string]any) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM co_invest_users"); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	stmt, err := tx.Prepare(`
+		INSERT INTO co_invest_users
+			(user_name, actual_buyer, phone, wechat, total_assets, risk_tolerance, industry,
+			 is_actual_deal, lead_source, asset_match, is_dedicated_account, is_competitor, raw)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, row := range rows {
+		if _, err := stmt.Exec(
+			row["user_name"], row["actual_buyer"], row["phone"], row["wechat"], row["total_assets"],
+			row["risk_tolerance"], row["industry"], row["is_actual_deal"], row["lead_source"],
+			row["asset_match"], row["is_dedicated_account"], row["is_competitor"], row["raw"],
+		); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ImportProductDocs(rows []map[string]any) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM product_docs"); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	stmt, err := tx.Prepare(`
+		INSERT OR REPLACE INTO product_docs
+			(doc_token, doc_name, parent_path, folder_token, raw_content, structure_json, synced_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, row := range rows {
+		if _, err := stmt.Exec(
+			row["doc_token"], row["doc_name"], row["parent_path"], row["folder_token"],
+			row["raw_content"], row["structure_json"], row["synced_at"],
+		); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) LogSync(rowCount int) error {
+	_, err := s.DB.Exec("INSERT INTO sync_log (synced_at, row_count) VALUES (?, ?)", isoNow(), rowCount)
+	return err
+}
+
+func (s *Store) LogCoInvestSync(rowCount int) error {
+	_, err := s.DB.Exec("INSERT INTO co_invest_sync_log (synced_at, row_count) VALUES (?, ?)", isoNow(), rowCount)
+	return err
+}
+
+func (s *Store) LogProductDocsSync(docCount int, folderCount int) error {
+	_, err := s.DB.Exec("INSERT INTO product_docs_sync_log (synced_at, doc_count, folder_count) VALUES (?, ?, ?)", isoNow(), docCount, folderCount)
+	return err
+}
+
+func (s *Store) LogActivity(logType string, action string, detail string) error {
+	_, err := s.DB.Exec("INSERT INTO activity_logs (type, action, detail) VALUES (?, ?, ?)", logType, action, nullableDBString(detail))
+	return err
+}
+
+func (s *Store) QueryOngoingProducts() ([]model.Product, error) {
+	return s.scanProducts("SELECT * FROM products WHERE holding_status LIKE ? OR holding_status LIKE ?", "%存续%", "%持有%")
+}
+
+func (s *Store) LastSync() (map[string]any, error) {
+	return s.queryOneMap("SELECT * FROM sync_log ORDER BY synced_at DESC LIMIT 1")
+}
+
+func (s *Store) LastCoInvestSync() (map[string]any, error) {
+	return s.queryOneMap("SELECT * FROM co_invest_sync_log ORDER BY synced_at DESC LIMIT 1")
+}
+
+func (s *Store) LastProductDocsSync() (map[string]any, error) {
+	return s.queryOneMap("SELECT * FROM product_docs_sync_log ORDER BY synced_at DESC LIMIT 1")
+}
+
+func (s *Store) DashboardStats() (map[string]any, error) {
+	stats := map[string]any{}
+	queries := map[string]string{
+		"totalProducts":  "SELECT COUNT(*) FROM products",
+		"activeProducts": "SELECT COUNT(*) FROM products WHERE holding_status LIKE '%存续%' OR holding_status LIKE '%持有%'",
+		"totalCustomers": "SELECT COUNT(DISTINCT customer_name) FROM customers",
+		"totalChannels":  "SELECT COUNT(DISTINCT channel_name) FROM channels",
+	}
+	for key, query := range queries {
+		var count int64
+		if err := s.DB.QueryRow(query).Scan(&count); err != nil {
+			return nil, err
+		}
+		stats[key] = count
+	}
+	return stats, nil
+}
+
+func (s *Store) LastObservationUpdate() (string, error) {
+	var updated sql.NullString
+	err := s.DB.QueryRow("SELECT updated_at FROM observations ORDER BY updated_at DESC LIMIT 1").Scan(&updated)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return nullString(updated), nil
+}
+
+func (s *Store) MonthlyTrend() ([]map[string]any, error) {
+	rows, err := s.DB.Query(`
+		SELECT strftime('%Y-%m', transaction_date) as month,
+		       SUM(subscribe_amount) as amount,
+		       COUNT(*) as count
+		FROM transactions
+		GROUP BY month ORDER BY month
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []map[string]any{}
+	for rows.Next() {
+		var month sql.NullString
+		var amount sql.NullFloat64
+		var count int64
+		if err := rows.Scan(&month, &amount, &count); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{
+			"month":  nullString(month),
+			"amount": nullFloat(amount),
+			"count":  count,
+		})
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) ChannelDistribution() ([]map[string]any, error) {
+	rows, err := s.DB.Query(`
+		SELECT c.channel_name, SUM(t.subscribe_amount) as amount
+		FROM channels c
+		LEFT JOIN transactions t ON t.counterparty = c.channel_name
+		GROUP BY c.channel_name ORDER BY amount DESC LIMIT 8
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []map[string]any{}
+	for rows.Next() {
+		var channel sql.NullString
+		var amount sql.NullFloat64
+		if err := rows.Scan(&channel, &amount); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{
+			"channel": nullString(channel),
+			"amount":  nullFloat(amount),
+		})
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) QueryObservationsByProduct(productID string) ([]model.Observation, error) {
+	rows, err := s.DB.Query(`
+		SELECT id, product_id, observation_date, knockout_price, dividend_line,
+		       underlying_price, is_knocked_out, is_dividend, months_since_entry, updated_at
+		FROM observations WHERE product_id = ? ORDER BY observation_date
+	`, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []model.Observation{}
+	for rows.Next() {
+		var row model.Observation
+		var knockout, dividend, underlying sql.NullFloat64
+		var months sql.NullInt64
+		if err := rows.Scan(
+			&row.ID, &row.ProductID, &row.ObservationDate, &knockout, &dividend,
+			&underlying, &row.IsKnockedOut, &row.IsDividend, &months, &row.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		row.KnockoutPrice = floatPtr(knockout)
+		row.DividendLine = floatPtr(dividend)
+		row.UnderlyingPrice = floatPtr(underlying)
+		row.MonthsSinceEntry = intPtr(months)
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) QueryPostersByDate(date string) ([]model.Poster, error) {
+	return s.queryPosters("SELECT * FROM posters WHERE observation_date = ? ORDER BY created_at DESC", date)
+}
+
+func (s *Store) QueryPostersByProduct(productID string) ([]model.Poster, error) {
+	return s.queryPosters("SELECT * FROM posters WHERE product_id = ? ORDER BY observation_date DESC", productID)
+}
+
+func (s *Store) QueryAllPosters() ([]model.Poster, error) {
+	return s.queryPosters("SELECT * FROM posters ORDER BY observation_date DESC, created_at DESC")
+}
+
+func (s *Store) QueryActivityLogs(logType string, limit int) ([]model.ActivityLog, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	query := "SELECT id, type, action, detail, created_at FROM activity_logs"
+	args := []any{}
+	if logType != "" {
+		query += " WHERE type = ?"
+		args = append(args, logType)
+	}
+	query += " ORDER BY created_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []model.ActivityLog{}
+	for rows.Next() {
+		var row model.ActivityLog
+		var detail sql.NullString
+		if err := rows.Scan(&row.ID, &row.Type, &row.Action, &detail, &row.CreatedAt); err != nil {
+			return nil, err
+		}
+		row.Detail = nullString(detail)
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) GetPushConfig(fallbackWebhook string) (model.PushConfig, error) {
+	row := model.PushConfig{
+		WebhookURL: fallbackWebhook,
+		CronHour:   9,
+		CronMinute: 0,
+		Enabled:    false,
+	}
+	var enabled int
+	var lastPushTime, lastPushResult sql.NullString
+	err := s.DB.QueryRow(`
+		SELECT webhook_url, cron_hour, cron_minute, enabled, last_push_time, last_push_result
+		FROM push_config WHERE id = 1
+	`).Scan(&row.WebhookURL, &row.CronHour, &row.CronMinute, &enabled, &lastPushTime, &lastPushResult)
+	if err == sql.ErrNoRows {
+		return row, nil
+	}
+	if err != nil {
+		return row, err
+	}
+	row.Enabled = enabled != 0
+	row.LastPushTime = nullString(lastPushTime)
+	row.LastPushResult = nullString(lastPushResult)
+	return row, nil
+}
+
+func (s *Store) UpsertPushConfig(config model.PushConfig) error {
+	enabled := 0
+	if config.Enabled {
+		enabled = 1
+	}
+	_, err := s.DB.Exec(`
+		INSERT INTO push_config (id, webhook_url, cron_hour, cron_minute, enabled, updated_at)
+		VALUES (1, ?, ?, ?, ?, datetime('now'))
+		ON CONFLICT(id) DO UPDATE SET
+			webhook_url = excluded.webhook_url,
+			cron_hour = excluded.cron_hour,
+			cron_minute = excluded.cron_minute,
+			enabled = excluded.enabled,
+			updated_at = excluded.updated_at
+	`, config.WebhookURL, config.CronHour, config.CronMinute, enabled)
+	return err
+}
+
+func (s *Store) UpdatePushResult(lastPushTime string, lastPushResult string) error {
+	_, err := s.DB.Exec(`
+		INSERT INTO push_config (id, webhook_url, cron_hour, cron_minute, enabled, last_push_time, last_push_result, updated_at)
+		VALUES (1, '', 9, 0, 0, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			last_push_time = excluded.last_push_time,
+			last_push_result = excluded.last_push_result,
+			updated_at = excluded.updated_at
+	`, lastPushTime, lastPushResult, isoNow())
+	return err
+}
+
+func (s *Store) SearchProducts(q string) ([]map[string]any, error) {
+	rows, err := s.DB.Query("SELECT id, name FROM products WHERE name LIKE ? LIMIT 5", LikeContains(q))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []map[string]any{}
+	for rows.Next() {
+		var id, name sql.NullString
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{
+			"type": "product",
+			"id":   nullString(id),
+			"name": nullString(name),
+			"path": "/ongoing-product",
+		})
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) SearchProductsForAgent(keyword string) ([]map[string]any, error) {
+	rows, err := s.DB.Query(
+		"SELECT id, name, holding_status, code FROM products WHERE name LIKE ? LIMIT 10",
+		LikeContains(keyword),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []map[string]any{}
+	for rows.Next() {
+		var id, name, holdingStatus, code sql.NullString
+		if err := rows.Scan(&id, &name, &holdingStatus, &code); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{
+			"id":             nullString(id),
+			"name":           nullString(name),
+			"holding_status": nullString(holdingStatus),
+			"code":           nullString(code),
+		})
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) ProductByID(id string) (*model.Product, error) {
+	products, err := s.scanProducts("SELECT * FROM products WHERE id = ?", id)
+	if err != nil {
+		return nil, err
+	}
+	if len(products) == 0 {
+		return nil, nil
+	}
+	return &products[0], nil
+}
+
+func (s *Store) LatestPrice(code string) (map[string]any, error) {
+	return s.queryOneMap(
+		"SELECT code, price_date, price, updated_at FROM price_cache WHERE code = ? ORDER BY price_date DESC LIMIT 1",
+		code,
+	)
+}
+
+func (s *Store) PriceByDate(code string, priceDate string) (map[string]any, error) {
+	return s.queryOneMap(
+		"SELECT code, price_date, price, updated_at FROM price_cache WHERE code = ? AND price_date = ?",
+		code, priceDate,
+	)
+}
+
+func (s *Store) UpsertPrice(code string, priceDate string, price float64) error {
+	_, err := s.DB.Exec(`
+		INSERT INTO price_cache (code, price_date, price, updated_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(code, price_date) DO UPDATE SET
+			price = excluded.price,
+			updated_at = excluded.updated_at
+	`, code, priceDate, price, isoNow())
+	return err
+}
+
+func (s *Store) UpsertObservation(productID string, eval map[string]any) error {
+	_, err := s.DB.Exec(`
+		INSERT INTO observations
+			(product_id, observation_date, knockout_price, dividend_line, underlying_price,
+			 is_knocked_out, is_dividend, months_since_entry, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(product_id, observation_date) DO UPDATE SET
+			knockout_price = excluded.knockout_price,
+			dividend_line = excluded.dividend_line,
+			underlying_price = excluded.underlying_price,
+			is_knocked_out = excluded.is_knocked_out,
+			is_dividend = excluded.is_dividend,
+			months_since_entry = excluded.months_since_entry,
+			updated_at = excluded.updated_at
+	`, productID, eval["observation_date"], eval["knockout_price"], eval["dividend_line"], eval["underlying_price"],
+		eval["is_knocked_out"], eval["is_dividend"], eval["months_since_entry"], isoNow())
+	return err
+}
+
+func (s *Store) UpsertPoster(row model.Poster) error {
+	_, err := s.DB.Exec(`
+		INSERT INTO posters
+			(product_id, poster_type, observation_date, product_name, date_display, months_since_entry,
+			 underlying_name, absolute_return, annualized_return, duration_months,
+			 parachute_value, knockout_value, dividend_barrier_value,
+			 dividend_count, cumulative_rate, monthly_coupon, entry_date, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(product_id, poster_type, observation_date) DO UPDATE SET
+			product_name = excluded.product_name,
+			date_display = excluded.date_display,
+			months_since_entry = excluded.months_since_entry,
+			underlying_name = excluded.underlying_name,
+			absolute_return = excluded.absolute_return,
+			annualized_return = excluded.annualized_return,
+			duration_months = excluded.duration_months,
+			parachute_value = excluded.parachute_value,
+			knockout_value = excluded.knockout_value,
+			dividend_barrier_value = excluded.dividend_barrier_value,
+			dividend_count = excluded.dividend_count,
+			cumulative_rate = excluded.cumulative_rate,
+			monthly_coupon = excluded.monthly_coupon,
+			entry_date = excluded.entry_date,
+			created_at = excluded.created_at
+	`, row.ProductID, row.PosterType, row.ObservationDate, row.ProductName, row.DateDisplay, nullableInt(row.MonthsSinceEntry),
+		row.UnderlyingName, nullableFloat(row.AbsoluteReturn), nullableFloat(row.AnnualizedReturn), nullableInt(row.DurationMonths),
+		nullableDBString(row.ParachuteValue), nullableDBString(row.KnockoutValue), nullableDBString(row.DividendBarrierValue),
+		nullableInt(row.DividendCount), nullableFloat(row.CumulativeRate), nullableFloat(row.MonthlyCoupon), row.EntryDate, isoNow())
+	return err
+}
+
+func (s *Store) SearchCustomersForAgent(keyword, industry, isDedicated, isCompetitor string, limit int) ([]map[string]any, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	query := `
+		SELECT user_name, actual_buyer, phone, wechat, total_assets, risk_tolerance, industry,
+		       is_actual_deal, lead_source, is_dedicated_account, is_competitor
+		FROM co_invest_users WHERE 1=1
+	`
+	args := []any{}
+	if keyword != "" {
+		query += " AND (user_name LIKE ? OR actual_buyer LIKE ? OR wechat LIKE ?)"
+		like := LikeContains(keyword)
+		args = append(args, like, like, like)
+	}
+	if industry != "" {
+		query += " AND industry LIKE ?"
+		args = append(args, LikeContains(industry))
+	}
+	if isDedicated != "" {
+		query += " AND is_dedicated_account = ?"
+		args = append(args, isDedicated)
+	}
+	if isCompetitor != "" {
+		query += " AND is_competitor = ?"
+		args = append(args, isCompetitor)
+	}
+	query += " ORDER BY id LIMIT ?"
+	args = append(args, limit)
+	return s.queryMaps(query, args...)
+}
+
+func (s *Store) DistinctIndustries() ([]string, error) {
+	rows, err := s.DB.Query("SELECT DISTINCT industry FROM co_invest_users WHERE industry IS NOT NULL AND industry != '' ORDER BY industry")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []string{}
+	for rows.Next() {
+		var industry sql.NullString
+		if err := rows.Scan(&industry); err != nil {
+			return nil, err
+		}
+		if industry.Valid && strings.TrimSpace(industry.String) != "" {
+			result = append(result, industry.String)
+		}
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) UserProfiles(actualBuyer, nominalBuyer, isDedicated, isCompetitor, industry string) ([]map[string]any, error) {
+	query := `
+		SELECT user_name AS nominal_buyer, actual_buyer, phone, wechat, total_assets,
+		       risk_tolerance, industry, is_actual_deal, lead_source, asset_match,
+		       is_dedicated_account, is_competitor
+		FROM co_invest_users WHERE 1=1
+	`
+	args := []any{}
+	if actualBuyer != "" {
+		query += " AND actual_buyer LIKE ?"
+		args = append(args, LikeContains(actualBuyer))
+	}
+	if nominalBuyer != "" {
+		query += " AND user_name LIKE ?"
+		args = append(args, LikeContains(nominalBuyer))
+	}
+	if isDedicated != "" {
+		query += " AND is_dedicated_account = ?"
+		args = append(args, isDedicated)
+	}
+	if isCompetitor != "" {
+		query += " AND is_competitor = ?"
+		args = append(args, isCompetitor)
+	}
+	if industry != "" {
+		query += " AND industry = ?"
+		args = append(args, industry)
+	}
+	query += " ORDER BY id"
+
+	rows, err := s.queryMaps(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	peaks, err := s.CustomerPeakAnalysis("")
+	if err != nil {
+		return nil, err
+	}
+	peakByCustomer := map[string]map[string]any{}
+	for _, peak := range peaks {
+		peakByCustomer[fmt.Sprint(peak["customer_name"])] = peak
+	}
+	for _, row := range rows {
+		name := strings.TrimSpace(fmt.Sprint(row["actual_buyer"]))
+		if name == "" {
+			name = strings.TrimSpace(fmt.Sprint(row["nominal_buyer"]))
+		}
+		peak := peakByCustomer[name]
+		if peak != nil {
+			row["peak_balance"] = peak["peak_balance"]
+			row["peak_diff"] = numberValue(peak["peak_balance"]) - numberValue(row["total_assets"])
+		}
+		row["bought_before_yanxuan"] = row["is_actual_deal"]
+		row["asset_range"] = row["total_assets"]
+	}
+	return rows, nil
+}
+
+func (s *Store) CustomerProductsForAgent(customerName string) ([]map[string]any, error) {
+	return s.queryMaps(`
+		SELECT DISTINCT p.id, p.name, p.holding_status, p.manager, p.code, p.outstanding_amount,
+		       l.user_name, l.actual_buyer
+		FROM customer_product_link l
+		LEFT JOIN products p ON p.id = l.product_id
+		WHERE l.actual_buyer LIKE ? OR l.user_name LIKE ?
+		ORDER BY p.issue_date DESC
+	`, LikeContains(customerName), LikeContains(customerName))
+}
+
+func (s *Store) CustomerPeakAnalysis(customerName string) ([]map[string]any, error) {
+	links, err := s.queryMaps(`
+		SELECT l.product_id, l.user_name, l.actual_buyer, p.name, p.outstanding_amount
+		FROM customer_product_link l
+		LEFT JOIN products p ON p.id = l.product_id
+		WHERE l.actual_buyer LIKE ? OR l.user_name LIKE ?
+	`, LikeContains(customerName), LikeContains(customerName))
+	if err != nil {
+		return nil, err
+	}
+
+	byCustomer := map[string]map[string]any{}
+	for _, link := range links {
+		name := strings.TrimSpace(fmt.Sprint(link["actual_buyer"]))
+		if name == "" {
+			name = strings.TrimSpace(fmt.Sprint(link["user_name"]))
+		}
+		if name == "" {
+			name = "unknown"
+		}
+		item, ok := byCustomer[name]
+		if !ok {
+			item = map[string]any{
+				"customer_name":        name,
+				"product_count":        int64(0),
+				"peak_balance":         float64(0),
+				"current_balance":      float64(0),
+				"representative_items": []map[string]any{},
+			}
+			byCustomer[name] = item
+		}
+
+		amount := numberValue(link["outstanding_amount"])
+		item["product_count"] = item["product_count"].(int64) + 1
+		item["current_balance"] = item["current_balance"].(float64) + amount
+		if amount > item["peak_balance"].(float64) {
+			item["peak_balance"] = amount
+		}
+		items := item["representative_items"].([]map[string]any)
+		if len(items) < 5 {
+			item["representative_items"] = append(items, map[string]any{
+				"product_id":         link["product_id"],
+				"product_name":       link["name"],
+				"outstanding_amount": link["outstanding_amount"],
+			})
+		}
+	}
+
+	result := make([]map[string]any, 0, len(byCustomer))
+	for _, item := range byCustomer {
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func (s *Store) QueryTransactionsForAgent(productID, counterparty, startDate, endDate string, limit int) ([]map[string]any, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	query := "SELECT transaction_date, flight_id, counterparty, subscribe_amount FROM transactions WHERE 1=1"
+	args := []any{}
+	if productID != "" {
+		query += " AND flight_id = ?"
+		args = append(args, productID)
+	}
+	if counterparty != "" {
+		query += " AND counterparty LIKE ?"
+		args = append(args, LikeContains(counterparty))
+	}
+	if startDate != "" {
+		query += " AND transaction_date >= ?"
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		query += " AND transaction_date <= ?"
+		args = append(args, endDate)
+	}
+	query += " ORDER BY transaction_date DESC LIMIT ?"
+	args = append(args, limit)
+	return s.queryMaps(query, args...)
+}
+
+func (s *Store) ProductAnalytics(groupBy string) ([]map[string]any, error) {
+	column := map[string]string{
+		"manager":        "manager",
+		"holding_status": "holding_status",
+		"structure_type": "structure_type",
+		"issue_month":    "strftime('%Y-%m', issue_date)",
+	}[groupBy]
+	if column == "" {
+		column = "manager"
+	}
+	return s.queryMaps(fmt.Sprintf(`
+		SELECT %s AS group_key,
+		       COUNT(*) AS product_count,
+		       SUM(COALESCE(subscribe_amount, 0)) AS subscribe_amount,
+		       SUM(COALESCE(outstanding_amount, 0)) AS outstanding_amount
+		FROM products
+		GROUP BY group_key
+		ORDER BY outstanding_amount DESC, product_count DESC
+		LIMIT 50
+	`, column))
+}
+
+func (s *Store) AllProductDocs() ([]map[string]any, error) {
+	query := `SELECT doc_token, doc_name, parent_path, folder_token, raw_content, structure_json, synced_at
+		FROM product_docs ORDER BY parent_path, doc_name`
+	return s.queryMaps(query)
+}
+
+func (s *Store) SearchProductDocs(keyword, month string, limit int) ([]map[string]any, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	query := `
+		SELECT doc_token, doc_name, parent_path, folder_token, substr(raw_content, 1, 500) AS content_preview, synced_at
+		FROM product_docs WHERE 1=1
+	`
+	args := []any{}
+	if keyword != "" {
+		like := LikeContains(keyword)
+		query += " AND (doc_name LIKE ? OR raw_content LIKE ? OR parent_path LIKE ?)"
+		args = append(args, like, like, like)
+	}
+	if month != "" {
+		query += " AND parent_path LIKE ?"
+		args = append(args, LikeContains(month))
+	}
+	query += " ORDER BY parent_path, doc_name LIMIT ?"
+	args = append(args, limit)
+	return s.queryMaps(query, args...)
+}
+
+func (s *Store) ProductDocs(month string) ([]map[string]any, error) {
+	query := `
+		SELECT doc_token, doc_name, parent_path, folder_token, raw_content, structure_json, synced_at
+		FROM product_docs
+	`
+	args := []any{}
+	if month != "" {
+		query += " WHERE parent_path LIKE ? OR doc_name LIKE ?"
+		like := LikeContains(month)
+		args = append(args, like, like)
+	}
+	query += " ORDER BY parent_path, doc_name"
+	rows, err := s.queryMaps(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if raw, ok := row["structure_json"].(string); ok && strings.TrimSpace(raw) != "" {
+			var structured any
+			if err := json.Unmarshal([]byte(raw), &structured); err == nil {
+				row["structured"] = structured
+			}
+		}
+	}
+	return rows, nil
+}
+
+func (s *Store) ChannelsForAgent() ([]map[string]any, []map[string]any, error) {
+	channels, err := s.queryMaps("SELECT id, channel_name FROM channels ORDER BY id")
+	if err != nil {
+		return nil, nil, err
+	}
+	sources, err := s.queryMaps("SELECT id, source_name FROM direct_customer_sources ORDER BY id")
+	if err != nil {
+		return nil, nil, err
+	}
+	return channels, sources, nil
+}
+
+func (s *Store) SyncStatusForAgent() (map[string]any, error) {
+	regular, err := s.LastSync()
+	if err != nil {
+		return nil, err
+	}
+	coinvest, err := s.LastCoInvestSync()
+	if err != nil {
+		return nil, err
+	}
+	docs, err := s.LastProductDocsSync()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"products":      regular,
+		"co_invest":     coinvest,
+		"product_docs":  docs,
+		"generated_at":  isoNow(),
+		"database_path": s.Path,
+	}, nil
+}
+
+func (s *Store) AgentConversations() ([]model.AgentConversation, error) {
+	rows, err := s.DB.Query("SELECT id, title, created_at, updated_at FROM agent_conversations ORDER BY updated_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []model.AgentConversation{}
+	for rows.Next() {
+		var row model.AgentConversation
+		if err := rows.Scan(&row.ID, &row.Title, &row.CreatedAt, &row.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) CreateAgentConversation(title string) (int64, error) {
+	if strings.TrimSpace(title) == "" {
+		title = "新对话"
+	}
+	now := isoNow()
+	result, err := s.DB.Exec(
+		"INSERT INTO agent_conversations (title, created_at, updated_at) VALUES (?, ?, ?)",
+		title, now, now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func (s *Store) UpdateAgentConversationTitle(id int64, title string) error {
+	_, err := s.DB.Exec(
+		"UPDATE agent_conversations SET title = ?, updated_at = ? WHERE id = ?",
+		title, isoNow(), id,
+	)
+	return err
+}
+
+func (s *Store) DeleteAgentConversation(id int64) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM agent_messages WHERE conversation_id = ?", id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM agent_conversations WHERE id = ?", id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) AgentMessages(conversationID int64) ([]model.AgentMessage, error) {
+	rows, err := s.DB.Query(`
+		SELECT id, conversation_id, role, content, tool_calls, tool_call_id, created_at
+		FROM agent_messages WHERE conversation_id = ? ORDER BY created_at ASC
+	`, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []model.AgentMessage{}
+	for rows.Next() {
+		var row model.AgentMessage
+		var toolCalls, toolCallID sql.NullString
+		if err := rows.Scan(&row.ID, &row.ConversationID, &row.Role, &row.Content, &toolCalls, &toolCallID, &row.CreatedAt); err != nil {
+			return nil, err
+		}
+		row.ToolCalls = nullString(toolCalls)
+		row.ToolCallID = nullString(toolCallID)
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) AddAgentMessage(conversationID int64, role string, content string, toolCalls string, toolCallID string) error {
+	now := isoNow()
+	_, err := s.DB.Exec(`
+		INSERT INTO agent_messages (conversation_id, role, content, tool_calls, tool_call_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, conversationID, role, content, nullableDBString(toolCalls), nullableDBString(toolCallID), now)
+	if err != nil {
+		return err
+	}
+	_, err = s.DB.Exec("UPDATE agent_conversations SET updated_at = ? WHERE id = ?", now, conversationID)
+	return err
+}
+
+func (s *Store) AgentMessageCount(conversationID int64) (int64, error) {
+	var count int64
+	err := s.DB.QueryRow("SELECT COUNT(*) FROM agent_messages WHERE conversation_id = ?", conversationID).Scan(&count)
+	return count, err
+}
+
+func (s *Store) queryPosters(query string, args ...any) ([]model.Poster, error) {
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []model.Poster{}
+	for rows.Next() {
+		var row model.Poster
+		var months, duration, dividendCount sql.NullInt64
+		var absoluteReturn, annualizedReturn, cumulativeRate, monthlyCoupon sql.NullFloat64
+		if err := rows.Scan(
+			&row.ID, &row.ProductID, &row.PosterType, &row.ObservationDate, &row.ProductName,
+			&row.DateDisplay, &months, &row.UnderlyingName, &absoluteReturn, &annualizedReturn,
+			&duration, &row.ParachuteValue, &row.KnockoutValue, &row.DividendBarrierValue,
+			&dividendCount, &cumulativeRate, &monthlyCoupon, &row.EntryDate, &row.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		row.MonthsSinceEntry = intPtr(months)
+		row.DurationMonths = intPtr(duration)
+		row.DividendCount = intPtr(dividendCount)
+		row.AbsoluteReturn = floatPtr(absoluteReturn)
+		row.AnnualizedReturn = floatPtr(annualizedReturn)
+		row.CumulativeRate = floatPtr(cumulativeRate)
+		row.MonthlyCoupon = floatPtr(monthlyCoupon)
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) scanProducts(query string, args ...any) ([]model.Product, error) {
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []model.Product{}
+	for rows.Next() {
+		var p model.Product
+		var isMain, lockDays, lockMonths sql.NullInt64
+		var subscribe, outstanding, firstKnockout, entry, monthlyDecrease sql.NullFloat64
+		var dividendBarrier, monthlyCoupon, coupon1, coupon2, coupon3 sql.NullFloat64
+		var duration, absoluteReturn sql.NullFloat64
+		var durationDays sql.NullInt64
+		var marginRatio sql.NullFloat64
+		var name, issueDate, completeDate sql.NullString
+		var manager, holdingStatus, structureType, code sql.NullString
+		var term, parachute, holidayAdjust, raw sql.NullString
+		var knockIn, knockedIn, custodian, counterparty sql.NullString
+		if err := rows.Scan(
+			&p.ID, &name, &isMain, &issueDate, &completeDate, &subscribe, &outstanding,
+			&manager, &holdingStatus, &structureType, &code, &lockDays, &lockMonths,
+			&firstKnockout, &entry, &monthlyDecrease, &term, &parachute,
+			&dividendBarrier, &monthlyCoupon, &coupon1, &coupon2, &coupon3, &duration,
+			&absoluteReturn, &holidayAdjust, &raw,
+			&knockIn, &durationDays, &knockedIn, &marginRatio, &custodian, &counterparty,
+		); err != nil {
+			return nil, err
+		}
+		p.Name = name.String
+		p.IssueDate = issueDate.String
+		p.CompleteDate = completeDate.String
+		p.Manager = manager.String
+		p.HoldingStatus = holdingStatus.String
+		p.StructureType = structureType.String
+		p.Code = code.String
+		p.Term = term.String
+		p.Parachute = parachute.String
+		p.HolidayAdjust = holidayAdjust.String
+		p.Raw = raw.String
+		p.KnockIn = knockIn.String
+		p.KnockedIn = knockedIn.String
+		p.Custodian = custodian.String
+		p.Counterparty = counterparty.String
+		p.IsMain = intPtr(isMain)
+		p.LockDays = intPtr(lockDays)
+		p.LockMonths = intPtr(lockMonths)
+		p.SubscribeAmount = floatPtr(subscribe)
+		p.OutstandingAmount = floatPtr(outstanding)
+		p.FirstKnockoutRatio = floatPtr(firstKnockout)
+		p.EntryPrice = floatPtr(entry)
+		p.MonthlyDecrease = floatPtr(monthlyDecrease)
+		p.DividendBarrier = floatPtr(dividendBarrier)
+		p.MonthlyCoupon = floatPtr(monthlyCoupon)
+		p.Coupon1st = floatPtr(coupon1)
+		p.Coupon2nd = floatPtr(coupon2)
+		p.Coupon3rd = floatPtr(coupon3)
+		p.DurationMonths = floatPtr(duration)
+		p.AbsoluteReturn = floatPtr(absoluteReturn)
+		p.DurationDays = intPtr(durationDays)
+		p.MarginRatio = floatPtr(marginRatio)
+		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) queryOneMap(query string, args ...any) (map[string]any, error) {
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, nil
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	values := make([]any, len(columns))
+	scanTargets := make([]any, len(columns))
+	for i := range values {
+		scanTargets[i] = &values[i]
+	}
+	if err := rows.Scan(scanTargets...); err != nil {
+		return nil, err
+	}
+	result := map[string]any{}
+	for i, column := range columns {
+		result[column] = normalizeDBValue(values[i])
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) queryMaps(query string, args ...any) ([]map[string]any, error) {
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	result := []map[string]any{}
+	for rows.Next() {
+		values := make([]any, len(columns))
+		scanTargets := make([]any, len(columns))
+		for i := range values {
+			scanTargets[i] = &values[i]
+		}
+		if err := rows.Scan(scanTargets...); err != nil {
+			return nil, err
+		}
+		item := map[string]any{}
+		for i, column := range columns {
+			item[column] = normalizeDBValue(values[i])
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+func normalizeDBValue(value any) any {
+	switch v := value.(type) {
+	case []byte:
+		return string(v)
+	default:
+		return v
+	}
+}
+
+func intPtr(value sql.NullInt64) *int {
+	if !value.Valid {
+		return nil
+	}
+	v := int(value.Int64)
+	return &v
+}
+
+func floatPtr(value sql.NullFloat64) *float64 {
+	if !value.Valid {
+		return nil
+	}
+	return &value.Float64
+}
+
+func nullString(value sql.NullString) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
+}
+
+func nullFloat(value sql.NullFloat64) float64 {
+	if !value.Valid {
+		return 0
+	}
+	return value.Float64
+}
+
+func numberValue(value any) float64 {
+	switch v := value.(type) {
+	case int64:
+		return float64(v)
+	case float64:
+		return v
+	case []byte:
+		var out float64
+		_, _ = fmt.Sscanf(string(v), "%f", &out)
+		return out
+	case string:
+		var out float64
+		_, _ = fmt.Sscanf(v, "%f", &out)
+		return out
+	default:
+		return 0
+	}
+}
+
+func LikeContains(value string) string {
+	return fmt.Sprintf("%%%s%%", strings.TrimSpace(value))
+}
+
+func nullableDBString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+
+func nullableFloat(value *float64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func nullableInt(value *int) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func isoNow() string {
+	return time.Now().UTC().Format(time.RFC3339Nano)
+}
+
+type ProductFilter struct {
+	IssueDateStart    string
+	IssueDateEnd      string
+	HoldingStatus     string
+	Manager           string
+	CompleteDateStart string
+	CompleteDateEnd   string
+	Code              string
+	StructureType     string
+	LockMonths        string
+	MarginRatio       string
+}
+
+func (s *Store) QueryHoldingProducts(f ProductFilter) ([]model.Product, error) {
+	query := "SELECT * FROM products WHERE 1=1"
+	args := []any{}
+	if f.IssueDateStart != "" {
+		query += " AND issue_date >= ?"
+		args = append(args, f.IssueDateStart)
+	}
+	if f.IssueDateEnd != "" {
+		query += " AND issue_date <= ?"
+		args = append(args, f.IssueDateEnd)
+	}
+	if f.HoldingStatus != "" {
+		query += " AND holding_status = ?"
+		args = append(args, f.HoldingStatus)
+	}
+	if f.Manager != "" {
+		query += " AND manager = ?"
+		args = append(args, f.Manager)
+	}
+	if f.CompleteDateStart != "" {
+		query += " AND complete_date >= ?"
+		args = append(args, f.CompleteDateStart)
+	}
+	if f.CompleteDateEnd != "" {
+		query += " AND complete_date <= ?"
+		args = append(args, f.CompleteDateEnd)
+	}
+	if f.Code != "" {
+		query += " AND code LIKE ?"
+		args = append(args, "%"+f.Code+"%")
+	}
+	if f.StructureType != "" {
+		query += " AND structure_type = ?"
+		args = append(args, f.StructureType)
+	}
+	if f.LockMonths != "" {
+		query += " AND lock_months = ?"
+		args = append(args, f.LockMonths)
+	}
+	if f.MarginRatio != "" {
+		query += " AND margin_ratio = ?"
+		args = append(args, f.MarginRatio)
+	}
+	query += " ORDER BY issue_date DESC"
+	return s.scanProducts(query, args...)
+}
+
+type TransactionFilter struct {
+	CustomerName      string
+	ActualBuyer       string
+	MatchType         string
+	RebateTarget      string
+	HoldingStatus     string
+	FlightDateStart   string
+	FlightDateEnd     string
+	CompleteDateStart string
+	CompleteDateEnd   string
+	ProductName       string
+}
+
+func (s *Store) QueryHoldingTransactions(f TransactionFilter) ([]model.TransactionRow, error) {
+	query := "SELECT * FROM transactions WHERE 1=1"
+	args := []any{}
+
+	if f.CustomerName != "" {
+		pattern := "%" + f.CustomerName + "%"
+		if f.MatchType == "name_only" {
+			query += " AND customer_name LIKE ?"
+			args = append(args, pattern)
+		} else if f.MatchType == "buyer_only" {
+			query += " AND actual_buyer LIKE ?"
+			args = append(args, pattern)
+		} else {
+			query += " AND (customer_name LIKE ? OR actual_buyer LIKE ?)"
+			args = append(args, pattern, pattern)
+		}
+	}
+	if f.RebateTarget != "" {
+		query += " AND rebate_target = ?"
+		args = append(args, f.RebateTarget)
+	}
+	if f.HoldingStatus != "" {
+		query += " AND holding_status = ?"
+		args = append(args, f.HoldingStatus)
+	}
+	if f.FlightDateStart != "" {
+		query += " AND flight_date >= ?"
+		args = append(args, f.FlightDateStart)
+	}
+	if f.FlightDateEnd != "" {
+		query += " AND flight_date <= ?"
+		args = append(args, f.FlightDateEnd)
+	}
+	if f.CompleteDateStart != "" {
+		query += " AND complete_date >= ?"
+		args = append(args, f.CompleteDateStart)
+	}
+	if f.CompleteDateEnd != "" {
+		query += " AND complete_date <= ?"
+		args = append(args, f.CompleteDateEnd)
+	}
+	if f.ProductName != "" {
+		query += " AND product_name LIKE ?"
+		args = append(args, "%"+f.ProductName+"%")
+	}
+	query += " ORDER BY flight_date DESC"
+	return s.scanTransactions(query, args...)
+}
+
+func (s *Store) scanTransactions(query string, args ...any) ([]model.TransactionRow, error) {
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols, _ := rows.Columns()
+	var results []model.TransactionRow
+	for rows.Next() {
+		values := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range values {
+			ptrs[i] = &values[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		row := model.TransactionRow{
+			ID:                  toInt64(values[colIndex(cols, "id")]),
+			TransactionDate:     toString(values[colIndex(cols, "transaction_date")]),
+			FlightID:            toString(values[colIndex(cols, "flight_id")]),
+			Counterparty:        toString(values[colIndex(cols, "counterparty")]),
+			SubscribeAmount:     toFloatPtr(values[colIndex(cols, "subscribe_amount")]),
+			ProductName:         toString(values[colIndex(cols, "product_name")]),
+			CustomerName:        toString(values[colIndex(cols, "customer_name")]),
+			ActualBuyer:         toString(values[colIndex(cols, "actual_buyer")]),
+			Amount:              toFloatPtr(values[colIndex(cols, "amount")]),
+			SubscribeFeeRatio:   toFloatPtr(values[colIndex(cols, "subscribe_fee_ratio")]),
+			ManagementFeeRatio:  toFloatPtr(values[colIndex(cols, "management_fee_ratio")]),
+			PerformanceFeeRatio: toFloatPtr(values[colIndex(cols, "performance_fee_ratio")]),
+			RebateTarget:        toString(values[colIndex(cols, "rebate_target")]),
+			FlightDate:          toString(values[colIndex(cols, "flight_date")]),
+			HoldingStatus:       toString(values[colIndex(cols, "holding_status")]),
+			CompleteDate:        toString(values[colIndex(cols, "complete_date")]),
+			Underlying:          toString(values[colIndex(cols, "underlying")]),
+			StructureType:       toString(values[colIndex(cols, "structure_type")]),
+			LockPeriod:          toString(values[colIndex(cols, "lock_period")]),
+			DividendBarrier:     toFloatPtr(values[colIndex(cols, "dividend_barrier")]),
+			MonthlyCoupon:       toFloatPtr(values[colIndex(cols, "monthly_coupon")]),
+			Coupon1st:           toFloatPtr(values[colIndex(cols, "coupon_1st")]),
+			Raw:                 toString(values[colIndex(cols, "raw")]),
+		}
+		results = append(results, row)
+	}
+	return results, nil
+}
+
+func colIndex(cols []string, name string) int {
+	for i, c := range cols {
+		if c == name {
+			return i
+		}
+	}
+	return -1
+}
+
+func toInt64(v any) int64 {
+	switch val := v.(type) {
+	case int64:
+		return val
+	case float64:
+		return int64(val)
+	case []byte:
+		var out int64
+		fmt.Sscanf(string(val), "%d", &out)
+		return out
+	case string:
+		var out int64
+		fmt.Sscanf(val, "%d", &out)
+		return out
+	default:
+		return 0
+	}
+}
+
+func toString(v any) string {
+	switch val := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return val
+	case []byte:
+		return string(val)
+	default:
+		return fmt.Sprint(val)
+	}
+}
+
+func toFloatPtr(v any) *float64 {
+	switch val := v.(type) {
+	case nil:
+		return nil
+	case float64:
+		return &val
+	case int64:
+		f := float64(val)
+		return &f
+	case []byte:
+		var out float64
+		if _, err := fmt.Sscanf(string(val), "%f", &out); err == nil {
+			return &out
+		}
+		return nil
+	case string:
+		var out float64
+		if _, err := fmt.Sscanf(val, "%f", &out); err == nil {
+			return &out
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (s *Store) QueryDistinctValues(table, column string) ([]string, error) {
+	query := fmt.Sprintf("SELECT DISTINCT %s FROM %s WHERE %s IS NOT NULL AND %s != '' ORDER BY %s", column, table, column, column, column)
+	rows, err := s.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []string
+	for rows.Next() {
+		var raw any
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		val := strings.TrimSpace(fmt.Sprint(raw))
+		if val == "" || val == "<nil>" {
+			continue
+		}
+		results = append(results, val)
+	}
+	return results, nil
+}

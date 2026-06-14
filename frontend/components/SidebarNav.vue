@@ -1,5 +1,5 @@
 <template>
-  <aside class="sidebar" :class="{ collapsed: collapsed, overlay: overlayOpen }">
+  <aside class="sidebar" :class="{ collapsed, overlay: overlayOpen }">
     <div class="sidebar-inner">
       <div class="sidebar-brand">
         <RouterLink to="/" class="brand-link" @click="emit('navigate')">
@@ -8,12 +8,6 @@
           </span>
           <span v-if="!collapsed" class="brand-name">业务工作台</span>
         </RouterLink>
-      </div>
-
-      <div v-if="!collapsed" class="workspace-select">
-        <span class="workspace-avatar">业</span>
-        <span class="workspace-name">航班服务业务空间</span>
-        <ChevronDown :size="16" />
       </div>
 
       <nav class="sidebar-nav" aria-label="主导航">
@@ -57,12 +51,11 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import {
   Award,
   BarChart3,
   Bot,
-  ChevronDown,
   Database,
   FileText,
   GitBranch,
@@ -87,7 +80,7 @@ const navItems = [
   { path: '/data-preparation', title: '数据准备', icon: Database },
   { path: '/product-completion', title: '观察日历', icon: Award },
   { path: '/product-report', title: '产品报告', icon: FileText },
-  { path: '/ongoing-product', title: '存续分析', icon: BarChart3 },
+  { path: '/holding-analysis', title: '持有分析', icon: BarChart3 },
   { path: '/push-settings', title: '推送设置', icon: Send },
   { path: '/agent', title: '智能助手', icon: Bot },
 ]
@@ -152,20 +145,6 @@ const navItems = [
   letter-spacing: 0;
 }
 
-.workspace-select {
-  min-height: 46px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 12px;
-  padding: 0 12px;
-  color: var(--brand);
-  border: 1px solid rgba(38, 119, 255, 0.24);
-  border-radius: var(--radius);
-  background: var(--brand-soft);
-}
-
-.workspace-avatar,
 .account-avatar {
   width: 28px;
   height: 28px;
@@ -181,13 +160,6 @@ const navItems = [
   line-height: 1;
 }
 
-.workspace-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 680;
-}
-
 .sidebar-nav {
   flex: 1;
   display: flex;
@@ -195,7 +167,6 @@ const navItems = [
   gap: 2px;
   overflow-y: auto;
   padding: 8px 10px 12px;
-  border-top: 1px solid var(--border-warm);
 }
 
 .sidebar-link {
@@ -276,7 +247,6 @@ const navItems = [
 }
 
 .sidebar.collapsed .brand-name,
-.sidebar.collapsed .workspace-select,
 .sidebar.collapsed .account-card {
   display: none;
 }
@@ -315,7 +285,6 @@ const navItems = [
   }
 
   .sidebar.collapsed .brand-name,
-  .sidebar.collapsed .workspace-select,
   .sidebar.collapsed .account-card {
     display: flex;
   }
