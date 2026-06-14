@@ -114,7 +114,7 @@
               <td>{{ item.manager }}</td>
               <td class="name-cell" :title="item.name">{{ truncateName(item.name) }}</td>
               <td class="status-cell">
-                <span class="badge" :class="item.holding_status === '存续' ? 'badge-green' : 'badge-amber'">
+                <span class="badge" :class="isActiveStatus(item.holding_status) ? 'badge-green' : 'badge-amber'">
                   {{ item.holding_status }}
                 </span>
               </td>
@@ -196,6 +196,14 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize))
 function truncateName(val) {
   if (!val) return '--'
   return val.length > 10 ? val.slice(0, 10) + '…' : val
+}
+
+function isCompletedStatus(val) {
+  return typeof val === 'string' && val.includes('完结')
+}
+
+function isActiveStatus(val) {
+  return !isCompletedStatus(val)
 }
 
 function stripParentheses(val) {
@@ -449,4 +457,4 @@ onMounted(async () => {
   color: var(--ink-soft);
   font-weight: 600;
 }
-</style>
+</style>

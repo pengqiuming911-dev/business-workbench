@@ -34,7 +34,10 @@ func (s *Store) InitSchema() error {
 	if err != nil {
 		return err
 	}
-	return s.MigrateHoldingColumns()
+	if err := s.MigrateHoldingColumns(); err != nil {
+		return err
+	}
+	return s.MigrateRebateColumns()
 }
 
 func (s *Store) MigrateHoldingColumns() error {
@@ -71,6 +74,22 @@ func (s *Store) MigrateHoldingColumns() error {
 		"dividend_barrier":      "REAL",
 		"monthly_coupon":        "REAL",
 		"coupon_1st":            "REAL",
+		"tax_subscribe_ratio":   "REAL",
+		"tax_management_ratio":  "REAL",
+		"tax_performance_ratio": "REAL",
+	}
+	for col, colType := range txCols {
+		_, err := s.DB.Exec(fmt.Sprintf("ALTER TABLE transactions ADD COLUMN %s %s", col, colType))
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate transactions.%s: %w", col, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) MigrateRebateColumns() error {
+	txCols := map[string]string{
+		"order_id": "TEXT",
 	}
 	for col, colType := range txCols {
 		_, err := s.DB.Exec(fmt.Sprintf("ALTER TABLE transactions ADD COLUMN %s %s", col, colType))

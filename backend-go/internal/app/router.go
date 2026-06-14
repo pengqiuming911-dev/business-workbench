@@ -120,6 +120,14 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.GET("/api/holding/filter-options", server.holdingFilterOptions)
 	router.POST("/api/holding/refresh-price", server.holdingRefreshPrice)
 
+	router.GET("/api/rebate/pending", server.rebatePending)
+	router.PUT("/api/rebate/pending/status", server.rebateUpdateStatus)
+	router.POST("/api/rebate/pending/mark-returned", server.rebateMarkReturned)
+	router.GET("/api/rebate/completed", server.rebateCompleted)
+	router.POST("/api/rebate/completed", server.rebateAddCompleted)
+	router.POST("/api/rebate/completed/batch", server.rebateBatchCompleted)
+	router.DELETE("/api/rebate/completed/:id", server.rebateDeleteCompleted)
+
 	server.startScheduler()
 	schedulerInstance = server.Cron
 	server.Cron.Start()
@@ -1521,6 +1529,7 @@ func mapTransactionSheetRows(rows []map[string]any) []map[string]any {
 			"monthly_coupon":        parseRatioValue(findSheetField(row, "月票息")),
 			"coupon_1st":            parseRatioValue(findSheetField(row, "第一段票息")),
 			"raw":                   string(raw),
+			"order_id":              cellString(row["订单号"]),
 		})
 	}
 	return transactions
@@ -1931,6 +1940,206 @@ func writeDriveError(c *gin.Context, err error) {
 		return
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+}
+
+func (s *Server) rebatePending(c *gin.Context) {
+	filters := map[string]string{}
+	for _, key := range []string{"customer_name", "rebate_target", "order_id", "flight_id", "product_name", "is_returnable"} {
+		if v := c.Query(key); v != "" {
+			filters[key] = v
+		}
+	}
+
+	rows, err := s.store.QueryPendingRebates(filters)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	var result []map[string]any
+	for _, row := range rows {
+		principal := numberValue(row["subscribe_amount"])
+		subRatio := numberValue(row["subscribe_fee_ratio"])
+		mgmtRatio := numberValue(row["management_fee_ratio"])
+		perfRatio := numberValue(row["performance_fee_ratio"])
+
+		returnedSub := numberValue(row["returned_subscribe"])
+		returnedMgmt := numberValue(row["returned_management"])
+		returnedPerf := numberValue(row["returned_performance"])
+
+		taxSub := numberValue(row["tax_subscribe_ratio"])
+		taxMgmt := numberValue(row["tax_management_ratio"])
+		taxPerf := numberValue(row["tax_performance_ratio"])
+
+		expectedSub := principal * subRatio * (1 - taxSub)
+		expectedMgmt := principal * mgmtRatio * (1 - taxMgmt)
+		expectedPerf := principal * perfRatio * (1 - taxPerf)
+
+		outstandingSub := expectedSub - returnedSub
+		outstandingMgmt := expectedMgmt - returnedMgmt
+		outstandingPerf := expectedPerf - returnedPerf
+
+		if outstandingSub <= 0 && outstandingMgmt <= 0 && outstandingPerf <= 0 {
+			continue
+		}
+
+		row["expected_subscribe"] = expectedSub
+		row["expected_management"] = expectedMgmt
+		row["expected_performance"] = expectedPerf
+		row["returned_subscribe"] = returnedSub
+		row["returned_management"] = returnedMgmt
+		row["returned_performance"] = returnedPerf
+		row["outstanding_subscribe"] = outstandingSub
+		row["outstanding_management"] = outstandingMgmt
+		row["outstanding_performance"] = outstandingPerf
+		row["tax_subscribe_ratio"] = taxSub
+		row["tax_management_ratio"] = taxMgmt
+		row["tax_performance_ratio"] = taxPerf
+		result = append(result, row)
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": result, "total": len(result)})
+}
+
+func (s *Server) rebateUpdateStatus(c *gin.Context) {
+	var req struct {
+		OrderID         string `json:"order_id"`
+		IsReturnable    string `json:"is_returnable"`
+		PlanSubscribe   *int   `json:"plan_subscribe"`
+		PlanManagement  *int   `json:"plan_management"`
+		PlanPerformance *int   `json:"plan_performance"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.OrderID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "order_id is required"})
+		return
+	}
+	fields := map[string]any{}
+	if req.IsReturnable != "" {
+		fields["is_returnable"] = req.IsReturnable
+	}
+	if req.PlanSubscribe != nil {
+		fields["plan_subscribe"] = *req.PlanSubscribe
+	}
+	if req.PlanManagement != nil {
+		fields["plan_management"] = *req.PlanManagement
+	}
+	if req.PlanPerformance != nil {
+		fields["plan_performance"] = *req.PlanPerformance
+	}
+	if err := s.store.UpsertRebateStatus(req.OrderID, fields); err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) rebateMarkReturned(c *gin.Context) {
+	var req struct {
+		OrderID  string  `json:"order_id"`
+		Category string  `json:"category"`
+		Amount   float64 `json:"amount"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.OrderID == "" || req.Category == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "order_id and category are required"})
+		return
+	}
+	validCategories := map[string]bool{"申购费": true, "管理费": true, "业绩报酬": true}
+	if !validCategories[req.Category] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "category must be one of: 申购费, 管理费, 业绩报酬"})
+		return
+	}
+
+	record := model.RebateCompleted{
+		OrderID:         req.OrderID,
+		ExpenseCategory: req.Category,
+		ExpenseAmount:   &req.Amount,
+		Source:          "auto_pending",
+	}
+	id, err := s.store.InsertRebateCompleted(record)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "id": id})
+}
+
+func (s *Server) rebateCompleted(c *gin.Context) {
+	filters := map[string]string{}
+	for _, key := range []string{"order_id", "customer_name", "product_name", "expense_category", "source", "flight_id", "rebate_target"} {
+		if v := c.Query(key); v != "" {
+			filters[key] = v
+		}
+	}
+	rows, err := s.store.QueryRebateCompleted(filters)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	if rows == nil {
+		rows = []model.RebateCompleted{}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": rows, "total": len(rows)})
+}
+
+func (s *Server) rebateAddCompleted(c *gin.Context) {
+	var record model.RebateCompleted
+	if err := c.ShouldBindJSON(&record); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if record.Source == "" {
+		record.Source = "manual"
+	}
+	id, err := s.store.InsertRebateCompleted(record)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "id": id})
+}
+
+func (s *Server) rebateBatchCompleted(c *gin.Context) {
+	var req struct {
+		Records []model.RebateCompleted `json:"records"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	records := req.Records
+	for i := range records {
+		if records[i].Source == "" {
+			records[i].Source = "manual"
+		}
+	}
+	if err := s.store.BulkInsertRebateCompleted(records); err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "count": len(records)})
+}
+
+func (s *Server) rebateDeleteCompleted(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+	if err := s.store.DeleteRebateCompleted(id); err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (s *Server) holdingProducts(c *gin.Context) {

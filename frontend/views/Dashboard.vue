@@ -105,7 +105,7 @@ const modules = [
   { path: '/data-preparation', title: '数据准备', desc: '飞书同步' },
   { path: '/product-completion', title: '观察日历', desc: '敲出 / 派息' },
   { path: '/product-report', title: '产品报告', desc: '运行材料' },
-  { path: '/ongoing-product', title: '产品分析', desc: '规模与人次' },
+  { path: '/holding-analysis', title: '持有产品分析', desc: '产品与客户持有' },
   { path: '/user-profile', title: '用户画像', desc: '条件筛选' },
   { path: '/customer-churn', title: '流失识别', desc: '未复购客户' },
 ]

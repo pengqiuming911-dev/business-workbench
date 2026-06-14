@@ -109,6 +109,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   subscribe_fee_ratio REAL,
   management_fee_ratio REAL,
   performance_fee_ratio REAL,
+  tax_subscribe_ratio REAL,
+  tax_management_ratio REAL,
+  tax_performance_ratio REAL,
   rebate_target TEXT,
   flight_date TEXT,
   holding_status TEXT,
@@ -119,7 +122,45 @@ CREATE TABLE IF NOT EXISTS transactions (
   dividend_barrier REAL,
   monthly_coupon REAL,
   coupon_1st REAL,
-  raw TEXT
+  raw TEXT,
+  order_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS rebate_status (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id TEXT NOT NULL UNIQUE,
+  is_returnable TEXT DEFAULT '',
+  plan_subscribe INTEGER DEFAULT 0,
+  plan_management INTEGER DEFAULT 0,
+  plan_performance INTEGER DEFAULT 0,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS rebate_completed (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id TEXT,
+  flight_id TEXT,
+  product_name TEXT,
+  customer_name TEXT,
+  channel_or_direct TEXT,
+  principal REAL,
+  margin_ratio REAL,
+  business_type TEXT,
+  subscribe_date TEXT,
+  order_status TEXT,
+  rebate_target TEXT,
+  channel_subscribe_ratio REAL,
+  channel_management_ratio REAL,
+  channel_performance_ratio REAL,
+  expense_category TEXT,
+  expense_amount REAL,
+  payment_time TEXT,
+  payment_year TEXT,
+  payment_month TEXT,
+  payment_day TEXT,
+  source TEXT DEFAULT 'manual',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS channels (
