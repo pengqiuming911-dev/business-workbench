@@ -107,14 +107,14 @@ func (s *Store) ImportTransactions(rows []map[string]any) error {
 		return err
 	}
 	stmt, err := tx.Prepare(`
-		INSERT INTO transactions 
+		INSERT INTO transactions
 			(transaction_date, flight_id, counterparty, subscribe_amount,
 			 product_name, customer_name, actual_buyer, amount,
 			 subscribe_fee_ratio, management_fee_ratio, performance_fee_ratio,
 			 rebate_target, flight_date, holding_status, complete_date,
 			 underlying, structure_type, lock_period,
-			 dividend_barrier, monthly_coupon, coupon_1st, raw)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 dividend_barrier, monthly_coupon, coupon_1st, raw, order_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		_ = tx.Rollback()
@@ -128,7 +128,7 @@ func (s *Store) ImportTransactions(rows []map[string]any) error {
 			row["subscribe_fee_ratio"], row["management_fee_ratio"], row["performance_fee_ratio"],
 			row["rebate_target"], row["flight_date"], row["holding_status"], row["complete_date"],
 			row["underlying"], row["structure_type"], row["lock_period"],
-			row["dividend_barrier"], row["monthly_coupon"], row["coupon_1st"], row["raw"],
+			row["dividend_barrier"], row["monthly_coupon"], row["coupon_1st"], row["raw"], row["order_id"],
 		); err != nil {
 			_ = tx.Rollback()
 			return err
@@ -471,7 +471,7 @@ func (s *Store) SearchProducts(q string) ([]map[string]any, error) {
 			"type": "product",
 			"id":   nullString(id),
 			"name": nullString(name),
-			"path": "/ongoing-product",
+			"path": "/holding-analysis",
 		})
 	}
 	return result, rows.Err()
@@ -1410,6 +1410,7 @@ func (s *Store) scanTransactions(query string, args ...any) ([]model.Transaction
 			MonthlyCoupon:       toFloatPtr(values[colIndex(cols, "monthly_coupon")]),
 			Coupon1st:           toFloatPtr(values[colIndex(cols, "coupon_1st")]),
 			Raw:                 toString(values[colIndex(cols, "raw")]),
+			OrderID:             toString(values[colIndex(cols, "order_id")]),
 		}
 		results = append(results, row)
 	}
@@ -1508,6 +1509,296 @@ func toIntPtr(v any) *int {
 	default:
 		return nil
 	}
+}
+
+func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any, error) {
+	query := `
+		SELECT t.id, t.order_id, t.flight_id, t.product_name, t.customer_name,
+		       t.counterparty, t.subscribe_amount, t.amount, t.rebate_target,
+		       t.subscribe_fee_ratio, t.management_fee_ratio, t.performance_fee_ratio,
+		       t.tax_subscribe_ratio, t.tax_management_ratio, t.tax_performance_ratio,
+		       t.flight_date, t.holding_status, t.complete_date,
+		       rs.is_returnable, rs.plan_subscribe, rs.plan_management, rs.plan_performance,
+		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '申购费'), 0) AS returned_subscribe,
+		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '管理费'), 0) AS returned_management,
+		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '业绩报酬'), 0) AS returned_performance
+		FROM transactions t
+		LEFT JOIN rebate_status rs ON t.order_id = rs.order_id
+		WHERE t.order_id IS NOT NULL AND t.order_id != ''
+	`
+	args := []any{}
+	if v, ok := filters["customer_name"]; ok && v != "" {
+		query += " AND t.customer_name LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["rebate_target"]; ok && v != "" {
+		query += " AND t.rebate_target LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["order_id"]; ok && v != "" {
+		query += " AND t.order_id LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["flight_id"]; ok && v != "" {
+		query += " AND t.flight_id LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["product_name"]; ok && v != "" {
+		query += " AND t.product_name LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["is_returnable"]; ok && v != "" {
+		query += " AND rs.is_returnable = ?"
+		args = append(args, v)
+	}
+	query += " ORDER BY t.flight_date DESC"
+	return s.queryMaps(query, args...)
+}
+
+func (s *Store) UpsertRebateStatus(orderID string, fields map[string]any) error {
+	setClauses := []string{}
+	args := []any{}
+	insertCols := []string{"order_id"}
+	insertPlaceholders := []string{"?"}
+	insertArgs := []any{orderID}
+
+	if v, ok := fields["is_returnable"]; ok {
+		setClauses = append(setClauses, "is_returnable = ?")
+		args = append(args, v)
+		insertCols = append(insertCols, "is_returnable")
+		insertPlaceholders = append(insertPlaceholders, "?")
+		insertArgs = append(insertArgs, v)
+	}
+	if v, ok := fields["plan_subscribe"]; ok {
+		setClauses = append(setClauses, "plan_subscribe = ?")
+		args = append(args, v)
+		insertCols = append(insertCols, "plan_subscribe")
+		insertPlaceholders = append(insertPlaceholders, "?")
+		insertArgs = append(insertArgs, v)
+	}
+	if v, ok := fields["plan_management"]; ok {
+		setClauses = append(setClauses, "plan_management = ?")
+		args = append(args, v)
+		insertCols = append(insertCols, "plan_management")
+		insertPlaceholders = append(insertPlaceholders, "?")
+		insertArgs = append(insertArgs, v)
+	}
+	if v, ok := fields["plan_performance"]; ok {
+		setClauses = append(setClauses, "plan_performance = ?")
+		args = append(args, v)
+		insertCols = append(insertCols, "plan_performance")
+		insertPlaceholders = append(insertPlaceholders, "?")
+		insertArgs = append(insertArgs, v)
+	}
+	setClauses = append(setClauses, "updated_at = datetime('now')")
+
+	query := fmt.Sprintf(
+		"INSERT INTO rebate_status (%s) VALUES (%s) ON CONFLICT(order_id) DO UPDATE SET %s",
+		strings.Join(insertCols, ", "),
+		strings.Join(insertPlaceholders, ", "),
+		strings.Join(setClauses, ", "),
+	)
+	allArgs := append(insertArgs, args...)
+	_, err := s.DB.Exec(query, allArgs...)
+	return err
+}
+
+func (s *Store) QueryRebateCompleted(filters map[string]string) ([]model.RebateCompleted, error) {
+	query := `
+		SELECT id, order_id, flight_id, product_name, customer_name, channel_or_direct,
+		       principal, margin_ratio, business_type, subscribe_date, order_status,
+		       rebate_target, channel_subscribe_ratio, channel_management_ratio,
+		       channel_performance_ratio, expense_category, expense_amount,
+		       payment_time, payment_year, payment_month, payment_day,
+		       source, created_at, updated_at
+		FROM rebate_completed WHERE 1=1
+	`
+	args := []any{}
+	if v, ok := filters["order_id"]; ok && v != "" {
+		query += " AND order_id LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["customer_name"]; ok && v != "" {
+		query += " AND customer_name LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["product_name"]; ok && v != "" {
+		query += " AND product_name LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["expense_category"]; ok && v != "" {
+		query += " AND expense_category = ?"
+		args = append(args, v)
+	}
+	if v, ok := filters["source"]; ok && v != "" {
+		query += " AND source = ?"
+		args = append(args, v)
+	}
+	if v, ok := filters["flight_id"]; ok && v != "" {
+		query += " AND flight_id LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	if v, ok := filters["rebate_target"]; ok && v != "" {
+		query += " AND rebate_target LIKE ?"
+		args = append(args, LikeContains(v))
+	}
+	query += " ORDER BY created_at DESC"
+
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []model.RebateCompleted
+	for rows.Next() {
+		var row model.RebateCompleted
+		var principal, marginRatio, chSubRatio, chMgmtRatio, chPerfRatio, expAmount sql.NullFloat64
+		var orderID, flightID, productName, customerName, channelOrDirect sql.NullString
+		var businessType, subscribeDate, orderStatus, rebateTarget sql.NullString
+		var expCategory, paymentTime, paymentYear, paymentMonth, paymentDay sql.NullString
+		var source, createdAt, updatedAt sql.NullString
+		if err := rows.Scan(
+			&row.ID, &orderID, &flightID, &productName, &customerName, &channelOrDirect,
+			&principal, &marginRatio, &businessType, &subscribeDate, &orderStatus,
+			&rebateTarget, &chSubRatio, &chMgmtRatio, &chPerfRatio,
+			&expCategory, &expAmount,
+			&paymentTime, &paymentYear, &paymentMonth, &paymentDay,
+			&source, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, err
+		}
+		row.OrderID = nullString(orderID)
+		row.FlightID = nullString(flightID)
+		row.ProductName = nullString(productName)
+		row.CustomerName = nullString(customerName)
+		row.ChannelOrDirect = nullString(channelOrDirect)
+		row.Principal = floatPtr(principal)
+		row.MarginRatio = floatPtr(marginRatio)
+		row.BusinessType = nullString(businessType)
+		row.SubscribeDate = nullString(subscribeDate)
+		row.OrderStatus = nullString(orderStatus)
+		row.RebateTarget = nullString(rebateTarget)
+		row.ChannelSubscribeRatio = floatPtr(chSubRatio)
+		row.ChannelManagementRatio = floatPtr(chMgmtRatio)
+		row.ChannelPerformanceRatio = floatPtr(chPerfRatio)
+		row.ExpenseCategory = nullString(expCategory)
+		row.ExpenseAmount = floatPtr(expAmount)
+		row.PaymentTime = nullString(paymentTime)
+		row.PaymentYear = nullString(paymentYear)
+		row.PaymentMonth = nullString(paymentMonth)
+		row.PaymentDay = nullString(paymentDay)
+		row.Source = nullString(source)
+		row.CreatedAt = nullString(createdAt)
+		row.UpdatedAt = nullString(updatedAt)
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) InsertRebateCompleted(record model.RebateCompleted) (int64, error) {
+	result, err := s.DB.Exec(`
+		INSERT INTO rebate_completed
+			(order_id, flight_id, product_name, customer_name, channel_or_direct,
+			 principal, margin_ratio, business_type, subscribe_date, order_status,
+			 rebate_target, channel_subscribe_ratio, channel_management_ratio,
+			 channel_performance_ratio, expense_category, expense_amount,
+			 payment_time, payment_year, payment_month, payment_day, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		nullableDBString(record.OrderID), nullableDBString(record.FlightID),
+		nullableDBString(record.ProductName), nullableDBString(record.CustomerName),
+		nullableDBString(record.ChannelOrDirect),
+		nullableFloat(record.Principal), nullableFloat(record.MarginRatio),
+		nullableDBString(record.BusinessType), nullableDBString(record.SubscribeDate),
+		nullableDBString(record.OrderStatus), nullableDBString(record.RebateTarget),
+		nullableFloat(record.ChannelSubscribeRatio), nullableFloat(record.ChannelManagementRatio),
+		nullableFloat(record.ChannelPerformanceRatio),
+		nullableDBString(record.ExpenseCategory), nullableFloat(record.ExpenseAmount),
+		nullableDBString(record.PaymentTime), nullableDBString(record.PaymentYear),
+		nullableDBString(record.PaymentMonth), nullableDBString(record.PaymentDay),
+		nullableDBString(record.Source),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func (s *Store) BulkInsertRebateCompleted(records []model.RebateCompleted) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`
+		INSERT INTO rebate_completed
+			(order_id, flight_id, product_name, customer_name, channel_or_direct,
+			 principal, margin_ratio, business_type, subscribe_date, order_status,
+			 rebate_target, channel_subscribe_ratio, channel_management_ratio,
+			 channel_performance_ratio, expense_category, expense_amount,
+			 payment_time, payment_year, payment_month, payment_day, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, r := range records {
+		if _, err := stmt.Exec(
+			nullableDBString(r.OrderID), nullableDBString(r.FlightID),
+			nullableDBString(r.ProductName), nullableDBString(r.CustomerName),
+			nullableDBString(r.ChannelOrDirect),
+			nullableFloat(r.Principal), nullableFloat(r.MarginRatio),
+			nullableDBString(r.BusinessType), nullableDBString(r.SubscribeDate),
+			nullableDBString(r.OrderStatus), nullableDBString(r.RebateTarget),
+			nullableFloat(r.ChannelSubscribeRatio), nullableFloat(r.ChannelManagementRatio),
+			nullableFloat(r.ChannelPerformanceRatio),
+			nullableDBString(r.ExpenseCategory), nullableFloat(r.ExpenseAmount),
+			nullableDBString(r.PaymentTime), nullableDBString(r.PaymentYear),
+			nullableDBString(r.PaymentMonth), nullableDBString(r.PaymentDay),
+			nullableDBString(r.Source),
+		); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) RebateCompletedSummary(orderID string) (map[string]float64, error) {
+	rows, err := s.DB.Query(`
+		SELECT expense_category, COALESCE(SUM(expense_amount), 0)
+		FROM rebate_completed
+		WHERE order_id = ?
+		GROUP BY expense_category
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := map[string]float64{
+		"申购费":  0,
+		"管理费":  0,
+		"业绩报酬": 0,
+	}
+	for rows.Next() {
+		var category sql.NullString
+		var amount float64
+		if err := rows.Scan(&category, &amount); err != nil {
+			return nil, err
+		}
+		if category.Valid {
+			result[category.String] = amount
+		}
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) DeleteRebateCompleted(id int64) error {
+	_, err := s.DB.Exec("DELETE FROM rebate_completed WHERE id = ?", id)
+	return err
 }
 
 func (s *Store) QueryDistinctValues(table, column string) ([]string, error) {

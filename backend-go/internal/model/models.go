@@ -60,6 +60,7 @@ type TransactionRow struct {
 	MonthlyCoupon       *float64 `json:"monthly_coupon,omitempty"`
 	Coupon1st           *float64 `json:"coupon_1st,omitempty"`
 	Raw                 string   `json:"raw,omitempty"`
+	OrderID             string   `json:"order_id"`
 }
 
 type Observation struct {
@@ -130,6 +131,43 @@ type PushConfig struct {
 	Enabled        bool   `json:"enabled"`
 	LastPushTime   string `json:"last_push_time"`
 	LastPushResult string `json:"last_push_result"`
+}
+
+type RebateStatus struct {
+	ID              int64  `json:"id"`
+	OrderID         string `json:"order_id"`
+	IsReturnable    string `json:"is_returnable"`
+	PlanSubscribe   int    `json:"plan_subscribe"`
+	PlanManagement  int    `json:"plan_management"`
+	PlanPerformance int    `json:"plan_performance"`
+	UpdatedAt       string `json:"updated_at"`
+}
+
+type RebateCompleted struct {
+	ID                      int64    `json:"id"`
+	OrderID                 string   `json:"order_id"`
+	FlightID                string   `json:"flight_id"`
+	ProductName             string   `json:"product_name"`
+	CustomerName            string   `json:"customer_name"`
+	ChannelOrDirect         string   `json:"channel_or_direct"`
+	Principal               *float64 `json:"principal,omitempty"`
+	MarginRatio             *float64 `json:"margin_ratio,omitempty"`
+	BusinessType            string   `json:"business_type"`
+	SubscribeDate           string   `json:"subscribe_date"`
+	OrderStatus             string   `json:"order_status"`
+	RebateTarget            string   `json:"rebate_target"`
+	ChannelSubscribeRatio   *float64 `json:"channel_subscribe_ratio,omitempty"`
+	ChannelManagementRatio  *float64 `json:"channel_management_ratio,omitempty"`
+	ChannelPerformanceRatio *float64 `json:"channel_performance_ratio,omitempty"`
+	ExpenseCategory         string   `json:"expense_category"`
+	ExpenseAmount           *float64 `json:"expense_amount,omitempty"`
+	PaymentTime             string   `json:"payment_time"`
+	PaymentYear             string   `json:"payment_year"`
+	PaymentMonth            string   `json:"payment_month"`
+	PaymentDay              string   `json:"payment_day"`
+	Source                  string   `json:"source"`
+	CreatedAt               string   `json:"created_at"`
+	UpdatedAt               string   `json:"updated_at"`
 }
 
 type AgentConversation struct {
