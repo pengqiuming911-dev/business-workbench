@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="channel-analysis-page">
     <h1 class="text-page-title">渠道分析</h1>
     <p class="text-body">按最终渠道统计各渠道的成交人数、成交金额与复购表现。</p>
 
@@ -22,20 +22,16 @@
     <PanelCard title="分析结果">
       <p class="empty-state">各渠道数据将在接入后端后展示。</p>
     </PanelCard>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import PanelCard from '../components/PanelCard.vue'
 
 const startMonth = ref('')
 const endMonth = ref('')
 const filePath = ref('')
 
-function run() { alert('渠道分析功能尚未接入后端。') }
+function run() { alert('生成渠道分析功能尚未接入后端。') }
 </script>
-
-<style scoped>
-</style>

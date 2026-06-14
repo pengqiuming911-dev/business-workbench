@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="product-report-page">
     <h1 class="text-page-title">产品运行报告</h1>
     <p class="text-body" style="margin-bottom: 24px;">指定开始/结束年月，统计每月完结产品数量与金额、按结构类型与标的的完结与交易分布、交易人次与人数及人均金额、不同标的的新客/续做/增购人数与金额。</p>
 
@@ -63,12 +63,11 @@
         请选择月份查看产品结构，或点击「从飞书同步」更新数据
       </div>
     </PanelCard>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import PanelCard from '../components/PanelCard.vue'
 
 const startMonth = ref('')
@@ -227,8 +226,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
-  padding-bottom: 18px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--border-soft);
   flex-wrap: wrap;
 }
@@ -236,7 +235,7 @@ onMounted(async () => {
 .product-cards {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
+  gap: 16px;
 }
 
 .product-card {
@@ -244,21 +243,21 @@ onMounted(async () => {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: box-shadow 200ms ease, border-color 200ms ease;
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .product-card:hover {
   border-color: var(--brand);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-soft);
 }
 
 .card-header {
   background: var(--brand);
   color: #fff;
-  padding: 12px 16px;
+  padding: 11px 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .card-icon { font-size: 17px; }
@@ -266,20 +265,19 @@ onMounted(async () => {
 .card-title {
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.card-body { padding: 6px 0; }
+.card-body { padding: 5px 0; }
 
 .info-row {
   display: grid;
-  grid-template-columns: 78px 1fr;
+  grid-template-columns: 76px 1fr;
   align-items: start;
-  padding: 7px 16px;
-  gap: 10px;
+  padding: 6px 14px;
+  gap: 8px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -290,13 +288,12 @@ onMounted(async () => {
   color: var(--ink-soft);
   white-space: nowrap;
   padding-top: 2px;
-  font-weight: 600;
 }
 
 .info-val {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-strong);
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 .info-val.multiline {
@@ -307,13 +304,12 @@ onMounted(async () => {
 }
 
 .raw-content {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-soft);
   white-space: pre-wrap;
   max-height: 150px;
   overflow: auto;
-  padding: 16px;
-  line-height: 1.6;
+  padding: 14px;
 }
 
 @media (max-width: 1400px) {

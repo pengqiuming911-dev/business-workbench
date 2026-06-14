@@ -1,5 +1,8 @@
 <template>
-  <div id="app">
+  <WorkbenchLayout>
     <router-view />
-  </div>
+  </WorkbenchLayout>
 </template>
+<script setup>
+import WorkbenchLayout from './components/WorkbenchLayout.vue'
+</script>

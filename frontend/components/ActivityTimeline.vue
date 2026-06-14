@@ -36,59 +36,55 @@ function formatTime(iso) {
 </script>
 
 <style scoped>
-.timeline { position: relative; padding-left: 28px; }
-.timeline-entry { position: relative; padding-bottom: 20px; }
+.timeline { position: relative; padding-left: 24px; }
+.timeline-entry { position: relative; padding-bottom: 16px; }
 .timeline-entry:last-child { padding-bottom: 0; }
 
 .timeline-dot {
   position: absolute;
-  left: -28px;
-  top: 5px;
+  left: -24px;
+  top: 4px;
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: var(--brand);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
-.timeline-dot.dot-sync { background: var(--brand); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
-.timeline-dot.dot-query { background: var(--success); box-shadow: 0 0 0 3px rgba(15, 159, 110, 0.12); }
-.timeline-dot.dot-export { background: var(--warning); box-shadow: 0 0 0 3px rgba(198, 120, 17, 0.12); }
+.timeline-dot.dot-sync { background: var(--brand); }
+.timeline-dot.dot-query { background: var(--success); }
+.timeline-dot.dot-export { background: var(--warning); }
 
 .timeline-entry:not(:last-child)::before {
   content: '';
   position: absolute;
-  left: -24px;
-  top: 18px;
+  left: -20px;
+  top: 16px;
   bottom: -4px;
-  width: 1.5px;
+  width: 1px;
   background: var(--border-soft);
 }
 
 .timeline-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .timeline-time {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--ink-faint);
   font-family: var(--font-mono);
-  font-weight: 500;
 }
 
 .timeline-action {
   font-size: 14px;
   color: var(--ink-strong);
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-weight: 500;
 }
 
 .timeline-detail {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-soft);
-  margin-top: 3px;
-  line-height: 1.5;
+  margin-top: 2px;
 }
 </style>

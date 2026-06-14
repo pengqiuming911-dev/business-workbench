@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="push-settings-page">
     <h1 class="text-page-title">飞书推送设置</h1>
     <p class="text-body" style="margin-bottom:24px">配置今日观察的飞书群机器人推送。设置推送时间后，系统将每天定时把今日观察内容推送到飞书群。</p>
 
@@ -61,12 +61,11 @@
         <span class="text-body">{{ lastPushResult || '--' }}</span>
       </div>
     </PanelCard>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import PanelCard from '../components/PanelCard.vue'
 
 const form = ref({
@@ -167,12 +166,4 @@ onMounted(loadConfig)
 .time-select {
   width: 120px;
 }
-
-.error-msg {
-  color: #e54d2e;
-}
-
-.success-msg {
-  color: #2e8b57;
-}
-</style>
+</style>

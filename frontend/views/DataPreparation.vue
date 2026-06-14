@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="data-preparation-page">
     <h1 class="text-page-title">数据准备</h1>
     <p class="text-body">连接飞书账号后，将航班服务交易总表和合投用户表同步到本地数据库，供后续业务页面使用。</p>
 
@@ -84,12 +84,11 @@
     </PanelCard>
 
     <div v-if="result" class="panel-card">{{ result }}</div>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import PanelCard from '../components/PanelCard.vue'
 
 const result = ref('')
@@ -200,12 +199,12 @@ function formatTime(iso) {
 </script>
 
 <style scoped>
-.auth-row { display: flex; align-items: center; gap: 14px; }
-.source-row { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.auth-row { display: flex; align-items: center; gap: 12px; }
+.source-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
 .source-icon { font-size: 28px; flex-shrink: 0; }
-.source-info { flex: 1; display: flex; flex-direction: column; gap: 5px; }
-.source-name { font-size: 14.5px; font-weight: 600; color: var(--ink-strong); letter-spacing: -0.005em; }
-.source-desc { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+.source-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.source-name { font-size: 14px; font-weight: 700; color: var(--ink-strong); }
+.source-desc { font-size: 12px; color: var(--ink-soft); }
 .source-status { flex-shrink: 0; }
-.sync-actions { display: flex; align-items: center; gap: 14px; }
+.sync-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 </style>

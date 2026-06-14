@@ -3,16 +3,22 @@
     <SidebarNav
       :collapsed="sidebarCollapsed"
       :overlay-open="sidebarOverlay"
-      @navigate="closeSidebar"
+      @navigate="sidebarOverlay = false"
       @close="sidebarOverlay = false"
+      @collapse="sidebarCollapsed = !sidebarCollapsed"
     />
 
     <div class="workbench-content" :class="{ expanded: sidebarCollapsed }">
       <header class="workbench-topbar">
-        <button class="sidebar-toggle" type="button" aria-label="切换导航" @click="toggleSidebar">
-          <PanelLeftClose v-if="!sidebarCollapsed" :size="21" :stroke-width="2" />
-          <PanelLeftOpen v-else :size="21" :stroke-width="2" />
-        </button>
+        <div class="topbar-actions">
+          <button class="topbar-btn" type="button" @click="searchOpen = true">
+            <Search :size="18" :stroke-width="2" />
+          </button>
+          <button class="topbar-btn" type="button">
+            <Bell :size="18" :stroke-width="2" />
+          </button>
+          <div class="topbar-avatar"></div>
+        </div>
       </header>
 
       <main class="workbench-main">
@@ -20,35 +26,32 @@
       </main>
     </div>
 
+    <AgentDrawer :open="drawerOpen" @close="drawerOpen = false" />
+
+    <button
+      class="agent-fab"
+      type="button"
+      @click="drawerOpen = !drawerOpen"
+    >
+      <X v-if="drawerOpen" :size="24" :stroke-width="2" color="#fff" />
+      <MessageSquare v-else :size="24" :stroke-width="2" color="#fff" />
+    </button>
+
     <GlobalSearch v-model:open="searchOpen" />
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
-import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { Search, Bell, MessageSquare, X } from '@lucide/vue'
 import SidebarNav from './SidebarNav.vue'
+import AgentDrawer from './AgentDrawer.vue'
 import GlobalSearch from './GlobalSearch.vue'
-
-defineProps({
-  wide: { type: Boolean, default: false },
-})
 
 const sidebarCollapsed = ref(false)
 const sidebarOverlay = ref(false)
 const searchOpen = ref(false)
-
-function toggleSidebar() {
-  if (window.innerWidth <= 860) {
-    sidebarOverlay.value = !sidebarOverlay.value
-  } else {
-    sidebarCollapsed.value = !sidebarCollapsed.value
-  }
-}
-
-function closeSidebar() {
-  sidebarOverlay.value = false
-}
+const drawerOpen = ref(true)
 
 function handleKeydown(e) {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -57,12 +60,18 @@ function handleKeydown(e) {
   }
 }
 
+function handleToggleDrawer() {
+  drawerOpen.value = !drawerOpen.value
+}
+
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  window.addEventListener('toggle-agent-drawer', handleToggleDrawer)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('toggle-agent-drawer', handleToggleDrawer)
 })
 </script>
 
@@ -73,90 +82,101 @@ onUnmounted(() => {
 
 .workbench-content {
   min-height: 100vh;
-  margin-left: 264px;
-  transition: margin-left 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  margin-left: 230px;
+  transition: margin-left 220ms ease;
 }
 
 .workbench-content.expanded {
-  margin-left: 86px;
+  margin-left: 64px;
 }
 
 .workbench-topbar {
   position: sticky;
   top: 0;
   z-index: 60;
-  min-height: 64px;
+  min-height: 56px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   padding: 12px 32px 4px;
-  pointer-events: none;
 }
 
-.sidebar-toggle {
-  pointer-events: auto;
-  width: 46px;
-  height: 46px;
-  display: none;
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 50%;
+  background: var(--bg-card);
   color: var(--ink-soft);
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transition: background 180ms ease, border-color 180ms ease;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
 }
 
-.sidebar-toggle:hover {
-  background: var(--bg-hover);
-  border-color: var(--border);
+.topbar-btn:hover {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.topbar-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--brand);
+  opacity: 0.7;
+  margin-left: 4px;
 }
 
 .workbench-main {
-  width: min(1200px, calc(100vw - 328px));
-  margin: 0 auto 0 36px;
-  padding: 0 0 72px;
+  max-width: 1100px;
+  padding: 24px 32px 72px;
+  margin: 0 auto 0 0;
 }
 
-@media (max-width: 1280px) {
-  .workbench-content {
-    margin-left: 250px;
-  }
+/* FAB */
+.agent-fab {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 200;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: #10b981;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
 
-  .workbench-main {
-    width: min(100% - 48px, 1120px);
-    margin-left: 24px;
-  }
-
-  .workbench-topbar {
-    padding-right: 36px;
-    padding-left: 24px;
-  }
+.agent-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
 }
 
 @media (max-width: 860px) {
-  .workbench-content,
-  .workbench-content.expanded {
+  .workbench-content {
     margin-left: 0;
   }
 
   .workbench-topbar {
-    min-height: 64px;
-    padding: 12px 14px 0;
-  }
-
-  .sidebar-toggle {
-    display: inline-flex;
-    width: 46px;
-    min-height: 46px;
-    height: 46px;
+    padding: 10px 14px;
   }
 
   .workbench-main {
-    width: calc(100% - 28px);
-    margin: 0 auto;
-    padding-bottom: 36px;
+    padding: 16px 14px 48px;
   }
 }
 </style>

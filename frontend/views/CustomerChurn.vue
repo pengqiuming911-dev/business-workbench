@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="customer-churn-page">
     <h1 class="text-page-title">客户流失分析</h1>
     <p class="text-body">生成客户存量峰值分析报告，识别已完结未复购客户，并为后续 Excel 导出预留入口。</p>
 
@@ -22,12 +22,11 @@
     <PanelCard v-if="showReport" title="报告预览">
       <p class="empty-state">报告内容将在接入后端后展示。</p>
     </PanelCard>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import PanelCard from '../components/PanelCard.vue'
 
 const endDate = ref('')
@@ -35,8 +34,5 @@ const filePath = ref('')
 const showReport = ref(false)
 
 function generate() { alert('生成报告功能尚未接入后端。') }
-function download() { alert('下载 Excel 功能尚未接入后端。') }
+function download() { alert('下载功能尚未接入后端。') }
 </script>
-
-<style scoped>
-</style>

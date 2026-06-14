@@ -327,7 +327,7 @@ onMounted(async () => {
 
 .filter-group label {
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
   letter-spacing: 0.01em;
@@ -337,14 +337,14 @@ onMounted(async () => {
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
-  font-size: 13px;
+  font-size: 15px;
   width: auto;
   min-width: 120px;
 }
 
 .filter-sep {
   color: var(--ink-faint);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .filter-actions {
@@ -357,7 +357,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--ink);
   cursor: pointer;
@@ -376,7 +376,7 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   color: var(--brand);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   margin-bottom: 18px;
@@ -404,12 +404,12 @@ onMounted(async () => {
 
 .tx-table {
   min-width: 3400px;
-  font-size: 12.5px;
+  font-size: 15px;
 }
 
 .tx-table th {
   padding: 11px 14px;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   text-transform: none;
   letter-spacing: 0.03em;
@@ -423,7 +423,7 @@ onMounted(async () => {
   white-space: nowrap;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
-  font-size: 12.5px;
+  font-size: 15px;
 }
 
 .tx-table tr:hover td {
@@ -437,7 +437,7 @@ onMounted(async () => {
 }
 
 .obs-type {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-soft);
   font-weight: 600;
 }
@@ -463,38 +463,6 @@ onMounted(async () => {
   border-color: var(--brand);
 }
 
-.pos-above {
-  color: var(--danger);
-  font-weight: 700;
-}
-
-.pos-below {
-  color: var(--success);
-  font-weight: 700;
-}
-
-.pos-done {
-  color: var(--ink-faint);
-  font-weight: 600;
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 18px;
-  padding: 0 4px;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.page-info {
-  font-size: 13px;
-  color: var(--ink-soft);
-  font-weight: 600;
-}
+.pos-above { color: var(--success); }
+.pos-below { color: var(--danger); }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="activity-log-page">
     <div class="page-header">
       <h1 class="text-page-title">操作日志</h1>
       <div class="filter-bar">
@@ -17,12 +17,11 @@
       <div v-if="loading" class="loading-state">加载中...</div>
       <ActivityTimeline v-else :logs="logs" />
     </div>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import ActivityTimeline from '../components/ActivityTimeline.vue'
 
 const logs = ref([])
@@ -66,8 +65,7 @@ onMounted(load)
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .filter-bar {

@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="holding-analysis-page">
     <h1 class="text-page-title">持有产品分析</h1>
     <p class="text-body" style="margin-bottom: 20px;">数据自动同步自航班服务交易总表</p>
 
@@ -18,12 +18,11 @@
 
     <ProductAnalysis v-if="activeTab === 'product'" />
     <CustomerHolding v-else />
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import ProductAnalysis from './ProductAnalysis.vue'
 import CustomerHolding from './CustomerHolding.vue'
 
@@ -57,7 +56,7 @@ const activeTab = ref('product')
   border-radius: 10px;
   background: transparent;
   color: var(--ink-soft);
-  font-size: 13.5px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
@@ -66,12 +65,11 @@ const activeTab = ref('product')
 
 .tab-btn:hover {
   background: var(--bg-hover);
-  color: var(--ink);
+  color: var(--ink-strong);
 }
 
 .tab-btn.active {
   background: var(--brand);
   color: #fff;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="nominal-buyer-page">
     <h1 class="text-page-title">名义购买人 × 私募管理人</h1>
     <p class="text-body">一次输入多个名义购买人，查看每个人分别在哪些私募管理人处购买过产品。</p>
 
@@ -33,12 +33,11 @@
         </table>
       </div>
     </PanelCard>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import PanelCard from '../components/PanelCard.vue'
 
 const names = ref('')
@@ -49,10 +48,3 @@ function query() {
   alert('查询功能尚未接入后端。')
 }
 </script>
-
-<style scoped>
-.hint {
-  color: var(--ink-soft);
-  font-size: 11px;
-}
-</style>

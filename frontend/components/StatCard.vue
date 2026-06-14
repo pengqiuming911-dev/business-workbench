@@ -40,6 +40,7 @@ function formatTrend(v) {
 </script>
 
 <style scoped>
+/* Depends on .panel-card defined in global main.css */
 .stat-card {
   display: flex;
   flex-direction: column;
@@ -47,19 +48,18 @@ function formatTrend(v) {
 }
 
 .stat-label {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--ink-soft);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
 }
 
 .stat-value {
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--ink-strong);
   line-height: 1.1;
-  letter-spacing: -0.025em;
   font-family: var(--font-mono);
 }
 
@@ -76,5 +76,5 @@ function formatTrend(v) {
 .trend-down { color: var(--danger); }
 .trend-neutral { color: var(--ink-faint); }
 
-.trend-dash { letter-spacing: 0.1em; }
+.trend-dash { letter-spacing: 0.1em; color: var(--ink-faint); }
 </style>

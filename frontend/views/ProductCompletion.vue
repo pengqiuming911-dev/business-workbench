@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="product-completion-page">
     <h1 class="text-page-title">派息/敲出观察</h1>
 
     <div class="tab-bar">
@@ -143,7 +143,7 @@
 
       <div v-if="calendarLoading" class="loading-state"><p>加载中...</p></div>
       <div v-else>
-        <PanelCard title="观察日历（{{ calendarTitle }}）">
+        <PanelCard title="观察日历">
           <div class="calendar-weekdays">
             <div v-for="day in weekDays" :key="day" class="calendar-weekday">{{ day }}</div>
           </div>
@@ -156,8 +156,23 @@
             >
               <div class="calendar-day">{{ cell.day || '' }}</div>
               <div v-if="cell.products.length" class="calendar-products">
-                <div v-for="product in cell.products" :key="product.id" class="calendar-product" :title="product.name">
-                  {{ product.name || product.id }}
+                <div
+                  v-for="product in cell.products"
+                  :key="product.id"
+                  class="calendar-product"
+                  :class="calItemClass(product)"
+                  :title="product.name"
+                >
+                  <div class="cal-item-top">
+                    <span class="cal-item-name">{{ truncateCalName(product.name || product.id) }}</span>
+                    <span v-if="product.is_knockout_observable && product.has_dividend_observation" class="cal-tag tag-both">派息+敲出</span>
+                    <span v-else-if="product.is_knockout_observable" class="cal-tag tag-knockout">敲出</span>
+                    <span v-else-if="product.has_dividend_observation" class="cal-tag tag-dividend">派息</span>
+                  </div>
+                  <div class="cal-item-prices">
+                    <span v-if="product.is_knockout_observable && product.knockout_price != null" class="cal-price ko">敲出 {{ fmtCalPrice(product.knockout_price) }}</span>
+                    <span v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-price dv">派息 {{ fmtCalPrice(product.dividend_line) }}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -260,12 +275,11 @@
         </PanelCard>
       </div>
     </div>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import PanelCard from '../components/PanelCard.vue'
 import PosterTemplate from '../components/PosterTemplate.vue'
 
@@ -452,11 +466,6 @@ const calendarMap = computed(() => {
   return map
 })
 
-const calendarTitle = computed(() => {
-  const [year, month] = calendarMonth.value.split('-')
-  return `${year}年${Number(month)}月`
-})
-
 const calendarProductCount = computed(() => (
   calendarItems.value.reduce((sum, item) => sum + (item.products?.length || 0), 0)
 ))
@@ -531,6 +540,23 @@ function dividendClass(status) {
   if (status === '否') return 'result-no'
   return ''
 }
+
+function truncateCalName(name) {
+  if (!name) return '--'
+  return name.length > 8 ? name.slice(0, 8) + '…' : name
+}
+
+function fmtCalPrice(val) {
+  if (val == null) return '--'
+  return Number(val).toFixed(2)
+}
+
+function calItemClass(product) {
+  if (product.is_knockout_observable && product.has_dividend_observation) return 'item-both'
+  if (product.is_knockout_observable) return 'item-knockout'
+  if (product.has_dividend_observation) return 'item-dividend'
+  return ''
+}
 </script>
 
 <style scoped>
@@ -541,37 +567,28 @@ function dividendClass(status) {
 .tab-bar {
   display: flex;
   gap: 4px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 5px;
+  padding: 4px;
   width: fit-content;
-  box-shadow: var(--shadow-sm);
 }
 
 .tab-btn {
   border: none;
   background: transparent;
   color: var(--ink-soft);
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  border-radius: 10px;
-  padding: 0 18px;
-  min-height: 38px;
-  transition: background 200ms ease, color 200ms ease;
 }
 
 .tab-btn:hover {
-  background: var(--bg-hover);
+  background: var(--surface-muted);
   color: var(--ink);
 }
 
 .tab-btn.active {
   background: var(--brand);
   color: #fff;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
 }
 
 .file-source { flex: 1; display: flex; align-items: center; gap: 10px; }
@@ -582,25 +599,24 @@ function dividendClass(status) {
   font-size: 12px;
   color: var(--ink-soft);
   text-align: right;
-  padding-top: 10px;
-  font-weight: 500;
+  padding-top: 8px;
 }
 
 .overview-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: 12px;
   min-width: 1400px;
 }
 
 .overview-table th {
-  padding: 11px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-soft);
-  font-weight: 700;
-  background: rgba(241, 245, 249, 0.5);
+  font-weight: 600;
+  background: var(--surface-muted);
   font-size: 11px;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   position: sticky;
   top: 0;
@@ -609,12 +625,12 @@ function dividendClass(status) {
 
 .data-row {
   cursor: pointer;
-  transition: background 180ms ease;
+  transition: background 0.15s;
 }
-.data-row:hover { background: rgba(241, 245, 249, 0.5); }
+.data-row:hover { background: var(--surface-muted); }
 
 .overview-table td {
-  padding: 12px 14px;
+  padding: 11px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
   white-space: nowrap;
@@ -630,8 +646,8 @@ function dividendClass(status) {
   background: var(--bg-card);
   z-index: 2;
 }
-.data-row:hover .sticky-col { background: rgba(241, 245, 249, 0.5); }
-.overview-table th.sticky-col { z-index: 3; background: rgba(241, 245, 249, 0.5); }
+.data-row:hover .sticky-col { background: var(--surface-muted); }
+.overview-table th.sticky-col { z-index: 3; background: var(--surface-muted); }
 
 .chevron {
   font-size: 14px;
@@ -650,18 +666,16 @@ function dividendClass(status) {
   color: var(--danger);
   font-weight: 600;
   background: var(--danger-soft);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 11.5px;
+  border-radius: 4px;
+  padding: 2px 6px;
 }
 
 .result-yes-dividend {
   color: var(--success);
   font-weight: 600;
   background: var(--success-soft);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 11.5px;
+  border-radius: 4px;
+  padding: 2px 6px;
 }
 
 .result-no { color: var(--ink-soft); }
@@ -677,41 +691,40 @@ function dividendClass(status) {
   border-bottom: 1px solid var(--border-soft);
 }
 
-.detail-cell { background: rgba(241, 245, 249, 0.4); }
+.detail-cell { background: var(--surface-muted); }
 
 .detail-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ink-soft);
   letter-spacing: 0.04em;
-  padding: 14px 18px 10px;
+  padding: 12px 16px 8px;
 }
 
 .detail-empty {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-soft);
-  padding: 14px 18px;
+  padding: 12px 16px;
 }
 
 .detail-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11.5px;
-  margin: 0 18px 14px;
+  font-size: 11px;
+  margin: 0 16px 12px;
 }
 
 .detail-table th {
-  padding: 7px 14px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-soft);
-  font-weight: 700;
+  font-weight: 600;
   background: transparent;
   text-align: left;
-  letter-spacing: 0.02em;
 }
 
 .detail-table td {
-  padding: 7px 14px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink);
 }
@@ -721,17 +734,16 @@ function dividendClass(status) {
   grid-template-columns: repeat(7, minmax(120px, 1fr));
   border: 1px solid var(--border-soft);
   border-bottom: none;
-  background: rgba(241, 245, 249, 0.3);
+  background: var(--surface-muted);
 }
 
 .calendar-weekday {
-  padding: 11px 12px;
+  padding: 10px 12px;
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 700;
   text-align: center;
   border-right: 1px solid var(--border-soft);
-  letter-spacing: 0.02em;
 }
 
 .calendar-weekday:last-child { border-right: none; }
@@ -746,21 +758,21 @@ function dividendClass(status) {
 
 .calendar-cell {
   min-height: 118px;
-  padding: 11px;
+  padding: 8px;
   border-right: 1px solid var(--border-soft);
   border-bottom: 1px solid var(--border-soft);
   background: var(--bg-card);
 }
 
-.calendar-cell.muted { background: rgba(241, 245, 249, 0.4); }
-.calendar-cell.has-products { background: rgba(219, 234, 254, 0.4); }
+.calendar-cell.muted { background: var(--surface-muted); }
+.calendar-cell.has-products { background: #fafbfd; }
 
 .calendar-day {
-  height: 20px;
+  height: 22px;
   color: var(--ink-strong);
-  font-size: 12px;
-  font-weight: 700;
-  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 6px;
 }
 
 .calendar-products {
@@ -770,16 +782,95 @@ function dividendClass(status) {
 }
 
 .calendar-product {
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--brand-soft);
-  color: var(--brand);
+  padding: 5px 7px;
+  border-radius: 6px;
+  border-left: 3px solid var(--brand);
+  background: #fff;
   font-size: 11px;
-  font-weight: 600;
   line-height: 1.4;
   overflow: hidden;
-  text-overflow: ellipsis;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.calendar-product.item-knockout {
+  border-left-color: #ef4444;
+  background: #fff5f5;
+}
+
+.calendar-product.item-dividend {
+  border-left-color: #10b981;
+  background: #f0fdf8;
+}
+
+.calendar-product.item-both {
+  border-left-color: #f59e0b;
+  background: #fffdf5;
+}
+
+.cal-item-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+
+.cal-item-name {
+  font-weight: 700;
+  color: var(--ink-strong);
+  font-size: 11.5px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.cal-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.tag-knockout {
+  color: #fff;
+  background: #ef4444;
+}
+
+.tag-dividend {
+  color: #fff;
+  background: #10b981;
+}
+
+.tag-both {
+  color: #fff;
+  background: #f59e0b;
+}
+
+.cal-item-prices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cal-price {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-price.ko {
+  color: #dc2626;
+}
+
+.cal-price.dv {
+  color: #059669;
 }
 
 .poster-grid {
@@ -792,24 +883,24 @@ function dividendClass(status) {
 .poster-card {
   background: var(--bg-card);
   border-radius: var(--radius);
-  padding: 22px;
+  padding: 20px;
   border: 1px solid var(--border-soft);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 200ms ease;
+  box-shadow: none;
+  transition: box-shadow 0.2s;
 }
 
-.poster-card:hover { box-shadow: var(--shadow-md); }
+.poster-card:hover { box-shadow: var(--shadow-soft); }
 
 .poster-card-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .poster-type-badge {
-  padding: 4px 14px;
-  border-radius: 999px;
+  padding: 4px 12px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
 }
@@ -827,6 +918,6 @@ function dividendClass(status) {
 .poster-product {
   font-size: 13px;
   color: var(--ink-soft);
-  font-weight: 600;
+  font-weight: 700;
 }
 </style>

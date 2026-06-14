@@ -1,154 +1,89 @@
 <template>
-  <WorkbenchLayout>
-    <section class="home-page">
-      <header class="home-header">
-        <div>
-          <div class="breadcrumbs">
-            <span>业务工作台</span>
-            <span>/</span>
-            <strong>总览</strong>
-          </div>
-          <h1>航班服务业务中台</h1>
-          <p>集中处理数据同步、产品观察、报告输出和客户分析。</p>
+  <div class="dashboard-page">
+    <!-- Hero -->
+    <section class="hero-section">
+      <div class="hero-content">
+        <h2 class="hero-title">业务工作台</h2>
+        <p class="hero-desc">集中处理数据同步、产品观察、报告输出和客户分析。</p>
+        <div class="hero-actions">
+          <RouterLink class="btn btn-primary" to="/data-preparation">同步数据</RouterLink>
+          <RouterLink class="btn btn-outline" to="/product-completion">今日观察</RouterLink>
+          <button class="btn btn-outline" @click="openDrawer">智能助手</button>
         </div>
+      </div>
+      <div class="hero-chart">
+        <img :src="klineChart" alt="趋势图" />
+      </div>
+    </section>
 
-        <div class="header-actions">
-          <RouterLink class="secondary-action" to="/product-completion">
-            <CalendarDays :size="17" />
-            今日观察
-          </RouterLink>
-          <RouterLink class="primary-action" to="/data-preparation">
-            <RefreshCw :size="17" />
-            同步数据
+    <!-- Stats Row -->
+    <section class="stats-row">
+      <article class="stat-card" v-for="item in statCards" :key="item.label">
+        <span class="stat-label">{{ item.label }}</span>
+        <strong class="stat-value">{{ item.value }}</strong>
+        <span class="stat-note">{{ item.note }}</span>
+      </article>
+    </section>
+
+    <!-- Content Grid -->
+    <section class="content-grid">
+      <div class="main-col">
+        <div class="card-head">
+          <h3>常用入口</h3>
+          <span class="card-link">6 项</span>
+        </div>
+        <div class="module-grid">
+          <RouterLink
+            v-for="item in modules"
+            :key="item.path"
+            :to="item.path"
+            class="module-item"
+          >
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.desc }}</span>
           </RouterLink>
         </div>
-      </header>
+      </div>
 
-      <section class="metric-grid" aria-label="业务指标">
-        <article v-for="item in summaryCards" :key="item.label" class="metric-card">
-          <span class="metric-icon">
-            <component :is="item.icon" :size="20" />
-          </span>
-          <div class="metric-body">
-            <span class="metric-label">{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
+      <div class="side-col">
+        <div class="side-card">
+          <div class="card-head">
+            <h3>同步状态</h3>
+            <RouterLink to="/data-preparation" class="card-link">管理</RouterLink>
           </div>
-        </article>
-      </section>
-
-      <section class="workbench-grid">
-        <article class="workflow-panel">
-          <header class="panel-heading">
-            <div>
-              <h2>今日流程</h2>
-              <p>按顺序完成核心业务动作</p>
-            </div>
-            <span>{{ shortDate }}</span>
-          </header>
-
-          <div class="pipeline" aria-label="业务流程">
-            <RouterLink
-              v-for="(step, index) in pipeline"
-              :key="step.label"
-              :to="step.path"
-              class="pipeline-step"
-            >
-              <span class="step-index">{{ index + 1 }}</span>
-              <span class="step-icon">
-                <component :is="step.icon" :size="19" />
-              </span>
-              <div>
-                <strong>{{ step.label }}</strong>
-                <em>{{ step.desc }}</em>
-              </div>
-            </RouterLink>
-          </div>
-        </article>
-
-        <article class="source-panel">
-          <header class="panel-heading">
-            <div>
-              <h2>数据健康</h2>
-              <p>主页依赖的数据源状态</p>
-            </div>
-            <RouterLink to="/data-preparation">管理</RouterLink>
-          </header>
-
-          <div class="source-list">
-            <div class="source-row">
-              <span class="source-dot" :class="{ ready: syncStatus.row_count }"></span>
-              <div>
-                <strong>交易总表</strong>
-                <em>产品 / 交易 / 客户 / 渠道</em>
-              </div>
+          <div class="sync-info">
+            <div class="sync-row">
+              <span class="sync-dot" :class="{ ready: syncStatus.row_count }"></span>
+              <strong>交易总表</strong>
               <span>{{ syncStatus.synced_at ? formatTime(syncStatus.synced_at) : '未同步' }}</span>
             </div>
-            <div class="source-row">
-              <span class="source-dot" :class="{ ready: coinvestStatus.row_count }"></span>
-              <div>
-                <strong>合投用户表</strong>
-                <em>画像 / 专户 / 行业标签</em>
-              </div>
+            <div class="sync-row">
+              <span class="sync-dot" :class="{ ready: coinvestStatus.row_count }"></span>
+              <strong>合投用户表</strong>
               <span>{{ coinvestStatus.synced_at ? formatTime(coinvestStatus.synced_at) : '未同步' }}</span>
             </div>
           </div>
-        </article>
-      </section>
-
-      <section class="module-panel">
-        <header class="panel-heading">
-          <div>
-            <h2>常用入口</h2>
-            <p>直接进入高频分析和输出页面</p>
-          </div>
-          <span>6 项</span>
-        </header>
-
-        <div class="module-grid">
-          <RouterLink
-            v-for="item in workflowItems"
-            :key="item.path"
-            :to="item.path"
-            class="module-tile"
-          >
-            <span>
-              <component :is="item.icon" :size="21" />
-            </span>
-            <div>
-              <strong>{{ item.title }}</strong>
-              <em>{{ item.desc }}</em>
-            </div>
-          </RouterLink>
         </div>
-      </section>
+
+        <div class="side-card">
+          <div class="card-head">
+            <h3>今日重点</h3>
+          </div>
+          <div class="quick-links">
+            <RouterLink to="/product-completion" class="quick-link">观察日历</RouterLink>
+            <RouterLink to="/product-report" class="quick-link">产品报告</RouterLink>
+            <RouterLink to="/customer-churn" class="quick-link">流失识别</RouterLink>
+          </div>
+        </div>
+      </div>
     </section>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import {
-  Award,
-  BarChart3,
-  CalendarDays,
-  Database,
-  FileText,
-  PieChart,
-  RefreshCw,
-  Search,
-  TrendingDown,
-  UserRound,
-  Users,
-} from '@lucide/vue'
-
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
-
-const shortDate = new Date().toLocaleDateString('zh-CN', {
-  month: 'long',
-  day: 'numeric',
-  weekday: 'short',
-})
+import klineChart from '../assets/kline-chart.svg'
 
 const stats = ref({
   totalProducts: 0,
@@ -159,30 +94,25 @@ const stats = ref({
 const syncStatus = ref({})
 const coinvestStatus = ref({})
 
-const pipeline = [
-  { label: '同步数据', desc: '刷新飞书交易与合投数据', path: '/data-preparation', icon: Database },
-  { label: '观察日历', desc: '处理敲出、派息和观察节点', path: '/product-completion', icon: Award },
-  { label: '产品报告', desc: '生成存续产品运行材料', path: '/product-report', icon: FileText },
-  { label: '客户画像', desc: '筛选专户与行业标签', path: '/user-profile', icon: UserRound },
-  { label: '复盘分析', desc: '查看渠道、流失和存续表现', path: '/channel-analysis', icon: PieChart },
-]
-
-const workflowItems = [
-  { path: '/data-preparation', title: '数据准备', desc: '飞书同步', icon: RefreshCw },
-  { path: '/product-completion', title: '观察日历', desc: '敲出 / 派息', icon: Award },
-  { path: '/product-report', title: '产品报告', desc: '运行材料', icon: FileText },
-  { path: '/ongoing-product', title: '存续分析', desc: '规模与人次', icon: BarChart3 },
-  { path: '/user-profile', title: '用户画像', desc: '条件筛选', icon: Search },
-  { path: '/customer-churn', title: '流失识别', desc: '未复购客户', icon: TrendingDown },
-]
-
-const summaryCards = computed(() => [
-  { label: '产品', value: stats.value.totalProducts.toLocaleString('zh-CN'), icon: FileText },
-  { label: '存续', value: stats.value.activeProducts.toLocaleString('zh-CN'), icon: BarChart3 },
-  { label: '客户', value: stats.value.totalCustomers.toLocaleString('zh-CN'), icon: Users },
-  { label: '渠道', value: stats.value.totalChannels.toLocaleString('zh-CN'), icon: PieChart },
-  { label: '同步', value: syncStatus.value.row_count ? '就绪' : '待同步', icon: Database },
+const statCards = computed(() => [
+  { label: '产品总数', value: stats.value.totalProducts.toLocaleString('zh-CN'), note: '全部产品' },
+  { label: '存续产品', value: stats.value.activeProducts.toLocaleString('zh-CN'), note: '持有中' },
+  { label: '客户数量', value: stats.value.totalCustomers.toLocaleString('zh-CN'), note: '已登记' },
+  { label: '渠道数量', value: stats.value.totalChannels.toLocaleString('zh-CN'), note: '活跃渠道' },
 ])
+
+const modules = [
+  { path: '/data-preparation', title: '数据准备', desc: '飞书同步' },
+  { path: '/product-completion', title: '观察日历', desc: '敲出 / 派息' },
+  { path: '/product-report', title: '产品报告', desc: '运行材料' },
+  { path: '/ongoing-product', title: '产品分析', desc: '规模与人次' },
+  { path: '/user-profile', title: '用户画像', desc: '条件筛选' },
+  { path: '/customer-churn', title: '流失识别', desc: '未复购客户' },
+]
+
+function openDrawer() {
+  window.dispatchEvent(new CustomEvent('toggle-agent-drawer'))
+}
 
 function formatTime(iso) {
   const d = new Date(iso)
@@ -216,385 +146,267 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.home-page {
-  padding-top: 18px;
+.dashboard-page {
+  padding-top: 8px;
 }
 
-.home-header {
-  display: flex;
+/* ─── Hero ─── */
+.hero-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  margin-bottom: 28px;
+  padding: 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hero-title {
+  color: var(--ink-strong);
+  font-size: 28px;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.hero-desc {
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 400px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.hero-chart {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.hero-chart img {
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+}
+
+/* ─── Stats ─── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
   margin-bottom: 24px;
 }
 
-.breadcrumbs {
+.stat-card {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  color: var(--ink-soft);
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.breadcrumbs strong {
-  color: var(--ink);
-  font-weight: 700;
-}
-
-.home-header h1 {
-  color: var(--ink-strong);
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.025em;
-}
-
-.home-header p {
-  max-width: 640px;
-  margin-top: 8px;
-  color: var(--ink-soft);
-  font-size: 14.5px;
-  line-height: 1.65;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 0 0 auto;
-}
-
-.primary-action,
-.secondary-action {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 18px;
-  border-radius: var(--radius);
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  transition: background 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms ease, transform 200ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms ease;
-}
-
-.primary-action {
-  color: #fff;
-  background: var(--brand);
-  border: 1px solid var(--brand);
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2), 0 4px 12px rgba(37, 99, 235, 0.1);
-}
-
-.secondary-action {
-  color: var(--ink);
-  border: 1px solid var(--border-soft);
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-}
-
-.primary-action:hover,
-.secondary-action:hover {
-  transform: translateY(-1px);
-}
-
-.primary-action:hover {
-  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2), 0 8px 20px rgba(37, 99, 235, 0.14);
-}
-
-.secondary-action:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 18px;
-}
-
-.metric-card {
-  min-height: 102px;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: start;
-  column-gap: 14px;
+  flex-direction: column;
+  gap: 4px;
   padding: 20px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
   background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
   box-shadow: var(--shadow-sm);
-  transition: box-shadow 200ms ease, border-color 200ms ease;
 }
 
-.metric-card:hover {
-  box-shadow: var(--shadow-md);
-  border-color: var(--border);
-}
-
-.metric-icon,
-.module-tile > span,
-.step-icon {
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  border-radius: 10px;
-  color: var(--brand);
-  background: var(--brand-soft);
-}
-
-.metric-body {
-  min-width: 0;
-  padding-top: 1px;
-}
-
-.metric-label {
-  display: block;
-  color: var(--ink-soft);
-  font-size: 12px;
+.stat-label {
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  color: var(--ink-soft);
 }
 
-.metric-card strong {
-  display: block;
-  margin-top: 6px;
+.stat-value {
+  font-size: 28px;
+  font-weight: 750;
   color: var(--ink-strong);
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
+  line-height: 1.1;
 }
 
-.workbench-grid {
+.stat-note {
+  font-size: 14px;
+  color: var(--ink-faint);
+}
+
+/* ─── Content Grid ─── */
+.content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
-  gap: 16px;
-  margin-bottom: 18px;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
 }
 
-.workflow-panel,
-.module-panel,
-.source-panel {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
-  padding: 24px 26px;
-}
-
-.panel-heading {
+.card-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
-.panel-heading h2 {
-  color: var(--ink-strong);
+.card-head h3 {
   font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.015em;
-}
-
-.panel-heading p {
-  margin-top: 4px;
-  color: var(--ink-soft);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.panel-heading span,
-.panel-heading a {
-  color: var(--ink-soft);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.pipeline {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.pipeline-step {
-  min-height: 74px;
-  display: grid;
-  grid-template-columns: 28px 42px 1fr;
-  align-items: center;
-  gap: 14px;
-  padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: #fff;
-  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms ease, background 200ms ease, box-shadow 200ms ease;
-}
-
-.pipeline-step:hover {
-  border-color: rgba(37, 99, 235, 0.25);
-  background: #fafbff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
-}
-
-.step-index {
-  color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.pipeline-step strong,
-.module-tile strong {
-  display: block;
   color: var(--ink-strong);
-  font-size: 14.5px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
 }
 
-.pipeline-step em,
-.module-tile em {
-  display: block;
-  margin-top: 4px;
+.card-link {
+  font-size: 15px;
   color: var(--ink-soft);
-  font-size: 12.5px;
-  font-style: normal;
-  line-height: 1.4;
+  font-weight: 600;
 }
 
 .module-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 
-.module-tile {
-  min-height: 88px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  color: var(--ink);
-  background: #fff;
-  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
-}
-
-.module-tile:hover {
-  background: #fafbff;
-  border-color: rgba(37, 99, 235, 0.2);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.05);
-}
-
-.module-tile:hover {
-  transform: translateY(-1px);
-}
-
-.source-list {
+.module-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.source-row {
-  min-height: 76px;
-  display: grid;
-  grid-template-columns: 12px 1fr auto;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
+  gap: 4px;
+  padding: 20px;
+  background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: #fff;
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
-.source-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #cbd5e1;
-  box-shadow: 0 0 0 3px rgba(203, 213, 225, 0.2);
+.module-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
-.source-dot.ready {
-  background: var(--success);
-  box-shadow: 0 0 0 3px rgba(15, 159, 110, 0.15);
-}
-
-.source-row div {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.source-row strong {
+.module-item strong {
+  font-size: 15px;
+  font-weight: 700;
   color: var(--ink-strong);
-  font-size: 14.5px;
-  font-weight: 600;
 }
 
-.source-row em,
-.source-row > span:last-child {
+.module-item span {
+  font-size: 14px;
   color: var(--ink-soft);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 500;
 }
 
-@media (max-width: 1280px) {
-  .workbench-grid {
+/* ─── Side Column ─── */
+.side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.side-card {
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.sync-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sync-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sync-row strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  flex: 1;
+}
+
+.sync-row span {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+.sync-dot.ready {
+  background: var(--success);
+}
+
+.quick-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-link {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--brand);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+  transition: color 150ms ease;
+}
+
+.quick-link:last-child {
+  border-bottom: none;
+}
+
+.quick-link:hover {
+  color: var(--brand-strong);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 960px) {
+  .hero-section {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 920px) {
-  .metric-grid,
+  .hero-chart {
+    display: none;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
   .module-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .metric-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 720px) {
-  .home-page {
-    padding-top: 20px;
+@media (max-width: 640px) {
+  .stats-row {
+    grid-template-columns: 1fr;
   }
 
-  .home-header,
-  .header-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .home-header h1 {
-    font-size: 27px;
-  }
-
-  .metric-grid,
   .module-grid {
     grid-template-columns: 1fr;
   }
 
-  .pipeline-step {
-    grid-template-columns: 24px 42px 1fr;
-  }
-
-  .workbench-grid {
-    grid-template-columns: 1fr;
+  .hero-section {
+    padding: 20px;
   }
 }
 </style>

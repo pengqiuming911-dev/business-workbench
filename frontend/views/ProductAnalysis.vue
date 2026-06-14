@@ -112,8 +112,8 @@
             <tr v-for="item in items" :key="item.id">
               <td class="sticky-col">{{ item.id }}</td>
               <td>{{ item.manager }}</td>
-              <td>{{ item.name }}</td>
-              <td>
+              <td class="name-cell" :title="item.name">{{ truncateName(item.name) }}</td>
+              <td class="status-cell">
                 <span class="badge" :class="item.holding_status === '存续' ? 'badge-green' : 'badge-amber'">
                   {{ item.holding_status }}
                 </span>
@@ -192,6 +192,11 @@ const filterOptions = ref({
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+
+function truncateName(val) {
+  if (!val) return '--'
+  return val.length > 10 ? val.slice(0, 10) + '…' : val
+}
 
 function stripParentheses(val) {
   if (!val) return '--'
@@ -305,7 +310,7 @@ onMounted(async () => {
 
 .filter-group label {
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
   letter-spacing: 0.01em;
@@ -315,14 +320,14 @@ onMounted(async () => {
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
-  font-size: 13px;
+  font-size: 15px;
   width: auto;
   min-width: 120px;
 }
 
 .filter-sep {
   color: var(--ink-faint);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .filter-actions {
@@ -336,7 +341,7 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   color: var(--brand);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   margin-bottom: 18px;
@@ -371,12 +376,12 @@ onMounted(async () => {
 
 .product-table {
   min-width: 3200px;
-  font-size: 12.5px;
+  font-size: 15px;
 }
 
 .product-table th {
   padding: 11px 14px;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   text-transform: none;
   letter-spacing: 0.03em;
@@ -390,7 +395,19 @@ onMounted(async () => {
   white-space: nowrap;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
-  font-size: 12.5px;
+  font-size: 15px;
+}
+
+.name-cell {
+  max-width: 160px;
+  cursor: default;
+}
+
+.status-cell {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  white-space: nowrap;
+  width: 1%;
 }
 
 .product-table tr:hover td {
@@ -428,8 +445,8 @@ onMounted(async () => {
 }
 
 .page-info {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--ink-soft);
   font-weight: 600;
 }
-</style>
+</style>

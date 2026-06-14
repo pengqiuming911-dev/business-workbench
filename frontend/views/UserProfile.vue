@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchLayout>
+  <div class="user-profile-page">
     <h1 class="text-page-title">用户画像</h1>
     <p class="text-body">查询合投用户画像，支持按实际购买人、名义购买人、是否专户客户、客户是否竞品群、客户行业等条件筛选。</p>
 
@@ -101,12 +101,11 @@
     <div v-else-if="!loading && searched" class="empty-state">
       未找到匹配的用户，请调整搜索条件
     </div>
-  </WorkbenchLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import PanelCard from '../components/PanelCard.vue'
 
 const filters = ref({
@@ -173,6 +172,6 @@ function fmtAmt(v) {
 <style scoped>
 .search-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
 .result-count { font-size: 13px; color: var(--ink-soft); }
-.positive { color: var(--success); font-weight: 700; }
-.negative { color: var(--danger); font-weight: 700; }
+.positive { color: var(--success); }
+.negative { color: var(--danger); }
 </style>
