@@ -28,17 +28,19 @@
         </label>
       </div>
       <div class="filter-group">
-        <label>返还对象</label>
+        <label>返佣对象</label>
         <select v-model="filters.rebateTarget" class="input input-sm">
           <option value="">全部</option>
           <option v-for="opt in filterOptions.rebateTargets" :key="opt" :value="opt">{{ opt }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>存续状态</label>
+        <label>持有状态</label>
         <select v-model="filters.holdingStatus" class="input input-sm">
           <option value="">全部</option>
-          <option v-for="opt in filterOptions.holdingStatuses" :key="opt" :value="opt">{{ opt }}</option>
+          <option v-for="opt in filterOptions.holdingStatuses" :key="opt" :value="opt">
+            {{ normalizeHoldingStatus(opt) }}
+          </option>
         </select>
       </div>
       <div class="filter-actions">
@@ -54,7 +56,7 @@
 
     <div v-show="showAdvanced" class="filter-bar advanced-bar">
       <div class="filter-group">
-        <label>产品名字</label>
+        <label>产品名称</label>
         <input v-model="filters.productName" type="text" class="input input-sm" placeholder="模糊搜索" />
       </div>
       <div class="filter-group">
@@ -71,22 +73,24 @@
       </div>
     </div>
 
+    <div class="update-hint">今日点位每日 15:05 自动更新，也支持手动刷新。</div>
+
     <div v-if="loading" class="loading-state">正在加载数据...</div>
     <div v-else-if="items.length > 0">
       <div class="table-wrap">
         <table class="data-table tx-table">
           <thead>
             <tr>
-              <th>产品名字</th>
+              <th>产品名称</th>
               <th>姓名</th>
               <th>实际申购人</th>
-              <th>金额/万</th>
+              <th>金额 / 万</th>
               <th>申购费返还比例</th>
               <th>管理费返还比例</th>
               <th>业绩报酬返还比例</th>
-              <th>返还对象</th>
+              <th>返佣对象</th>
               <th>申购日期</th>
-              <th>存续状态</th>
+              <th>持有状态</th>
               <th>完结日期</th>
               <th>挂钩标的</th>
               <th>结构类型</th>
@@ -94,10 +98,10 @@
               <th>观察日</th>
               <th>入场价</th>
               <th>首月敲出</th>
-              <th>每月降敲</th>
+              <th>每月递减</th>
               <th>敲出价</th>
               <th>今日点位</th>
-              <th>敲出线以上/下</th>
+              <th>敲出线以上 / 以下</th>
               <th>降落伞</th>
               <th>派息障碍（如有）</th>
               <th>月票息（税费后）</th>
@@ -119,7 +123,7 @@
               <td>{{ item.flight_date || '--' }}</td>
               <td>
                 <span class="badge" :class="isActiveStatus(item.holding_status) ? 'badge-green' : 'badge-amber'">
-                  {{ item.holding_status || '--' }}
+                  {{ normalizeHoldingStatus(item.holding_status) }}
                 </span>
               </td>
               <td>{{ item.complete_date || '--' }}</td>
@@ -139,7 +143,7 @@
                 <button
                   v-if="item.underlying"
                   class="refresh-btn"
-                  title="刷新价格"
+                  title="刷新今日点位"
                   @click="refreshPrice(item)"
                 >↻</button>
               </td>
@@ -206,11 +210,35 @@ const filterOptions = ref({
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
 function isCompletedStatus(val) {
-  return typeof val === 'string' && val.includes('完结')
+  if (typeof val !== 'string') return false
+  return ['完结', '已完结', '瀹岀粨', '宸插畬缁'].some(keyword => val.includes(keyword))
 }
 
 function isActiveStatus(val) {
   return !isCompletedStatus(val)
+}
+
+function normalizeHoldingStatus(val) {
+  if (!val) return '--'
+  if (isCompletedStatus(val)) return '已完结'
+  return val
+}
+
+function normalizeObservationType(val) {
+  if (!val) return ''
+  if (val.includes('派息') || val.includes('敲出')) return val
+  if (val.includes('娲炬伅') && val.includes('鏁插嚭')) return '派息 / 敲出'
+  if (val.includes('娲炬伅')) return '派息'
+  if (val.includes('鏁插嚭')) return '敲出'
+  return val
+}
+
+function normalizeKnockoutPosition(val) {
+  if (!val) return '--'
+  if (val.includes('以上') || val.includes('浠ヤ笂')) return '以上'
+  if (val.includes('以下') || val.includes('浠ヤ笅')) return '以下'
+  if (isCompletedStatus(val)) return '已完结'
+  return val
 }
 
 function displayObservationDay(item) {
@@ -220,7 +248,7 @@ function displayObservationDay(item) {
 
 function displayObservationType(item) {
   if (isCompletedStatus(item.holding_status)) return ''
-  return item.observation_type || ''
+  return normalizeObservationType(item.observation_type || '')
 }
 
 function displayTodayPrice(item) {
@@ -229,11 +257,10 @@ function displayTodayPrice(item) {
 
 function displayKnockoutPosition(item) {
   if (isCompletedStatus(item.holding_status)) return '已完结'
-  return item.knockout_position || '--'
+  return normalizeKnockoutPosition(item.knockout_position || '--')
 }
 
 function knockoutPositionClass(val) {
-  if (!val) return ''
   if (val === '以上') return 'pos-above'
   if (val === '以下') return 'pos-below'
   if (val === '已完结') return 'pos-done'
@@ -432,6 +459,13 @@ onMounted(async () => {
   transform: rotate(90deg);
 }
 
+.update-hint {
+  margin-bottom: 18px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .tx-table {
   min-width: 3400px;
   font-size: 15px;
@@ -491,6 +525,26 @@ onMounted(async () => {
 .refresh-btn:hover {
   background: var(--brand-soft);
   border-color: var(--brand);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding: 0 4px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-info {
+  font-size: 15px;
+  color: var(--ink-soft);
+  font-weight: 600;
 }
 
 .pos-above { color: var(--success); }

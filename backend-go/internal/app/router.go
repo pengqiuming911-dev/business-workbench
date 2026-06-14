@@ -963,8 +963,7 @@ func (s *Server) executeScheduledObservationPush(ctx context.Context, webhookURL
 
 func (s *Server) startScheduler() {
 	s.Cron.AddFunc("30 11 * * 1-5", s.scheduledPriceUpdate)
-	s.Cron.AddFunc("0 15 * * 1-5", s.scheduledPriceUpdate)
-	s.Cron.AddFunc("30 15 * * 1-5", s.scheduledPriceUpdate)
+	s.Cron.AddFunc("5 15 * * 1-5", s.scheduledPriceUpdate)
 	s.Cron.AddFunc("5 15 * * 1-5", s.generateAutoPosters)
 	s.Cron.AddFunc("0 10 * * *", s.scheduledObservationEmail)
 	s.Cron.AddFunc("10 15 * * *", s.scheduledObservationEmail)
@@ -2569,4 +2568,19 @@ var schedulerInstance *cron.Cron
 
 func GetCron() *cron.Cron {
 	return schedulerInstance
+}
+
+func numberValue(v any) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case int64:
+		return float64(val)
+	case string:
+		var out float64
+		_, _ = fmt.Sscanf(val, "%f", &out)
+		return out
+	default:
+		return 0
+	}
 }
