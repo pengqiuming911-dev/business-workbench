@@ -48,6 +48,14 @@ fi
 chmod +x "${RELEASE_DIR}/server"
 ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 
+if [ -e "${APP_DIR}/frontend" ] && [ ! -L "${APP_DIR}/frontend" ]; then
+  rm -rf "${APP_DIR}/frontend"
+fi
+
+if [ -e "${APP_DIR}/backend-go" ] && [ ! -L "${APP_DIR}/backend-go" ]; then
+  rm -rf "${APP_DIR}/backend-go"
+fi
+
 ln -sfn "${CURRENT_LINK}/frontend" "${APP_DIR}/frontend"
 ln -sfn "${CURRENT_LINK}/backend-go" "${APP_DIR}/backend-go"
 
@@ -87,6 +95,12 @@ sudo journalctl -u "${SERVICE_NAME}" -n 100 --no-pager || true
 
 if [ -n "${PREVIOUS_TARGET}" ] && [ -d "${PREVIOUS_TARGET}" ]; then
   ln -sfn "${PREVIOUS_TARGET}" "${CURRENT_LINK}"
+  if [ -e "${APP_DIR}/frontend" ] && [ ! -L "${APP_DIR}/frontend" ]; then
+    rm -rf "${APP_DIR}/frontend"
+  fi
+  if [ -e "${APP_DIR}/backend-go" ] && [ ! -L "${APP_DIR}/backend-go" ]; then
+    rm -rf "${APP_DIR}/backend-go"
+  fi
   ln -sfn "${CURRENT_LINK}/frontend" "${APP_DIR}/frontend"
   ln -sfn "${CURRENT_LINK}/backend-go" "${APP_DIR}/backend-go"
   sudo systemctl restart "${SERVICE_NAME}" || true
