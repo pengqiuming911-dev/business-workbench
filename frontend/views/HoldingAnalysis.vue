@@ -22,11 +22,37 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import ProductAnalysis from './ProductAnalysis.vue'
 import CustomerHolding from './CustomerHolding.vue'
 
-const activeTab = ref('product')
+const route = useRoute()
+const router = useRouter()
+
+function normalizeTab(value) {
+  return value === 'customer' ? 'customer' : 'product'
+}
+
+const activeTab = ref(normalizeTab(route.query.tab))
+
+watch(
+  () => route.query.tab,
+  (value) => {
+    activeTab.value = normalizeTab(value)
+  },
+)
+
+watch(activeTab, (value) => {
+  const next = normalizeTab(value)
+  if (route.query.tab === next) return
+  router.replace({
+    query: {
+      ...route.query,
+      tab: next,
+    },
+  })
+})
 </script>
 
 <style scoped>

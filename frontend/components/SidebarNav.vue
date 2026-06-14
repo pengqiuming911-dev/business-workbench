@@ -12,17 +12,44 @@
       </div>
 
       <nav class="sidebar-nav">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: currentPath === item.path }"
-          @click="emit('navigate')"
-        >
-          <component :is="item.icon" :size="20" :stroke-width="2" />
-          <span v-if="!collapsed">{{ item.title }}</span>
-        </RouterLink>
+        <template v-for="item in navItems" :key="item.path || item.title">
+          <!-- Regular nav item -->
+          <RouterLink
+            v-if="!item.children"
+            :to="item.path"
+            class="nav-item"
+            :class="{ active: currentPath === item.path }"
+            @click="emit('navigate')"
+          >
+            <component :is="item.icon" :size="20" :stroke-width="2" />
+            <span v-if="!collapsed">{{ item.title }}</span>
+          </RouterLink>
+
+          <!-- Nav group with children -->
+          <template v-else>
+            <button
+              class="nav-item nav-group-toggle"
+              :class="{ active: isGroupActive(item), open: rebateOpen }"
+              @click="collapsed ? null : (rebateOpen = !rebateOpen)"
+            >
+              <component :is="item.icon" :size="20" :stroke-width="2" />
+              <span v-if="!collapsed">{{ item.title }}</span>
+              <ChevronDown v-if="!collapsed" :size="14" :stroke-width="2" class="chevron" />
+            </button>
+            <div v-if="!collapsed && rebateOpen" class="nav-children">
+              <RouterLink
+                v-for="child in item.children"
+                :key="child.path"
+                :to="child.path"
+                class="nav-item nav-child"
+                :class="{ active: currentPath === child.path }"
+                @click="emit('navigate')"
+              >
+                <span>{{ child.title }}</span>
+              </RouterLink>
+            </div>
+          </template>
+        </template>
       </nav>
 
       <div class="sidebar-bottom">
@@ -40,7 +67,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
   LayoutDashboard,
@@ -52,6 +79,8 @@ import {
   Clock,
   User,
   ChevronsLeft,
+  ChevronDown,
+  Receipt,
 } from '@lucide/vue'
 import logoImg from '../assets/business-workbench-logo.jpg'
 
@@ -65,13 +94,32 @@ const emit = defineEmits(['navigate', 'close', 'collapse'])
 const route = useRoute()
 const currentPath = computed(() => route.path)
 
+const rebateOpen = ref(false)
+
+// Auto-expand rebate group when on a rebate page
+watch(currentPath, (p) => {
+  if (p.startsWith('/rebate')) rebateOpen.value = true
+}, { immediate: true })
+
+function isGroupActive(item) {
+  return item.children?.some(c => currentPath.value === c.path)
+}
+
 const navItems = [
   { path: '/', title: '总览', icon: LayoutDashboard },
   { path: '/data-preparation', title: '简报', icon: FileSpreadsheet },
-  { path: '/holding-analysis', title: '监控', icon: Activity },
+  { path: '/holding-analysis', title: '持有产品分析', icon: Activity },
   { path: '/product-report', title: '报告', icon: FileText },
   { path: '/push-settings', title: '投递', icon: Send },
   { path: '/channel-analysis', title: '分析', icon: BarChart3 },
+  {
+    title: '返费',
+    icon: Receipt,
+    children: [
+      { path: '/rebate-pending', title: '待返费分析' },
+      { path: '/rebate-completed', title: '已返费分析' },
+    ],
+  },
 ]
 </script>
 
@@ -177,6 +225,36 @@ const navItems = [
 .nav-item.active {
   background: var(--brand-soft);
   color: var(--brand);
+}
+
+.nav-group-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.nav-group-toggle .chevron {
+  margin-left: auto;
+  transition: transform 180ms ease;
+  color: var(--ink-faint);
+}
+
+.nav-group-toggle.open .chevron {
+  transform: rotate(180deg);
+}
+
+.nav-children {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.nav-child {
+  padding-left: 44px !important;
+  font-size: 15px !important;
+  height: 38px !important;
 }
 
 .sidebar-bottom {

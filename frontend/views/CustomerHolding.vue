@@ -3,7 +3,7 @@
     <div class="filter-bar">
       <div class="filter-group">
         <label>客户</label>
-        <input v-model="filters.customerName" type="text" class="input input-sm" placeholder="输入客户名" />
+        <input v-model="filters.customerName" type="text" class="input input-sm" placeholder="输入客户关键词" />
         <label class="checkbox-label">
           <input v-model="filters.matchName" type="checkbox" />
           姓名
@@ -48,7 +48,7 @@
     </div>
 
     <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
-      <span class="chevron" :class="{ open: showAdvanced }">›</span>
+      <span class="chevron" :class="{ open: showAdvanced }">▸</span>
       高级筛选
     </div>
 
@@ -118,7 +118,7 @@
               <td>{{ item.rebate_target || '--' }}</td>
               <td>{{ item.flight_date || '--' }}</td>
               <td>
-                <span class="badge" :class="item.holding_status === '存续' ? 'badge-green' : 'badge-amber'">
+                <span class="badge" :class="isActiveStatus(item.holding_status) ? 'badge-green' : 'badge-amber'">
                   {{ item.holding_status || '--' }}
                 </span>
               </td>
@@ -127,15 +127,15 @@
               <td>{{ item.structure_type || '--' }}</td>
               <td>{{ item.lock_period || '--' }}</td>
               <td class="obs-cell">
-                <span>{{ item.observation_day || '--' }}</span>
-                <span v-if="item.observation_type" class="obs-type">{{ item.observation_type }}</span>
+                <span>{{ displayObservationDay(item) }}</span>
+                <span v-if="displayObservationType(item)" class="obs-type">{{ displayObservationType(item) }}</span>
               </td>
               <td>{{ item.entry_price ?? '--' }}</td>
               <td>{{ item.first_knockout_ratio ?? '--' }}</td>
               <td>{{ item.monthly_decrease ?? '--' }}</td>
               <td>{{ item.knockout_price ?? '--' }}</td>
               <td>
-                <span>{{ item.today_price ?? '--' }}</span>
+                <span>{{ displayTodayPrice(item) }}</span>
                 <button
                   v-if="item.underlying"
                   class="refresh-btn"
@@ -143,8 +143,8 @@
                   @click="refreshPrice(item)"
                 >↻</button>
               </td>
-              <td :class="knockoutPositionClass(item.knockout_position)">
-                {{ item.knockout_position || '--' }}
+              <td :class="knockoutPositionClass(displayKnockoutPosition(item))">
+                {{ displayKnockoutPosition(item) }}
               </td>
               <td>{{ item.parachute ?? '--' }}</td>
               <td>{{ item.dividend_barrier ?? '--' }}</td>
@@ -171,7 +171,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const loading = ref(false)
 const loaded = ref(false)
@@ -204,6 +204,33 @@ const filterOptions = ref({
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+
+function isCompletedStatus(val) {
+  return typeof val === 'string' && val.includes('完结')
+}
+
+function isActiveStatus(val) {
+  return !isCompletedStatus(val)
+}
+
+function displayObservationDay(item) {
+  if (isCompletedStatus(item.holding_status)) return '已完结'
+  return item.observation_day || '--'
+}
+
+function displayObservationType(item) {
+  if (isCompletedStatus(item.holding_status)) return ''
+  return item.observation_type || ''
+}
+
+function displayTodayPrice(item) {
+  return item.today_price ?? '--'
+}
+
+function displayKnockoutPosition(item) {
+  if (isCompletedStatus(item.holding_status)) return '已完结'
+  return item.knockout_position || '--'
+}
 
 function knockoutPositionClass(val) {
   if (!val) return ''
@@ -295,6 +322,9 @@ async function refreshPrice(item) {
     const data = await res.json()
     if (data.price != null) {
       item.today_price = data.price
+      if (!isCompletedStatus(item.holding_status) && item.knockout_price != null) {
+        item.knockout_position = Number(data.price) >= Number(item.knockout_price) ? '以上' : '以下'
+      }
     }
   } catch {}
 }
@@ -465,4 +495,5 @@ onMounted(async () => {
 
 .pos-above { color: var(--success); }
 .pos-below { color: var(--danger); }
+.pos-done { color: var(--ink-soft); }
 </style>
