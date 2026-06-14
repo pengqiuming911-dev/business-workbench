@@ -14,10 +14,6 @@
           <button class="topbar-btn" type="button" @click="searchOpen = true">
             <Search :size="18" :stroke-width="2" />
           </button>
-          <button class="topbar-btn" type="button">
-            <Bell :size="18" :stroke-width="2" />
-          </button>
-          <div class="topbar-avatar"></div>
         </div>
       </header>
 
@@ -29,12 +25,12 @@
     <AgentDrawer :open="drawerOpen" @close="drawerOpen = false" />
 
     <button
+      v-show="!drawerOpen"
       class="agent-fab"
       type="button"
-      @click="drawerOpen = !drawerOpen"
+      @click="drawerOpen = true"
     >
-      <X v-if="drawerOpen" :size="24" :stroke-width="2" color="#fff" />
-      <MessageSquare v-else :size="24" :stroke-width="2" color="#fff" />
+      <MessageSquare :size="24" :stroke-width="2" color="#fff" />
     </button>
 
     <GlobalSearch v-model:open="searchOpen" />
@@ -43,7 +39,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Search, Bell, MessageSquare, X } from '@lucide/vue'
+import { Search, MessageSquare } from '@lucide/vue'
 import SidebarNav from './SidebarNav.vue'
 import AgentDrawer from './AgentDrawer.vue'
 import GlobalSearch from './GlobalSearch.vue'
@@ -124,15 +120,6 @@ onUnmounted(() => {
 .topbar-btn:hover {
   background: var(--brand-soft);
   color: var(--brand);
-}
-
-.topbar-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--brand);
-  opacity: 0.7;
-  margin-left: 4px;
 }
 
 .workbench-main {

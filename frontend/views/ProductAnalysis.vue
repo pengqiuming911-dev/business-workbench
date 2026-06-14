@@ -18,10 +18,16 @@
       </div>
       <div class="filter-group">
         <label>管理人</label>
-        <select v-model="filters.manager" class="input input-sm">
-          <option value="">全部</option>
+        <input
+          v-model="filters.manager"
+          list="manager-options"
+          type="text"
+          class="input input-sm"
+          placeholder="输入关键字模糊匹配"
+        />
+        <datalist id="manager-options">
           <option v-for="opt in filterOptions.managers" :key="opt" :value="opt">{{ opt }}</option>
-        </select>
+        </datalist>
       </div>
       <div class="filter-group">
         <label>完结日期</label>

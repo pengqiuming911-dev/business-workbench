@@ -1271,12 +1271,11 @@ func (s *Store) QueryHoldingProducts(f ProductFilter) ([]model.Product, error) {
 		args = append(args, f.IssueDateEnd)
 	}
 	if f.HoldingStatus != "" {
-		query += " AND holding_status = ?"
-		args = append(args, f.HoldingStatus)
+		query, args = appendHoldingStatusClause(query, args, f.HoldingStatus)
 	}
 	if f.Manager != "" {
-		query += " AND manager = ?"
-		args = append(args, f.Manager)
+		query += " AND manager LIKE ?"
+		args = append(args, "%"+f.Manager+"%")
 	}
 	if f.CompleteDateStart != "" {
 		query += " AND complete_date >= ?"
@@ -1341,8 +1340,7 @@ func (s *Store) QueryHoldingTransactions(f TransactionFilter) ([]model.Transacti
 		args = append(args, f.RebateTarget)
 	}
 	if f.HoldingStatus != "" {
-		query += " AND holding_status = ?"
-		args = append(args, f.HoldingStatus)
+		query, args = appendHoldingStatusClause(query, args, f.HoldingStatus)
 	}
 	if f.FlightDateStart != "" {
 		query += " AND flight_date >= ?"
@@ -1366,6 +1364,21 @@ func (s *Store) QueryHoldingTransactions(f TransactionFilter) ([]model.Transacti
 	}
 	query += " ORDER BY flight_date DESC"
 	return s.scanTransactions(query, args...)
+}
+
+func appendHoldingStatusClause(query string, args []any, value string) (string, []any) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return query, args
+	}
+	if strings.Contains(value, "已完结") || strings.Contains(value, "完结") {
+		query += " AND (holding_status LIKE ? OR holding_status LIKE ? OR holding_status LIKE ? OR holding_status = ?)"
+		args = append(args, "%完结%", "%已完结%", "%瀹岀粨%", value)
+		return query, args
+	}
+	query += " AND holding_status = ?"
+	args = append(args, value)
+	return query, args
 }
 
 func (s *Store) scanTransactions(query string, args ...any) ([]model.TransactionRow, error) {

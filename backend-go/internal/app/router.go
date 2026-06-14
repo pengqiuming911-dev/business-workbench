@@ -2167,7 +2167,7 @@ func (s *Server) holdingProducts(c *gin.Context) {
 			"id":                   p.ID,
 			"name":                 p.Name,
 			"manager":              p.Manager,
-			"holding_status":       p.HoldingStatus,
+			"holding_status":       normalizeHoldingStatusLabel(p.HoldingStatus),
 			"issue_date":           p.IssueDate,
 			"structure_type":       p.StructureType,
 			"code":                 p.Code,
@@ -2193,7 +2193,7 @@ func (s *Server) holdingProducts(c *gin.Context) {
 		}
 		item["knock_in"] = p.KnockIn
 		status := strings.TrimSpace(p.HoldingStatus)
-		if strings.Contains(status, "存续") {
+		if isActiveHoldingStatus(status) {
 			if p.DurationDays != nil && *p.DurationDays > 0 {
 				months := float64(*p.DurationDays) / 30.0
 				item["duration_months"] = math.Round(months*10) / 10
@@ -2269,7 +2269,7 @@ func (s *Server) holdingTransactions(c *gin.Context) {
 			"performance_fee_ratio": t.PerformanceFeeRatio,
 			"rebate_target":         t.RebateTarget,
 			"flight_date":           t.FlightDate,
-			"holding_status":        t.HoldingStatus,
+			"holding_status":        normalizeHoldingStatusLabel(t.HoldingStatus),
 			"complete_date":         t.CompleteDate,
 			"flight_id":             t.FlightID,
 			"underlying":            t.Underlying,
@@ -2320,7 +2320,7 @@ func (s *Server) holdingFilterOptions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"managers":         managers,
 		"statuses":         statuses,
-		"holding_statuses": uniqueStrings(statuses, txStatuses),
+		"holding_statuses": normalizeHoldingStatusOptions(uniqueStrings(statuses, txStatuses)),
 		"structure_types":  structureTypes,
 		"codes":            codes,
 		"lock_months":      lockMonths,
@@ -2416,15 +2416,15 @@ func matchesObservationFilters(item map[string]any, start, end string, observeDi
 	obsDay, _ := item["observation_day"].(string)
 	obsType, _ := item["observation_type"].(string)
 	obsDay = strings.TrimSpace(obsDay)
-	obsType = strings.TrimSpace(obsType)
+	obsType = normalizeObservationType(strings.TrimSpace(obsType))
 
 	if start != "" {
-		if obsDay == "" || obsDay == "宸插畬缁?" || obsDay < start {
+		if obsDay == "" || isCompletedHoldingStatus(obsDay) || obsDay < start {
 			return false
 		}
 	}
 	if end != "" {
-		if obsDay == "" || obsDay == "宸插畬缁?" || obsDay > end {
+		if obsDay == "" || isCompletedHoldingStatus(obsDay) || obsDay > end {
 			return false
 		}
 	}
@@ -2449,7 +2449,7 @@ func matchesObservationFilters(item map[string]any, start, end string, observeDi
 
 func (s *Server) computeObservationDay(t model.TransactionRow, product model.Product, hasProduct bool, today string) (string, string) {
 	status := strings.TrimSpace(t.HoldingStatus)
-	if strings.Contains(status, "完结") {
+	if isCompletedHoldingStatus(status) {
 		return "已完结", ""
 	}
 	if !hasProduct || product.IssueDate == "" {
@@ -2468,7 +2468,7 @@ func (s *Server) computeObservationDay(t model.TransactionRow, product model.Pro
 		if adjusted >= today {
 			observeKnockout := months >= lockMonths
 			if hasDividend && observeKnockout {
-				return adjusted, "派息/敲出"
+				return adjusted, "派息 / 敲出"
 			} else if hasDividend {
 				return adjusted, "派息"
 			} else if observeKnockout {
@@ -2486,18 +2486,18 @@ func (s *Server) computeKnockoutAndPrice(t model.TransactionRow, product model.P
 	}
 
 	status := strings.TrimSpace(t.HoldingStatus)
-	if strings.Contains(status, "完结") {
+	if isCompletedHoldingStatus(status) {
 		allObs := observations.DatesUntil(product, today)
 		if len(allObs) > 0 {
 			lastObs := allObs[len(allObs)-1]
 			kp := observations.ComputeKnockoutPrice(product, lastObs.MonthsSinceEntry)
-			return kp, nil, ""
+			return kp, nil, "已完结"
 		}
-		return nil, nil, ""
+		return nil, nil, "已完结"
 	}
 
 	obsDay, _ := s.computeObservationDay(t, product, hasProduct, today)
-	if obsDay == "" || obsDay == "已完结" {
+	if obsDay == "" || isCompletedHoldingStatus(obsDay) {
 		var todayPrice *float64
 		if product.Code != "" {
 			if cached, err := s.store.LatestPrice(product.Code); err == nil && cached != nil {
@@ -2552,6 +2552,71 @@ func (s *Server) computeKnockoutAndPrice(t model.TransactionRow, product model.P
 		}
 	}
 	return knockoutPrice, todayPrice, position
+}
+
+func isCompletedHoldingStatus(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	keywords := []string{"已完结", "完结", "宸插畬缁?", "瀹岀粨"}
+	for _, keyword := range keywords {
+		if strings.Contains(value, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func isActiveHoldingStatus(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || isCompletedHoldingStatus(value) {
+		return false
+	}
+	return strings.Contains(value, "存续") || strings.Contains(value, "持有") || strings.Contains(value, "瀛樼画")
+}
+
+func normalizeObservationType(value string) string {
+	value = strings.TrimSpace(value)
+	switch {
+	case value == "":
+		return ""
+	case strings.Contains(value, "派息") && strings.Contains(value, "敲出"):
+		return "派息 / 敲出"
+	case strings.Contains(value, "娲炬伅") && strings.Contains(value, "鏁插嚭"):
+		return "派息 / 敲出"
+	case strings.Contains(value, "派息"), strings.Contains(value, "娲炬伅"):
+		return "派息"
+	case strings.Contains(value, "敲出"), strings.Contains(value, "鏁插嚭"):
+		return "敲出"
+	default:
+		return value
+	}
+}
+
+func normalizeHoldingStatusLabel(value string) string {
+	if isCompletedHoldingStatus(value) {
+		return "已完结"
+	}
+	return strings.TrimSpace(value)
+}
+
+func normalizeHoldingStatusOptions(values []string) []string {
+	seen := map[string]struct{}{}
+	var result []string
+	for _, value := range values {
+		label := normalizeHoldingStatusLabel(value)
+		if label == "" {
+			continue
+		}
+		if _, ok := seen[label]; ok {
+			continue
+		}
+		seen[label] = struct{}{}
+		result = append(result, label)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func monthsBetween(a, b time.Time) int {

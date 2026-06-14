@@ -89,7 +89,6 @@ const stats = ref({
   totalProducts: 0,
   activeProducts: 0,
   totalCustomers: 0,
-  totalChannels: 0,
 })
 const syncStatus = ref({})
 const coinvestStatus = ref({})
@@ -98,7 +97,6 @@ const statCards = computed(() => [
   { label: '产品总数', value: stats.value.totalProducts.toLocaleString('zh-CN'), note: '全部产品' },
   { label: '存续产品', value: stats.value.activeProducts.toLocaleString('zh-CN'), note: '持有中' },
   { label: '客户数量', value: stats.value.totalCustomers.toLocaleString('zh-CN'), note: '已登记' },
-  { label: '渠道数量', value: stats.value.totalChannels.toLocaleString('zh-CN'), note: '活跃渠道' },
 ])
 
 const modules = [
@@ -106,6 +104,7 @@ const modules = [
   { path: '/product-completion', title: '观察日历', desc: '敲出 / 派息' },
   { path: '/product-report', title: '产品报告', desc: '运行材料' },
   { path: '/holding-analysis', title: '持有产品分析', desc: '产品与客户持有' },
+  { path: '/rebate-analysis', title: '返费分析', desc: '待返费与已返费' },
   { path: '/user-profile', title: '用户画像', desc: '条件筛选' },
   { path: '/customer-churn', title: '流失识别', desc: '未复购客户' },
 ]
@@ -205,7 +204,7 @@ onMounted(async () => {
 /* ─── Stats ─── */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
