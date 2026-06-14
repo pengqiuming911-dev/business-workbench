@@ -33,6 +33,7 @@ type StreamCallbacks struct {
 	OnReasoning func(string)
 	OnDelta     func(string)
 	OnToolCall  func(string)
+	OnToolDone  func(string)
 }
 
 func NewService(cfg config.Config, store *db.Store) *Service {
@@ -78,6 +79,9 @@ func (s *Service) StreamChat(ctx context.Context, history []model.AgentMessage, 
 				callbacks.OnToolCall(toolCall.Function.Name)
 			}
 			toolResult := s.executeTool(toolCall.Function.Name, toolCall.Function.Arguments)
+			if callbacks.OnToolDone != nil {
+				callbacks.OnToolDone(toolCall.Function.Name)
+			}
 			resultJSON, _ := json.Marshal(toolResult)
 			messages = append(messages, chatMessage{
 				Role:       "tool",

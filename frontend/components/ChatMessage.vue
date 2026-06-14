@@ -4,23 +4,21 @@
       <component :is="role === 'user' ? User : Bot" :size="17" :stroke-width="2" />
     </div>
     <div class="message-column">
-      <div class="message-header">
-        {{ role === 'user' ? '你' : '智能助手' }}
-      </div>
-
-      <div v-if="reasoning" class="reasoning-block">
-        <div class="reasoning-label">思考过程</div>
-        <div class="reasoning-content" v-html="renderedReasoning"></div>
-      </div>
-
-      <div class="message-card">
-        <div class="message-content" v-html="renderedContent"></div>
-      </div>
-
       <div v-if="toolCalls && toolCalls.length" class="tool-calls">
-        <div v-for="(tc, i) in toolCalls" :key="i" class="tool-call-badge">
-          调用工具：{{ tc.function?.name || tc }}
+        <div
+          v-for="(tc, i) in toolCalls"
+          :key="i"
+          class="tool-call-badge"
+          :class="{ 'is-calling': tc.status === 'calling' }"
+        >
+          <span v-if="tc.status === 'calling'" class="call-spinner"></span>
+          <span v-else class="call-check">✓</span>
+          {{ tc.name || tc.function?.name || tc }}
         </div>
+      </div>
+
+      <div v-if="hasContent || streaming" class="message-card">
+        <div class="message-content" v-html="renderedContent"></div>
       </div>
     </div>
   </div>
@@ -35,7 +33,6 @@ import DOMPurify from 'dompurify'
 const props = defineProps({
   role: { type: String, required: true },
   content: { type: String, default: '' },
-  reasoning: { type: String, default: '' },
   streaming: { type: Boolean, default: false },
   toolCalls: { type: Array, default: null },
 })
@@ -45,14 +42,11 @@ marked.setOptions({
   gfm: true,
 })
 
+const hasContent = computed(() => !!props.content)
+
 const renderedContent = computed(() => {
   if (!props.content) return ''
   return DOMPurify.sanitize(marked.parse(props.content))
-})
-
-const renderedReasoning = computed(() => {
-  if (!props.reasoning) return ''
-  return DOMPurify.sanitize(marked.parse(props.reasoning))
 })
 </script>
 
@@ -88,14 +82,6 @@ const renderedReasoning = computed(() => {
   min-width: 0;
 }
 
-.message-header {
-  margin-bottom: 8px;
-  color: #506078;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
 .message-card {
   border: 1px solid rgba(15, 23, 42, 0.07);
   border-radius: 22px;
@@ -116,35 +102,10 @@ const renderedReasoning = computed(() => {
   word-break: break-word;
 }
 
-.reasoning-block {
-  margin-bottom: 10px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  background: rgba(248, 250, 252, 0.94);
-}
-
-.reasoning-label {
-  margin-bottom: 6px;
-  color: #8d98a8;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.reasoning-content {
-  color: #66758b;
-  font-size: 13px;
-  line-height: 1.75;
-}
-
-.reasoning-content :deep(p),
 .message-content :deep(p) {
   margin: 0 0 10px 0;
 }
 
-.reasoning-content :deep(p:last-child),
 .message-content :deep(p:last-child) {
   margin-bottom: 0;
 }
@@ -200,16 +161,43 @@ const renderedReasoning = computed(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 .tool-call-badge {
-  padding: 5px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
   border-radius: 999px;
-  background: rgba(47, 108, 246, 0.08);
-  color: #3165d4;
+  background: rgba(100, 116, 139, 0.08);
+  color: #5b6b80;
   font-size: 12px;
   font-weight: 600;
+}
+
+.tool-call-badge.is-calling {
+  background: rgba(47, 108, 246, 0.09);
+  color: #2f6cf6;
+}
+
+.call-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(47, 108, 246, 0.25);
+  border-top-color: #2f6cf6;
+  animation: spin 0.8s linear infinite;
+}
+
+.call-check {
+  color: #22a87a;
+  font-size: 12px;
+  line-height: 1;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .streaming .message-content::after {

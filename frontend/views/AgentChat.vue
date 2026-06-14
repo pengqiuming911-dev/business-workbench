@@ -44,13 +44,6 @@
       </aside>
 
       <section class="chat-stage">
-        <header class="chat-topbar">
-          <div>
-            <div class="chat-kicker">Business Workbench AI</div>
-            <h1 class="chat-title">智能业务助手</h1>
-          </div>
-        </header>
-
         <div ref="messagesContainer" class="messages-area">
           <div v-if="messages.length === 0" class="welcome-state">
             <h2 class="welcome-title">开始一段更清晰的业务对话</h2>
@@ -69,7 +62,6 @@
             <ChatMessage
               :role="msg.role"
               :content="msg.content"
-              :reasoning="msg.reasoning"
               :streaming="msg.streaming"
               :tool-calls="msg.tool_calls_display"
             />
@@ -109,7 +101,6 @@ import { nextTick, onMounted, ref } from 'vue'
 import WorkbenchLayout from '../components/WorkbenchLayout.vue'
 import ChatMessage from '../components/ChatMessage.vue'
 import {
-  Bot,
   MessageSquare,
   PanelRightClose,
   PanelRightOpen,
@@ -148,16 +139,24 @@ async function selectConversation(id) {
     const res = await fetch(`/api/agent/conversations/${id}/messages`)
     if (res.ok) {
       const msgs = await res.json()
-      messages.value = msgs.map((m) => ({
-        ...m,
-        tool_calls: null,
-        tool_calls_display: m.tool_calls
-          ? typeof m.tool_calls === 'string'
-            ? JSON.parse(m.tool_calls)
-            : m.tool_calls
-          : null,
-        streaming: false,
-      }))
+      messages.value = msgs.map((m) => {
+        let display = null
+        if (m.tool_calls) {
+          const raw = typeof m.tool_calls === 'string' ? JSON.parse(m.tool_calls) : m.tool_calls
+          if (Array.isArray(raw)) {
+            display = raw.map((tc) => ({
+              name: tc.function?.name || tc.name || tc,
+              status: 'done',
+            }))
+          }
+        }
+        return {
+          ...m,
+          tool_calls: null,
+          tool_calls_display: display,
+          streaming: false,
+        }
+      })
     }
   } catch {}
   scrollToBottom()
@@ -202,7 +201,7 @@ async function sendMessage() {
   messages.value.push({
     _tempId: assistantMsgId,
     role: 'assistant',
-    content: '正在思考...',
+    content: '',
     reasoning: '',
     streaming: true,
     tool_calls_display: [],
@@ -268,7 +267,14 @@ async function sendMessage() {
           const msg = messages.value.find((m) => m._tempId === assistantMsgId)
           if (msg) {
             if (!msg.tool_calls_display) msg.tool_calls_display = []
-            msg.tool_calls_display.push({ function: { name: event.name } })
+            msg.tool_calls_display.push({ name: event.name, status: 'calling' })
+          }
+          scrollToBottom()
+        } else if (event.type === 'tool_done') {
+          const msg = messages.value.find((m) => m._tempId === assistantMsgId)
+          if (msg && msg.tool_calls_display) {
+            const tc = [...msg.tool_calls_display].reverse().find((t) => t.name === event.name && t.status === 'calling')
+            if (tc) tc.status = 'done'
           }
         } else if (event.type === 'done') {
           streaming.value = false
@@ -276,7 +282,10 @@ async function sendMessage() {
           if (msg) {
             msg.streaming = false
             if (!msg.hasContent && !msg.content.trim()) {
-              msg.content = '已完成，但模型没有返回可展示的正文。'
+              const hasTools = msg.tool_calls_display && msg.tool_calls_display.length > 0
+              if (!hasTools) {
+                msg.content = '已完成，但模型没有返回可展示的正文。'
+              }
             }
           }
         } else if (event.type === 'error') {
@@ -473,26 +482,6 @@ onMounted(() => {
     radial-gradient(circle at top, rgba(255, 255, 255, 0.92), rgba(245, 247, 250, 0.95) 58%, rgba(241, 244, 248, 0.98));
   box-shadow: 0 28px 64px rgba(15, 23, 42, 0.06);
   overflow: hidden;
-}
-
-.chat-topbar {
-  padding: 24px 30px 12px;
-}
-
-.chat-kicker {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #8190a4;
-  margin-bottom: 6px;
-}
-
-.chat-title {
-  font-size: 28px;
-  line-height: 1.15;
-  font-weight: 700;
-  color: #152033;
 }
 
 .messages-area {

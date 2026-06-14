@@ -1273,6 +1273,9 @@ func (s *Server) agentChat(c *gin.Context) {
 		OnToolCall: func(name string) {
 			writeSSE(c, gin.H{"type": "tool_call", "name": name})
 		},
+		OnToolDone: func(name string) {
+			writeSSE(c, gin.H{"type": "tool_done", "name": name})
+		},
 	})
 	if err != nil {
 		writeSSE(c, gin.H{"type": "error", "error": err.Error()})
