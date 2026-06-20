@@ -853,9 +853,9 @@ function fmtCalPrice(val) {
 }
 
 .cal-card {
-  padding: 9px 10px;
-  border-radius: 8px;
-  border: 1px solid #dfe8f3;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
   font-size: 11px;
   line-height: 1.45;
   background: #fff;
@@ -863,27 +863,27 @@ function fmtCalPrice(val) {
 }
 
 .cal-card:hover {
-  border-color: #bfd4ec;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+  border-color: #c7d6e8;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
 }
 
 .cal-card-name {
   font-weight: 700;
   color: var(--ink-strong);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-bottom: 6px;
+  padding-bottom: 5px;
 }
 
 .cal-card-details {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-top: 6px;
-  border-top: 1px solid #edf2f7;
+  gap: 3px;
+  padding-top: 5px;
+  border-top: 1px solid #f0f3f7;
 }
 
 .cal-card-details:empty {
@@ -895,15 +895,16 @@ function fmtCalPrice(val) {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  min-height: 24px;
-  padding: 3px 7px;
-  border-radius: 6px;
+  min-height: 22px;
+  padding: 3px 0 3px 9px;
+  border-left: 3px solid transparent;
   font-size: 11px;
 }
 
 .cal-detail-label {
   white-space: nowrap;
-  font-weight: 700;
+  font-weight: 600;
+  color: var(--ink-soft);
 }
 
 .cal-detail-row strong {
@@ -911,11 +912,11 @@ function fmtCalPrice(val) {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  color: var(--ink-strong);
 }
 
 .cal-detail-knockout-spot {
-  color: #2563a8;
-  background: #edf6ff;
+  border-left-color: #2563a8;
   flex-wrap: wrap;
 }
 
@@ -924,11 +925,11 @@ function fmtCalPrice(val) {
 }
 
 .cal-detail-knockout-spot .cal-spot {
-  margin-left: 4px;
+  margin-left: 6px;
 }
 
 .cal-detail-knockout-spot .cal-spot .cal-detail-label {
-  color: #6b5b95;
+  color: var(--ink-soft);
 }
 
 .cal-detail-knockout-spot .cal-spot strong {
@@ -936,12 +937,11 @@ function fmtCalPrice(val) {
 }
 
 .cal-detail-knockout-spot.cal-spot-only {
-  background: #f3f0fb;
+  border-left-color: #6b5b95;
 }
 
 .cal-detail-dividend {
-  color: #16806a;
-  background: #edfbf7;
+  border-left-color: #16806a;
 }
 
 .cal-detail-dividend strong {
