@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const eastmoneyAPI = "https://push2.eastmoney.com/api/qt/stock/get"
+const tencentKlineAPI = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 
 type Result struct {
 	Prices map[string]float64
@@ -162,52 +165,73 @@ type KlineResult struct {
 
 func FetchKlines(ctx context.Context, codes []string, days int) []KlineResult {
 	results := make([]KlineResult, len(codes))
+	client := &http.Client{Timeout: 8 * time.Second}
 	for i, code := range codes {
 		results[i].Code = code
 		parsed, ok := parseCode(code)
 		if !ok {
 			continue
 		}
-		market := "1"
-		if parsed.Exchange == "SZ" {
-			market = "0"
-		}
-		secid := market + "." + parsed.Num
-		client := &http.Client{Timeout: 5 * time.Second}
-		endpoint := fmt.Sprintf("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&end=20500101&lmt=%d", secid, days)
+		symbol := strings.ToLower(parsed.Exchange) + parsed.Num
+		param := fmt.Sprintf("%s,day,,,%d,qfq", symbol, days)
+		endpoint := tencentKlineAPI + "?param=" + url.QueryEscape(param)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 		if err != nil {
 			continue
 		}
 		req.Header.Set("User-Agent", "Mozilla/5.0")
-		req.Header.Set("Referer", "https://quote.eastmoney.com/")
+		req.Header.Set("Referer", "https://gu.qq.com/")
 		resp, err := client.Do(req)
 		if err != nil {
 			continue
 		}
-		var payload struct {
-			Data struct {
-				Name   string   `json:"name"`
-				Klines []string `json:"klines"`
-			} `json:"data"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-			resp.Body.Close()
+		points, err := decodeTencentKlines(resp.Body, symbol)
+		resp.Body.Close()
+		if err != nil {
 			continue
 		}
-		resp.Body.Close()
-		results[i].Name = payload.Data.Name
-		for _, line := range payload.Data.Klines {
-			parts := strings.Split(line, ",")
-			if len(parts) < 3 {
-				continue
-			}
-			var closePrice float64
-			fmt.Sscanf(parts[2], "%f", &closePrice)
-			results[i].Klines = append(results[i].Klines, KlinePoint{Date: parts[0], Close: closePrice})
-		}
+		results[i].Klines = points
 	}
 	return results
+}
+
+func decodeTencentKlines(body interface{ Read([]byte) (int, error) }, symbol string) ([]KlinePoint, error) {
+	var payload struct {
+		Code int `json:"code"`
+		Data map[string]struct {
+			Day    [][]string `json:"day"`
+			QfqDay [][]string `json:"qfqday"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	if payload.Code != 0 {
+		return nil, fmt.Errorf("Tencent kline API code %d", payload.Code)
+	}
+	series, ok := payload.Data[symbol]
+	if !ok {
+		return nil, fmt.Errorf("no kline data for %s", symbol)
+	}
+	rows := series.Day
+	if len(rows) == 0 {
+		rows = series.QfqDay
+	}
+	points := make([]KlinePoint, 0, len(rows))
+	for _, row := range rows {
+		if len(row) < 3 {
+			continue
+		}
+		closePrice, err := strconv.ParseFloat(row[2], 64)
+		if err != nil {
+			continue
+		}
+		points = append(points, KlinePoint{Date: row[0], Close: closePrice})
+	}
+	if len(points) == 0 {
+		return nil, fmt.Errorf("empty kline data for %s", symbol)
+	}
+	return points, nil
 }
 
 func parseCode(rawCode string) (parsedCode, bool) {

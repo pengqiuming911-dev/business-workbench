@@ -1100,9 +1100,24 @@ func (s *Store) scanProducts(query string, args ...any) ([]model.Product, error)
 			DurationDays:       toIntPtr(v("duration_days")),
 			MarginRatio:        toFloatPtr(v("margin_ratio")),
 		}
+		p.FirstKnockoutRatio = normalizeFirstKnockoutRatioPtr(p.FirstKnockoutRatio, p.EntryPrice)
 		result = append(result, p)
 	}
 	return result, rows.Err()
+}
+
+func normalizeFirstKnockoutRatioPtr(value, entryPrice *float64) *float64 {
+	if value == nil || entryPrice == nil {
+		return value
+	}
+	if *value <= 0 || *entryPrice <= 0 {
+		return value
+	}
+	if *value > 2 || *value < 1 {
+		normalized := *value / *entryPrice
+		return &normalized
+	}
+	return value
 }
 
 func (s *Store) queryOneMap(query string, args ...any) (map[string]any, error) {
@@ -1610,10 +1625,6 @@ func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any
 	if v, ok := filters["product_name"]; ok && v != "" {
 		query += " AND t.product_name LIKE ?"
 		args = append(args, LikeContains(v))
-	}
-	if v, ok := filters["is_returnable"]; ok && v != "" {
-		query += " AND rs.is_returnable = ?"
-		args = append(args, v)
 	}
 	query += " ORDER BY t.flight_date DESC"
 	return s.queryMaps(query, args...)
