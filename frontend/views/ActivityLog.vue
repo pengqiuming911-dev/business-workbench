@@ -62,6 +62,7 @@ onMounted(load)
 <style scoped>
 .page-header {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
@@ -70,6 +71,12 @@ onMounted(load)
 
 .filter-bar {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  margin-bottom: 0;
 }
 </style>
