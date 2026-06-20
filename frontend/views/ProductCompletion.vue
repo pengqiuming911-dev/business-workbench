@@ -46,16 +46,16 @@
                   <th class="col-left">私募管理人</th>
                   <th class="col-left">持有状态</th>
                   <th class="col-left">代码</th>
-                  <th class="col-right">入场价</th>
+                  <th class="num">入场价</th>
                   <th class="col-left">入场日</th>
-                  <th class="col-right">存续月</th>
-                  <th class="col-right">锁定期(月)</th>
+                  <th class="num">存续月</th>
+                  <th class="num">锁定期(月)</th>
                   <th class="col-left">最近观察日</th>
                   <th class="col-left">下个观察日</th>
-                  <th class="col-right">标的价格</th>
-                  <th class="col-right">降敲</th>
-                  <th class="col-right">敲出价</th>
-                  <th class="col-right">派息线</th>
+                  <th class="num">标的价格</th>
+                  <th class="num">降敲</th>
+                  <th class="num">敲出价</th>
+                  <th class="num">派息线</th>
                   <th class="col-center">是否敲出</th>
                   <th class="col-center">是否派息</th>
                 </tr>
@@ -71,16 +71,16 @@
                     <td class="col-left">{{ p.manager }}</td>
                     <td class="col-left"><span class="badge badge-green">{{ p.holding_status }}</span></td>
                     <td class="col-left code-cell">{{ p.code }}</td>
-                    <td class="col-right">{{ formatPrice(p.entry_price, p) }}</td>
+                    <td class="num">{{ formatPrice(p.entry_price, p) }}</td>
                     <td class="col-left">{{ p.issue_date || '--' }}</td>
-                    <td class="col-right">{{ computeMonthsSince(p) }}</td>
-                    <td class="col-right">{{ p.lock_months || '--' }}</td>
+                    <td class="num">{{ computeMonthsSince(p) }}</td>
+                    <td class="num">{{ p.lock_months || '--' }}</td>
                     <td class="col-left">{{ latestObs(p)?.date || '--' }}</td>
                     <td class="col-left next-date">{{ p.next_observation_date || '--' }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
-                    <td class="col-right">{{ p.monthly_decrease ?? '--' }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
+                    <td class="num">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
+                    <td class="num">{{ p.monthly_decrease ?? '--' }}</td>
+                    <td class="num">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
+                    <td class="num">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
                     <td class="col-center" :class="knockoutClass(latestObs(p)?.is_knocked_out)">
                       {{ latestObs(p)?.is_knocked_out || '--' }}
                     </td>
@@ -95,9 +95,9 @@
                         <thead>
                           <tr>
                             <th>观察日</th>
-                            <th>标的价格</th>
-                            <th>敲出价</th>
-                            <th>派息线</th>
+                            <th class="num">标的价格</th>
+                            <th class="num">敲出价</th>
+                            <th class="num">派息线</th>
                             <th>是否敲出</th>
                             <th>是否派息</th>
                           </tr>
@@ -105,9 +105,9 @@
                         <tbody>
                           <tr v-for="obs in p.observations" :key="obs.date">
                             <td>{{ obs.date }}</td>
-                            <td>{{ formatPrice(obs.underlying_price, p) }}</td>
-                            <td>{{ formatPrice(obs.knockout_price, p) }}</td>
-                            <td>{{ formatPrice(obs.dividend_line, p) }}</td>
+                            <td class="num">{{ formatPrice(obs.underlying_price, p) }}</td>
+                            <td class="num">{{ formatPrice(obs.knockout_price, p) }}</td>
+                            <td class="num">{{ formatPrice(obs.dividend_line, p) }}</td>
                             <td :class="knockoutClass(obs.is_knocked_out)">{{ obs.is_knocked_out }}</td>
                             <td :class="dividendClass(obs.is_dividend)">{{ obs.is_dividend }}</td>
                           </tr>
@@ -205,11 +205,11 @@
                   <th class="col-left">产品名称</th>
                   <th class="col-left">私募管理人</th>
                   <th class="col-left">代码</th>
-                  <th class="col-right">入场价</th>
-                  <th class="col-right">存续月</th>
-                  <th class="col-right">标的价格</th>
-                  <th class="col-right">敲出价</th>
-                  <th class="col-right">派息线</th>
+                  <th class="num">入场价</th>
+                  <th class="num">存续月</th>
+                  <th class="num">标的价格</th>
+                  <th class="num">敲出价</th>
+                  <th class="num">派息线</th>
                   <th class="col-center">是否敲出</th>
                   <th class="col-center">是否派息</th>
                 </tr>
@@ -220,11 +220,11 @@
                   <td class="col-left">{{ p.name }}</td>
                   <td class="col-left">{{ p.manager }}</td>
                   <td class="col-left code-cell">{{ p.code }}</td>
-                  <td class="col-right">{{ formatPrice(p.entry_price, p) }}</td>
-                  <td class="col-right">{{ computeMonthsSince(p) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.underlying_price, p) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.knockout_price, p) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.dividend_line, p) }}</td>
+                  <td class="num">{{ formatPrice(p.entry_price, p) }}</td>
+                  <td class="num">{{ computeMonthsSince(p) }}</td>
+                  <td class="num">{{ formatPrice(todayObs(p)?.underlying_price, p) }}</td>
+                  <td class="num">{{ formatPrice(todayObs(p)?.knockout_price, p) }}</td>
+                  <td class="num">{{ formatPrice(todayObs(p)?.dividend_line, p) }}</td>
                   <td class="col-center" :class="knockoutClass(todayObs(p)?.is_knocked_out)">
                     {{ todayObs(p)?.is_knocked_out || '--' }}
                   </td>
@@ -568,33 +568,6 @@ function fmtCalPrice(val) {
   max-width: none;
 }
 
-.tab-bar {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 24px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  padding: 4px;
-  width: fit-content;
-}
-
-.tab-btn {
-  border: none;
-  background: transparent;
-  color: var(--ink-soft);
-}
-
-.tab-btn:hover {
-  background: var(--surface-muted);
-  color: var(--ink);
-}
-
-.tab-btn.active {
-  background: var(--brand);
-  color: #fff;
-}
-
 .file-source { flex: 1; display: flex; align-items: center; gap: 10px; }
 
 .month-input { width: 180px; flex: none; }
@@ -608,26 +581,22 @@ function fmtCalPrice(val) {
 
 .overview-table {
   width: 100%;
-  /* border-collapse: separate 让 sticky 列/表头背景能正确盖住横向滚动内容，
-     避免 collapse 下表头与首列透出相邻列（与 holding/rebate 表一致） */
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: 12px;
+  font-size: 13px;
   min-width: 1400px;
 }
 
 .overview-table th {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 2px solid var(--border);
   color: var(--ink-soft);
-  font-weight: 600;
-  background: var(--surface-muted);
+  font-weight: 800;
   font-size: 11px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   position: sticky;
   top: 0;
   z-index: 1;
+  background: var(--bg-card);
 }
 
 .data-row {
@@ -637,14 +606,21 @@ function fmtCalPrice(val) {
 .data-row:hover { background: var(--surface-muted); }
 
 .overview-table td {
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 7px 12px;
+  border-bottom: 1px solid #f0f2f5;
   color: var(--ink-strong);
   white-space: nowrap;
 }
 
+.overview-table tbody tr:nth-child(even) td {
+  background: var(--bg-zebra);
+}
+
+.overview-table tr:hover td {
+  background: #eef2f7;
+}
+
 .col-left { text-align: left; }
-.col-right { text-align: left; }
 .col-center { text-align: left; }
 
 .sticky-col {
@@ -653,8 +629,11 @@ function fmtCalPrice(val) {
   background: var(--bg-card);
   z-index: 2;
 }
-.data-row:hover .sticky-col { background: var(--surface-muted); }
-.overview-table th.sticky-col { z-index: 3; background: var(--surface-muted); }
+.overview-table tbody tr:nth-child(even) .sticky-col {
+  background: var(--bg-zebra);
+}
+.data-row:hover .sticky-col { background: #eef2f7; }
+.overview-table th.sticky-col { z-index: 3; background: var(--bg-card); }
 
 .chevron {
   font-size: 14px;
@@ -722,18 +701,35 @@ function fmtCalPrice(val) {
 }
 
 .detail-table th {
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-soft);
-  font-weight: 600;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.04em;
   background: transparent;
   text-align: left;
 }
 
+.detail-table th.num {
+  text-align: right;
+}
+
 .detail-table td {
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink);
+}
+
+.detail-table td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.detail-table tbody tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.015);
 }
 
 .calendar-section {
