@@ -136,8 +136,8 @@
             <th rowspan="2">产品名称</th>
             <th rowspan="2">客户姓名</th>
             <th rowspan="2">渠道/直客</th>
-            <th rowspan="2" class="num-col">本金</th>
-            <th rowspan="2" class="num-col">保证金比例</th>
+            <th rowspan="2" class="num">本金</th>
+            <th rowspan="2" class="num">保证金比例</th>
             <th rowspan="2">业务类型</th>
             <th rowspan="2">认购日</th>
             <th rowspan="2">订单状态</th>
@@ -150,12 +150,12 @@
           </tr>
           <tr class="header-sub-row">
             <!-- 渠道返还比例 -->
-            <th class="num-col sub-channel-ratio">申购费</th>
-            <th class="num-col sub-channel-ratio">管理费</th>
-            <th class="num-col sub-channel-ratio">业绩报酬</th>
+            <th class="num sub-channel-ratio">申购费</th>
+            <th class="num sub-channel-ratio">管理费</th>
+            <th class="num sub-channel-ratio">业绩报酬</th>
             <!-- 支出流水明细 -->
             <th class="sub-expense">类别</th>
-            <th class="num-col sub-expense">金额</th>
+            <th class="num sub-expense">金额</th>
             <th class="sub-expense">支付时间</th>
             <th class="sub-expense">年</th>
             <th class="sub-expense">月</th>
@@ -169,19 +169,19 @@
             <td class="name-cell" :title="item.product_name">{{ truncate(item.product_name, 12) }}</td>
             <td>{{ item.customer_name || '--' }}</td>
             <td>{{ item.channel_or_direct || '--' }}</td>
-            <td class="num-col">{{ fmtNum(item.principal) }}</td>
-            <td class="num-col">{{ fmtPct(item.margin_ratio) }}</td>
+            <td class="num">{{ fmtNum(item.principal) }}</td>
+            <td class="num">{{ fmtPct(item.margin_ratio) }}</td>
             <td>{{ item.business_type || '--' }}</td>
             <td>{{ item.subscribe_date || '--' }}</td>
             <td>{{ item.order_status || '--' }}</td>
             <td>{{ item.rebate_target || '--' }}</td>
             <!-- 渠道返还比例 -->
-            <td class="num-col">{{ fmtPct(item.channel_subscribe_ratio) }}</td>
-            <td class="num-col">{{ fmtPct(item.channel_management_ratio) }}</td>
-            <td class="num-col">{{ fmtPct(item.channel_performance_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.channel_subscribe_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.channel_management_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.channel_performance_ratio) }}</td>
             <!-- 支出流水明细 -->
             <td>{{ item.expense_category || '--' }}</td>
-            <td class="num-col">{{ fmtNum(item.expense_amount) }}</td>
+            <td class="num">{{ fmtNum(item.expense_amount) }}</td>
             <td>{{ item.payment_time || '--' }}</td>
             <td>{{ item.payment_year || '--' }}</td>
             <td>{{ item.payment_month || '--' }}</td>
@@ -1252,55 +1252,12 @@ function downloadCSV() {
   max-width: none;
 }
 
-/* --- Filter bar --- */
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 14px;
-  align-items: flex-end;
-  margin-bottom: 16px;
-  padding: 20px 24px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-group label {
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.input-sm {
-  height: 34px;
-  min-height: 34px;
-  padding: 0 12px;
-  font-size: 13px;
-  width: auto;
-  min-width: 120px;
-}
-
 .input-compact {
   min-width: 106px;
 }
 
 .input-select-compact {
   min-width: 116px;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 .validation-banner {
@@ -1384,30 +1341,6 @@ function downloadCSV() {
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
   font-size: 14px;
-}
-
-.completed-table .num-col {
-  text-align: left;
-  font-variant-numeric: tabular-nums;
-}
-
-.completed-table thead .num-col {
-  text-align: center;
-}
-
-.row-alt td {
-  background: var(--bg-page);
-}
-
-.completed-table tr:hover td {
-  background: rgba(41, 98, 255, 0.04);
-}
-
-.sticky-col {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--bg-card);
 }
 
 .row-alt .sticky-col {
