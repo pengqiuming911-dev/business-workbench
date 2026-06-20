@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"business-workbench/backend-go/internal/agent"
@@ -35,6 +36,24 @@ type Server struct {
 	agentSvc *agent.Service
 	feishu   *feishu.Client
 	Cron     *cron.Cron
+
+	// 待返 sheet 扣税比例缓存（按 order_id），TTL 刷新
+	daifanMu    sync.RWMutex
+	daifanData  *daifanTaxRatios
+	daifanAt    time.Time
+}
+
+const daifanNotReturnable = "暂不可返"
+const daifanCacheTTL = 10 * time.Minute
+
+// daifanTaxRatios 解析"待返"sheet 得到的扣税比例、管理费实收/业绩报酬应收与可返性。
+// subTax/mgmtTax/perfTax: order_id -> 扣税比例(找到则为数值，空单元格为 0)。
+// mgmtReceived/perfReceivable: order_id -> 管理费实收/业绩报酬应收(应收基数，取自该表)。
+// *Orders: 出现在对应区域的 order_id 集合（用于判断"暂不可返"）。
+type daifanTaxRatios struct {
+	subTax, mgmtTax, perfTax             map[string]float64
+	mgmtReceived, perfReceivable         map[string]float64
+	subOrders, mgmtOrders                map[string]bool
 }
 
 const (
@@ -59,6 +78,7 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 		feishu:   feishu.New(cfg.FeishuAppID, cfg.FeishuAppSecret, cfg.FeishuRedirectURI),
 		Cron:     cron.New(cron.WithLocation(location)),
 	}
+	server.feishu.SetTokenPersistPath(".feishu-user-token")
 
 	router := gin.Default()
 	router.Static("/public", "public")
@@ -263,15 +283,79 @@ func (s *Server) observationCalendar(c *gin.Context) {
 		return
 	}
 
+	status := c.DefaultQuery("status", "ongoing")
+	if status != "ongoing" && status != "completed" {
+		status = "ongoing"
+	}
+
+	if status == "completed" {
+		products, err := s.store.QueryCompletedProducts()
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		closeByDate := map[string]map[string]float64{}
+		for _, p := range products {
+			records, err := s.store.QueryObservationsByProduct(p.ID)
+			if err != nil {
+				writeError(c, err)
+				return
+			}
+			byDate := map[string]float64{}
+			for _, r := range records {
+				if r.UnderlyingPrice != nil {
+					byDate[r.ObservationDate] = *r.UnderlyingPrice
+				}
+			}
+			closeByDate[p.ID] = byDate
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"month":    month,
+			"status":   "completed",
+			"calendar": observations.CalendarForMonth(products, month, observations.CalendarOpts{
+				Status:      "completed",
+				CloseByDate: closeByDate,
+			}),
+		})
+		return
+	}
+
 	products, err := s.store.QueryOngoingProducts()
 	if err != nil {
 		writeError(c, err)
 		return
 	}
+	todayPrice := s.loadTodayPrices(c.Request.Context(), uniqueProductCodes(products))
 	c.JSON(http.StatusOK, gin.H{
 		"month":    month,
-		"calendar": observations.CalendarForMonth(products, month),
+		"status":   "ongoing",
+		"calendar": observations.CalendarForMonth(products, month, observations.CalendarOpts{Status: "ongoing", TodayPrice: todayPrice}),
 	})
+}
+
+// loadTodayPrices 返回 code -> 今日价。优先读 DB 缓存当日价；缺失的 code 才实时拉取并回写缓存。
+func (s *Server) loadTodayPrices(ctx context.Context, codes []string) map[string]float64 {
+	today := time.Now().Format("2006-01-02")
+	result := map[string]float64{}
+	var missing []string
+	for _, code := range codes {
+		if cached, err := s.store.PriceByDate(code, today); err == nil && cached != nil {
+			if v, ok := numberFromAny(cached["price"]); ok && v != 0 {
+				result[code] = v
+				continue
+			}
+		}
+		missing = append(missing, code)
+	}
+	if len(missing) == 0 {
+		return result
+	}
+	fetched := prices.FetchAll(ctx, missing)
+	for code, p := range fetched.Prices {
+		result[code] = p
+		_ = s.store.UpsertPrice(code, today, p)
+	}
+	return result
 }
 
 func (s *Server) observationProducts(c *gin.Context) {
@@ -644,6 +728,7 @@ func (s *Server) syncAll(c *gin.Context) {
 	if rebateErr == nil {
 		result["rebateRowCount"] = rebateInfo["row_count"]
 		result["rebateSheetName"] = rebateInfo["sheet_name"]
+		s.invalidateDaifanCache()
 	}
 
 	if rebateErr != nil {
@@ -663,7 +748,16 @@ func (s *Server) syncRebateDetail(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
+	// 返款明细表更新后，清掉"待返"sheet 的扣税比例缓存，下次查询重新拉取
+	s.invalidateDaifanCache()
 	c.JSON(http.StatusOK, gin.H{"ok": true, "row_count": info["row_count"], "sheet_name": info["sheet_name"]})
+}
+
+// invalidateDaifanCache 清空待返 sheet 扣税比例缓存。
+func (s *Server) invalidateDaifanCache() {
+	s.daifanMu.Lock()
+	s.daifanData = nil
+	s.daifanMu.Unlock()
 }
 
 func (s *Server) rebateDetailStatus(c *gin.Context) {
@@ -679,14 +773,159 @@ func (s *Server) rebateDetailStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, row)
 }
 
+// fetchDaifanRows 取返费文件夹下日期最新的电子表格里名称含"待返"的 sheet 的原始行（保留行顺序）。
+func (s *Server) fetchDaifanRows(ctx context.Context) ([][]any, error) {
+	data, err := s.feishu.DriveFiles(ctx, rebateFolderToken, "", "")
+	if err != nil {
+		return nil, fmt.Errorf("读取返费文件夹失败: %w", err)
+	}
+	filesRaw, _ := data["files"].([]any)
+	type rebateFile struct {
+		Token string
+		Name  string
+		Date  string
+	}
+	var files []rebateFile
+	for _, f := range filesRaw {
+		fmap, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		token := fmt.Sprint(fmap["token"])
+		name := fmt.Sprint(fmap["name"])
+		if token == "" {
+			continue
+		}
+		if m := rebateDateRe.FindStringSubmatch(name); len(m) >= 4 {
+			y, mm, d := m[1], m[2], m[3]
+			if len(mm) == 1 {
+				mm = "0" + mm
+			}
+			if len(d) == 1 {
+				d = "0" + d
+			}
+			files = append(files, rebateFile{token, name, "20" + y + mm + d})
+		}
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("返费文件夹下未找到带日期的电子表格")
+	}
+	latest := files[0]
+	for _, f := range files[1:] {
+		if f.Date > latest.Date {
+			latest = f
+		}
+	}
+	meta, err := s.feishu.GetSheetMetaData(ctx, latest.Token)
+	if err != nil {
+		return nil, err
+	}
+	var sheet *feishu.SheetMeta
+	for i := range meta {
+		if strings.Contains(meta[i].Title, "待返") {
+			sheet = &meta[i]
+			break
+		}
+	}
+	if sheet == nil {
+		return nil, fmt.Errorf("未找到名称含'待返'的 sheet")
+	}
+	colCount := 27
+	if sheet.GridProps.ColumnCount > 0 {
+		colCount = sheet.GridProps.ColumnCount
+	}
+	return s.feishu.ReadSheetRaw(ctx, latest.Token, sheet.SheetID, colCount)
+}
+
+// loadDaifanTaxRatios 带缓存地获取"待返"sheet 的扣税比例（按 order_id）。
+// 取数失败时回退到旧缓存，若无旧缓存返回 nil（调用方据此跳过覆盖，不阻断请求）。
+func (s *Server) loadDaifanTaxRatios(ctx context.Context) *daifanTaxRatios {
+	s.daifanMu.RLock()
+	if s.daifanData != nil && time.Since(s.daifanAt) < daifanCacheTTL {
+		d := s.daifanData
+		s.daifanMu.RUnlock()
+		return d
+	}
+	s.daifanMu.RUnlock()
+
+	s.daifanMu.Lock()
+	defer s.daifanMu.Unlock()
+	if s.daifanData != nil && time.Since(s.daifanAt) < daifanCacheTTL {
+		return s.daifanData
+	}
+	raw, err := s.fetchDaifanRows(ctx)
+	if err != nil {
+		if s.daifanData != nil {
+			return s.daifanData
+		}
+		return nil
+	}
+	s.daifanData = parseDaifanTaxRatios(raw)
+	s.daifanAt = time.Now()
+	return s.daifanData
+}
+
+// parseDaifanTaxRatios 按"待返"sheet 布局解析扣税比例：
+//   - 分界行（A列=="申购费返还"）上方为管理费/业绩报酬区：col10=管理费扣税，col11=业绩报酬扣税
+//   - 分界行下方为申购费区（自带表头"订单号"）：col8=申购费扣税
+//   - 区域内出现该订单→取该列扣税比例（空单元格记 0）；未在区域出现→调用方据此标"暂不可返"
+func parseDaifanTaxRatios(raw [][]any) *daifanTaxRatios {
+	divIdx := -1
+	for i, r := range raw {
+		if len(r) > 0 && strings.TrimSpace(fmt.Sprint(r[0])) == "申购费返还" {
+			divIdx = i
+			break
+		}
+	}
+	d := &daifanTaxRatios{
+		subTax: map[string]float64{}, mgmtTax: map[string]float64{}, perfTax: map[string]float64{},
+		mgmtReceived: map[string]float64{}, perfReceivable: map[string]float64{},
+		subOrders: map[string]bool{}, mgmtOrders: map[string]bool{},
+	}
+	if divIdx < 0 {
+		return d
+	}
+	for i, r := range raw {
+		if len(r) == 0 {
+			continue
+		}
+		oid := strings.TrimSpace(fmt.Sprint(r[0]))
+		// 只接受 snowball 开头的真实订单号，跳过表头/说明/合计行
+		if !strings.HasPrefix(oid, "snowball") {
+			continue
+		}
+		if i < divIdx {
+			// 管理费/业绩报酬区：col6=管理费实收, col7=业绩报酬应收, col10=管理费扣税, col11=业绩报酬扣税
+			d.mgmtOrders[oid] = true
+			d.mgmtReceived[oid] = cellFloat(r, 6)
+			d.perfReceivable[oid] = cellFloat(r, 7)
+			d.mgmtTax[oid] = cellFloat(r, 10)
+			d.perfTax[oid] = cellFloat(r, 11)
+		} else if i > divIdx {
+			// 申购费区（自带表头"订单号"）：col8=申购费扣税
+			d.subOrders[oid] = true
+			d.subTax[oid] = cellFloat(r, 8)
+		}
+	}
+	return d
+}
+
+func cellFloat(r []any, i int) float64 {
+	if i >= len(r) || r[i] == nil {
+		return 0
+	}
+	f, _ := strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(r[i])), 64)
+	return f
+}
+
 func (s *Server) dashboardIndices(c *gin.Context) {
-	codes := []string{"000852.SH", "513180.SH", "000905.SH", "000300.SH"}
+	codes := []string{"000852.SH", "513180.SH", "000905.SH", "000300.SH", "000001.SH", "399006.SZ"}
 	results := prices.FetchIndices(c.Request.Context(), codes)
 	c.JSON(http.StatusOK, gin.H{"indices": results})
 }
 
 func (s *Server) dashboardKlines(c *gin.Context) {
-	codes := []string{"000852.SH", "513180.SH", "000905.SH", "000300.SH"}
+	codes := []string{"000852.SH", "513180.SH", "000905.SH", "000300.SH", "000001.SH", "399006.SZ"}
 	days := 30
 	results := prices.FetchKlines(c.Request.Context(), codes, days)
 	c.JSON(http.StatusOK, gin.H{"klines": results})
@@ -2205,19 +2444,17 @@ func (s *Server) rebatePending(c *gin.Context) {
 		return
 	}
 
+	taxLookup := s.loadDaifanTaxRatios(c.Request.Context())
+
 	var result []map[string]any
 	for _, row := range rows {
-		principal := numberValue(row["subscribe_amount"])
+		// 本金取交易表"金额/万"(amount)，单位万→元；amount 为空时回退认购金额
+		principal := numberValue(row["amount"]) * 10000
 		if principal <= 0 {
-			principal = numberValue(row["amount"])
-			if principal > 0 && principal < 10000 {
-				principal = principal * 10000
-			}
+			principal = numberValue(row["subscribe_amount"])
 		}
 		subFeeRate := numberValue(row["subscribe_fee_rate"])
 		subRatio := numberValue(row["subscribe_fee_ratio"])
-		managementReceivable := numberValue(row["management_fee_received"])
-		performanceReceivable := numberValue(row["performance_fee_receivable"])
 		managementRatio := numberValue(row["management_fee_ratio"])
 		performanceRatio := numberValue(row["performance_fee_ratio"])
 
@@ -2225,14 +2462,51 @@ func (s *Server) rebatePending(c *gin.Context) {
 		returnedMgmt := numberValue(row["returned_management"])
 		returnedPerf := numberValue(row["returned_performance"])
 
-		taxSub := numberValue(row["tax_subscribe_ratio"])
-		taxMgmt := numberValue(row["tax_management_ratio"])
-		taxPerf := numberValue(row["tax_performance_ratio"])
+		// 管理费实收/业绩报酬应收 取自"待返"sheet；返还比例取自交易表；扣税取自"待返"sheet。
+		// 区域未出现该订单→标"暂不可返"，且该费用应返为 0。
+		var taxSubVal, taxMgmtVal, taxPerfVal any = nil, nil, nil
+		var managementReceivable, performanceReceivable float64
+		subReturnable, mgmtReturnable, perfReturnable := true, true, true
+		oid := strings.TrimSpace(fmt.Sprint(row["order_id"]))
+		if taxLookup != nil && oid != "" {
+			if _, ok := taxLookup.subOrders[oid]; ok {
+				taxSubVal = taxLookup.subTax[oid]
+			} else {
+				taxSubVal = daifanNotReturnable
+				subReturnable = false
+			}
+			if _, ok := taxLookup.mgmtOrders[oid]; ok {
+				taxMgmtVal = taxLookup.mgmtTax[oid]
+				taxPerfVal = taxLookup.perfTax[oid]
+				managementReceivable = taxLookup.mgmtReceived[oid]
+				performanceReceivable = taxLookup.perfReceivable[oid]
+			} else {
+				taxMgmtVal = daifanNotReturnable
+				taxPerfVal = daifanNotReturnable
+				mgmtReturnable = false
+				perfReturnable = false
+			}
+		} else {
+			managementReceivable = numberValue(row["management_fee_received"])
+			performanceReceivable = numberValue(row["performance_fee_receivable"])
+		}
+		taxSub := numberValue(taxSubVal)
+		taxMgmt := numberValue(taxMgmtVal)
+		taxPerf := numberValue(taxPerfVal)
 
 		subscribeReceivable := principal * subFeeRate
-		expectedSub := subscribeReceivable * subRatio * (1 - taxSub)
-		expectedMgmt := managementReceivable * managementRatio * (1 - taxMgmt)
-		expectedPerf := performanceReceivable * performanceRatio * (1 - taxPerf)
+		expectedSub := 0.0
+		if subReturnable {
+			expectedSub = subscribeReceivable * subRatio * (1 - taxSub)
+		}
+		expectedMgmt := 0.0
+		if mgmtReturnable {
+			expectedMgmt = managementReceivable * managementRatio * (1 - taxMgmt)
+		}
+		expectedPerf := 0.0
+		if perfReturnable {
+			expectedPerf = performanceReceivable * performanceRatio * (1 - taxPerf)
+		}
 
 		outstandingSub := expectedSub - returnedSub
 		outstandingMgmt := expectedMgmt - returnedMgmt
@@ -2251,18 +2525,20 @@ func (s *Server) rebatePending(c *gin.Context) {
 		row["outstanding_subscribe"] = outstandingSub
 		row["outstanding_management"] = outstandingMgmt
 		row["outstanding_performance"] = outstandingPerf
-		row["tax_subscribe_ratio"] = taxSub
-		row["tax_management_ratio"] = taxMgmt
-		row["tax_performance_ratio"] = taxPerf
+		if taxSubVal != nil {
+			row["tax_subscribe_ratio"] = taxSubVal
+		}
+		if taxMgmtVal != nil {
+			row["tax_management_ratio"] = taxMgmtVal
+		}
+		if taxPerfVal != nil {
+			row["tax_performance_ratio"] = taxPerfVal
+		}
 
-		if _, manualExists := row["manual_order_id"]; manualExists {
+		if manualID, manualExists := row["manual_order_id"]; manualExists && manualID != nil {
 			applyManualNumber := func(target string) {
 				manualKey := "manual_" + target
-				if v, ok := row[manualKey]; ok {
-					if v == nil {
-						row[target] = nil
-						return
-					}
+				if v, ok := row[manualKey]; ok && v != nil {
 					row[target] = numberValue(v)
 				}
 			}

@@ -225,6 +225,10 @@ func (s *Store) QueryOngoingProducts() ([]model.Product, error) {
 	return s.scanProducts("SELECT * FROM products WHERE holding_status LIKE ? OR holding_status LIKE ?", "%存续%", "%持有%")
 }
 
+func (s *Store) QueryCompletedProducts() ([]model.Product, error) {
+	return s.scanProducts("SELECT * FROM products WHERE holding_status LIKE ?", "%完结%")
+}
+
 func (s *Store) LastSync() (map[string]any, error) {
 	return s.queryOneMap("SELECT * FROM sync_log ORDER BY synced_at DESC LIMIT 1")
 }
@@ -1583,6 +1587,8 @@ func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any
 		LEFT JOIN rebate_status rs ON t.order_id = rs.order_id
 		LEFT JOIN rebate_pending_manual rpm ON t.order_id = rpm.order_id
 		WHERE t.order_id IS NOT NULL AND t.order_id != ''
+		  AND t.rebate_target IS NOT NULL AND TRIM(t.rebate_target) != ''
+		  AND TRIM(t.rebate_target) NOT IN ('-', '--', '0')
 	`
 	args := []any{}
 	if v, ok := filters["customer_name"]; ok && v != "" {

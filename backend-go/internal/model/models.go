@@ -89,6 +89,7 @@ type CalendarProduct struct {
 	EntryPrice             *float64 `json:"entry_price"`
 	KnockoutPrice          *float64 `json:"knockout_price"`
 	DividendLine           *float64 `json:"dividend_line"`
+	SpotPrice              *float64 `json:"spot_price,omitempty"`
 	IsKnockoutObservable   bool     `json:"is_knockout_observable"`
 	HasDividendObservation bool     `json:"has_dividend_observation"`
 }

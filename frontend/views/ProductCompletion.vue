@@ -137,6 +137,11 @@
         <div class="calendar-month-picker">
           <label>月份</label>
           <input v-model="calendarMonth" type="month" class="input month-input" @change="loadCalendarData" />
+          <label style="margin-left: 16px;">状态</label>
+          <select v-model="calendarStatus" class="input month-input" @change="loadCalendarData">
+            <option value="ongoing">存续</option>
+            <option value="completed">已完结</option>
+          </select>
           <span v-if="calendarError" class="error-msg" style="margin-left: 12px;">{{ calendarError }}</span>
         </div>
         <div class="calendar-summary">本月共 {{ calendarProductCount }} 个产品观察安排</div>
@@ -171,6 +176,10 @@
                   <div v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-detail-row cal-detail-dividend">
                     <span class="cal-detail-label">派息</span>
                     <strong>{{ fmtCalPrice(product.dividend_line) }}</strong>
+                  </div>
+                  <div v-if="product.spot_price != null" class="cal-detail-row cal-detail-spot">
+                    <span class="cal-detail-label">{{ calendarStatus === 'completed' ? '当日' : '今日' }}</span>
+                    <strong>{{ fmtCalPrice(product.spot_price) }}</strong>
                   </div>
                 </div>
               </div>
@@ -298,6 +307,7 @@ const todayLoading = ref(false)
 const todayLoaded = ref(false)
 
 const calendarMonth = ref(new Date().toISOString().slice(0, 7))
+const calendarStatus = ref('ongoing')
 const calendarItems = ref([])
 const calendarLoading = ref(false)
 const calendarLoaded = ref(false)
@@ -349,7 +359,7 @@ async function loadCalendarData() {
   calendarLoading.value = true
   calendarError.value = ''
   try {
-    const res = await fetch(`/api/observations/calendar?month=${calendarMonth.value}`)
+    const res = await fetch(`/api/observations/calendar?month=${calendarMonth.value}&status=${calendarStatus.value}`)
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '加载失败')
     calendarItems.value = data.calendar || []
@@ -914,6 +924,15 @@ function fmtCalPrice(val) {
 
 .cal-detail-dividend strong {
   color: #116451;
+}
+
+.cal-detail-spot {
+  color: #6b5b95;
+  background: #f3f0fb;
+}
+
+.cal-detail-spot strong {
+  color: #4c3f73;
 }
 
 .poster-grid {
