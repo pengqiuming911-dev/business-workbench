@@ -1,6 +1,6 @@
 <template>
   <div class="holding-analysis-page">
-    <h1 class="text-page-title">持有产品分析</h1>
+    <h1 class="text-page-title">产品&持仓</h1>
     <p class="text-body" style="margin-bottom: 20px;">数据自动同步自航班服务交易总表</p>
 
     <div class="tab-bar">

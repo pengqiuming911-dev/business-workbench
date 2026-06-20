@@ -84,6 +84,10 @@
         <Download :size="14" />
         下载
       </button>
+      <button class="btn btn-secondary btn-sm" @click="downloadTemplate">
+        <Download :size="14" />
+        下载模板
+      </button>
       <input
         ref="fileInputRef"
         type="file"
@@ -103,6 +107,9 @@
 
     <!-- Data table -->
     <div v-else-if="items.length > 0" class="table-wrap">
+      <div v-if="validationSummary.count > 0" class="validation-banner">
+        检测到 {{ validationSummary.count }} 条已返记录存在校验冲突，共 {{ validationSummary.issueCount }} 项，请优先处理。
+      </div>
       <table class="data-table completed-table">
         <colgroup>
           <col style="min-width: 120px" /><!-- 订单号 -->
@@ -119,6 +126,7 @@
           <col span="3" style="min-width: 90px" /><!-- 渠道返还比例 x3 -->
           <col span="6" style="min-width: 90px" /><!-- 支出流水明细 x6 -->
           <col style="min-width: 80px" /><!-- 来源 -->
+          <col style="min-width: 180px" /><!-- 校验 -->
           <col style="min-width: 70px" /><!-- 操作 -->
         </colgroup>
         <thead>
@@ -137,6 +145,7 @@
             <th colspan="3" class="group-header group-channel-ratio">渠道返还比例</th>
             <th colspan="6" class="group-header group-expense">支出流水明细</th>
             <th rowspan="2">来源</th>
+            <th rowspan="2">校验</th>
             <th rowspan="2">操作</th>
           </tr>
           <tr class="header-sub-row">
@@ -182,6 +191,19 @@
               <span class="source-pill" :class="sourceClass(item.source)">
                 {{ sourceLabel(item.source) }}
               </span>
+            </td>
+            <td>
+              <span v-if="item.validation_conflicts?.length" class="validation-pill validation-error" :title="conflictMessage(item.validation_conflicts)">
+                {{ item.validation_conflicts.length }}项冲突
+              </span>
+              <span
+                v-else-if="ignoredConflictCount(item) > 0"
+                class="validation-pill validation-muted"
+                :title="ignoredConflictMessage(item)"
+              >
+                已忽略{{ ignoredConflictCount(item) }}项
+              </span>
+              <span v-else class="validation-pill validation-ok">通过</span>
             </td>
             <!-- 操作 -->
             <td>
@@ -415,6 +437,15 @@ const addModal = reactive({
   submitting: false,
 })
 
+const autofillState = reactive({
+  applying: false,
+})
+
+const validationSummary = reactive({
+  count: 0,
+  issueCount: 0,
+})
+
 function createEmptyForm() {
   return {
     order_id: '',
@@ -437,6 +468,7 @@ function createEmptyForm() {
     payment_year: '',
     payment_month: '',
     payment_day: '',
+    ignored_conflicts: [],
   }
 }
 
@@ -515,9 +547,11 @@ async function fetchData() {
     const res = await fetch(url)
     if (!res.ok) throw new Error('加载失败')
     const data = await res.json()
-    items.value = data.items || []
+    items.value = await validateLoadedItems(data.items || [])
   } catch {
     items.value = []
+    validationSummary.count = 0
+    validationSummary.issueCount = 0
   } finally {
     loading.value = false
     loaded.value = true
@@ -554,6 +588,189 @@ function onPaymentTimeChange() {
   }
 }
 
+function toAssistPayload(form) {
+  return {
+    order_id: form.order_id || '',
+    flight_id: form.flight_id || '',
+    product_name: form.product_name || '',
+    customer_name: form.customer_name || '',
+    channel_or_direct: form.channel_or_direct || '',
+    principal: form.principal === '' || form.principal == null ? null : Number(form.principal),
+    margin_ratio: form.margin_ratio === '' || form.margin_ratio == null ? null : Number(form.margin_ratio),
+    subscribe_date: form.subscribe_date || '',
+    order_status: form.order_status || '',
+    rebate_target: form.rebate_target || '',
+    channel_subscribe_ratio: form.channel_subscribe_ratio === '' || form.channel_subscribe_ratio == null ? null : Number(form.channel_subscribe_ratio),
+    channel_management_ratio: form.channel_management_ratio === '' || form.channel_management_ratio == null ? null : Number(form.channel_management_ratio),
+    channel_performance_ratio: form.channel_performance_ratio === '' || form.channel_performance_ratio == null ? null : Number(form.channel_performance_ratio),
+    ignored_conflicts: Array.isArray(form.ignored_conflicts) ? [...new Set(form.ignored_conflicts.filter(Boolean))] : [],
+  }
+}
+
+function applyAutofillToForm(form, autofill) {
+  for (const [key, value] of Object.entries(autofill || {})) {
+    if (form[key] == null || form[key] === '') {
+      form[key] = value
+    }
+  }
+}
+
+const CONFLICT_FIELD_LABELS = {
+  order_id: '订单号',
+  flight_id: '航班编号',
+  product_name: '产品名称',
+  customer_name: '客户姓名',
+  rebate_target: '返还人',
+  channel_or_direct: '渠道/直客',
+  subscribe_date: '认购日',
+  order_status: '订单状态',
+  principal: '本金',
+  margin_ratio: '保证金比例',
+  product_ref: '产品表匹配',
+  'product_name(product_table)': '产品名称',
+}
+
+function conflictFieldLabel(field) {
+  return CONFLICT_FIELD_LABELS[field] || field
+}
+
+function conflictExpectedLabel(field) {
+  if (field === 'product_name(product_table)' || field === 'margin_ratio' || field === 'product_ref') {
+    return '产品表'
+  }
+  return '交易表'
+}
+
+function conflictMessage(conflicts) {
+  return conflicts
+    .map(item => `${conflictFieldLabel(item.field)}: 当前=${item.current}，${conflictExpectedLabel(item.field)}=${item.expected}`)
+    .join('\n')
+}
+
+function ignoredConflictCount(item) {
+  return Array.isArray(item?.ignored_conflicts) ? item.ignored_conflicts.length : 0
+}
+
+function ignoredConflictMessage(item) {
+  const entries = Array.isArray(item?.ignored_conflicts) ? item.ignored_conflicts : []
+  if (!entries.length) return '无已忽略冲突'
+  return entries
+    .map((entry) => {
+      const [field, ...rest] = String(entry).split('|')
+      const expected = rest.join('|')
+      return expected ? `${conflictFieldLabel(field)}: ${conflictExpectedLabel(field)}=${expected}` : conflictFieldLabel(field)
+    })
+    .join('\n')
+}
+
+async function assistCompletedRecordLegacy(form, { interactive = false } = {}) {
+  const payload = toAssistPayload(form)
+  const meaningfulKeys = ['order_id', 'flight_id', 'product_name', 'customer_name', 'principal', 'rebate_target']
+  if (!meaningfulKeys.some(key => payload[key] !== '' && payload[key] != null)) {
+    return { allowed: true, conflicts: [] }
+  }
+
+  try {
+    autofillState.applying = true
+    const res = await fetch('/api/rebate/completed/assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '自动识别失败')
+    applyAutofillToForm(form, data.autofill)
+    if (data.conflicts?.length) {
+      if (!interactive) return { allowed: false, conflicts: data.conflicts }
+      return window.confirm(`检测到与交易表不一致的字段：\n${conflictMessage(data.conflicts)}\n\n点击“确定”忽略并继续，点击“取消”返回修改。`)
+    }
+    return true
+  } catch (error) {
+    if (interactive) {
+      alert(error.message || '自动识别失败')
+    }
+    return !interactive
+  } finally {
+    autofillState.applying = false
+  }
+}
+
+function mergeIgnoredConflictSignatures(form, conflicts) {
+  if (!Array.isArray(form.ignored_conflicts)) {
+    form.ignored_conflicts = []
+  }
+  const signatures = (conflicts || []).map(item => item?.signature).filter(Boolean)
+  if (!signatures.length) return
+  form.ignored_conflicts = [...new Set([...form.ignored_conflicts, ...signatures])]
+}
+
+async function assistCompletedRecord(form, { interactive = false } = {}) {
+  const payload = toAssistPayload(form)
+  const meaningfulKeys = ['order_id', 'flight_id', 'product_name', 'customer_name', 'principal', 'rebate_target']
+  if (!meaningfulKeys.some(key => payload[key] !== '' && payload[key] != null)) {
+    return { allowed: true, conflicts: [] }
+  }
+
+  try {
+    autofillState.applying = true
+    const res = await fetch('/api/rebate/completed/assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '自动识别失败')
+    applyAutofillToForm(form, data.autofill)
+    if (data.conflicts?.length) {
+      if (!interactive) return { allowed: false, conflicts: data.conflicts }
+      const confirmed = window.confirm(`检测到与交易表不一致的字段：\n${conflictMessage(data.conflicts)}\n\n点击“确定”忽略并继续，点击“取消”返回修改。`)
+      if (confirmed) {
+        mergeIgnoredConflictSignatures(form, data.conflicts)
+      }
+      return { allowed: confirmed, conflicts: data.conflicts }
+    }
+    return { allowed: true, conflicts: [] }
+  } catch (error) {
+    if (interactive) {
+      alert(error.message || '自动识别失败')
+    }
+    return { allowed: !interactive, conflicts: [] }
+  } finally {
+    autofillState.applying = false
+  }
+}
+
+async function validateLoadedItems(rows) {
+  const validated = []
+  let conflictCount = 0
+  let issueCount = 0
+  for (const row of rows) {
+    try {
+      const res = await fetch('/api/rebate/completed/assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toAssistPayload(row)),
+      })
+      const data = await res.json()
+      const conflicts = res.ok ? (data.conflicts || []) : []
+      if (conflicts.length > 0) conflictCount += 1
+      issueCount += conflicts.length
+      validated.push({
+        ...row,
+        validation_conflicts: conflicts,
+      })
+    } catch {
+      validated.push({
+        ...row,
+        validation_conflicts: [],
+      })
+    }
+  }
+  validationSummary.count = conflictCount
+  validationSummary.issueCount = issueCount
+  return validated
+}
+
 async function submitAddForm() {
   if (!addForm.order_id) {
     alert('请填写订单号')
@@ -561,6 +778,8 @@ async function submitAddForm() {
   }
   addModal.submitting = true
   try {
+    const assistResult = await assistCompletedRecord(addForm, { interactive: true })
+    if (!assistResult.allowed) return
     const body = { ...addForm }
     // Clean null numeric fields
     for (const key of ['principal', 'margin_ratio', 'channel_subscribe_ratio', 'channel_management_ratio', 'channel_performance_ratio', 'expense_amount']) {
@@ -623,20 +842,194 @@ const COLUMN_MAP = {
   '来源': 'source',
 }
 
+function resolveColumnField(trimmedKey) {
+  if (COLUMN_MAP[trimmedKey]) return COLUMN_MAP[trimmedKey]
+
+  if (trimmedKey === '产品表对应类别') return 'expense_category'
+  if (trimmedKey === '支付年') return 'payment_year'
+  if (trimmedKey === '支付月') return 'payment_month'
+  if (trimmedKey === '支付日') return 'payment_day'
+
+  if (/^(渠道)?返还比例-?申购费$/.test(trimmedKey) || trimmedKey === '申购费比例') {
+    return 'channel_subscribe_ratio'
+  }
+  if (/^(渠道)?返还比例-?管理费$/.test(trimmedKey) || trimmedKey === '管理费比例') {
+    return 'channel_management_ratio'
+  }
+  if (/^(渠道)?返还比例-?业绩报酬$/.test(trimmedKey) || trimmedKey === '业绩报酬比例') {
+    return 'channel_performance_ratio'
+  }
+  if (trimmedKey === '支出金额（元）' || trimmedKey === '金额（元）') {
+    return 'expense_amount'
+  }
+  if (trimmedKey === '支付日期' || trimmedKey === '支付年月日') {
+    return 'payment_time'
+  }
+
+  return trimmedKey
+}
+
+function normalizeHeaderText(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function buildRowsFromSheetMatrix(matrix) {
+  if (!Array.isArray(matrix) || matrix.length === 0) return []
+
+  const firstRow = Array.isArray(matrix[0]) ? matrix[0] : []
+  const secondRow = Array.isArray(matrix[1]) ? matrix[1] : []
+  const secondHeaderMarkers = new Set([
+    '申购费比例',
+    '管理费比例',
+    '业绩报酬比例',
+    '产品表对应类别',
+    '支出金额',
+    '支付时间',
+    '支付年',
+    '支付月',
+    '支付日',
+  ])
+  const secondHeaderHits = secondRow
+    .map(normalizeHeaderText)
+    .filter(text => secondHeaderMarkers.has(text))
+    .length
+
+  if (secondHeaderHits < 3) {
+    const headers = firstRow.map(cell => normalizeHeaderText(cell))
+    return matrix
+      .slice(1)
+      .map((row) => {
+        const record = {}
+        headers.forEach((header, index) => {
+          if (!header) return
+          record[header] = row?.[index] ?? ''
+        })
+        return record
+      })
+      .filter(row => Object.values(row).some(value => String(value ?? '').trim() !== ''))
+  }
+
+  const groupHeaders = firstRow.map(cell => normalizeHeaderText(cell))
+  const subHeaders = secondRow.map(cell => normalizeHeaderText(cell))
+  const headers = groupHeaders.map((groupHeader, index) => {
+    const subHeader = subHeaders[index]
+    if (subHeader) {
+      const field = resolveColumnField(subHeader)
+      if (field !== subHeader || COLUMN_MAP[subHeader]) return subHeader
+      const combined = `${groupHeader}-${subHeader}`
+      const combinedField = resolveColumnField(combined)
+      if (combinedField !== combined || COLUMN_MAP[combined]) return combined
+    }
+    return groupHeader
+  })
+
+  return matrix
+    .slice(2)
+    .map((row) => {
+      const record = {}
+      headers.forEach((header, index) => {
+        if (!header) return
+        record[header] = row?.[index] ?? ''
+      })
+      return record
+    })
+    .filter(row => Object.values(row).some(value => String(value ?? '').trim() !== ''))
+}
+
 async function parseExcelFile(file) {
   const XLSX = await import('xlsx')
   const data = await file.arrayBuffer()
   const wb = XLSX.read(data, { type: 'array' })
   const ws = wb.Sheets[wb.SheetNames[0]]
-  return XLSX.utils.sheet_to_json(ws)
+  const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false })
+  return buildRowsFromSheetMatrix(matrix)
+}
+
+const NUMERIC_FIELDS = new Set([
+  'principal',
+  'margin_ratio',
+  'channel_subscribe_ratio',
+  'channel_management_ratio',
+  'channel_performance_ratio',
+  'expense_amount',
+])
+
+const RATIO_FIELDS = new Set([
+  'margin_ratio',
+  'channel_subscribe_ratio',
+  'channel_management_ratio',
+  'channel_performance_ratio',
+])
+
+const DATE_FIELDS = new Set(['subscribe_date', 'payment_time'])
+
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function excelSerialToDateString(value) {
+  const serial = Number(value)
+  if (!Number.isFinite(serial)) return ''
+  const utcDays = Math.floor(serial - 25569)
+  const utcValue = utcDays * 86400
+  const dateInfo = new Date(utcValue * 1000)
+  if (Number.isNaN(dateInfo.getTime())) return ''
+  return `${dateInfo.getUTCFullYear()}-${pad2(dateInfo.getUTCMonth() + 1)}-${pad2(dateInfo.getUTCDate())}`
+}
+
+function normalizeNumericValue(fieldName, value) {
+  if (value == null) return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  const text = String(value).trim().replace(/,/g, '')
+  if (!text) return null
+  const isPercent = text.endsWith('%')
+  const parsed = Number(isPercent ? text.slice(0, -1) : text)
+  if (!Number.isFinite(parsed)) return null
+  if (isPercent && RATIO_FIELDS.has(fieldName)) return parsed / 100
+  return parsed
+}
+
+function normalizeDateValue(value) {
+  if (value == null) return ''
+  if (typeof value === 'number') return excelSerialToDateString(value)
+
+  const text = String(value).trim()
+  if (!text) return ''
+  if (/^\d{5,6}(\.\d+)?$/.test(text)) {
+    return excelSerialToDateString(text)
+  }
+
+  const normalized = text.replace(/[./]/g, '-')
+  const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (match) {
+    return `${match[1]}-${pad2(match[2])}-${pad2(match[3])}`
+  }
+
+  const parsed = new Date(normalized)
+  if (Number.isNaN(parsed.getTime())) return text
+  return `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())}`
+}
+
+function normalizeRowValue(fieldName, value) {
+  if (NUMERIC_FIELDS.has(fieldName)) return normalizeNumericValue(fieldName, value)
+  if (DATE_FIELDS.has(fieldName)) return normalizeDateValue(value)
+  if (fieldName === 'payment_year') {
+    const text = String(value ?? '').trim().replace(/年$/, '')
+    return text || ''
+  }
+  if (fieldName === 'payment_month' || fieldName === 'payment_day') {
+    const text = String(value ?? '').trim().replace(/[月日]$/, '')
+    return text ? pad2(text) : ''
+  }
+  return typeof value === 'string' ? value.trim() : value
 }
 
 function mapRowFields(rawRow) {
   const mapped = {}
   for (const [key, value] of Object.entries(rawRow)) {
     const trimmedKey = String(key).trim()
-    const fieldName = COLUMN_MAP[trimmedKey] || trimmedKey
-    mapped[fieldName] = value
+    const fieldName = resolveColumnField(trimmedKey)
+    mapped[fieldName] = normalizeRowValue(fieldName, value)
   }
   // Auto-fill year/month/day from payment_time if present
   if (mapped.payment_time && !mapped.payment_year) {
@@ -669,14 +1062,23 @@ async function handleFileSelect(event) {
   }
 }
 
-async function submitBatchUpload() {
+async function submitBatchUploadLegacy() {
   if (uploadModal.records.length === 0) return
   uploadModal.submitting = true
   try {
-    const records = uploadModal.records.map(r => ({
-      ...r,
-      source: 'upload',
-    }))
+    const records = []
+    for (const row of uploadModal.records) {
+      const cloned = { ...row }
+      const allowed = await assistCompletedRecord(cloned, { interactive: false })
+      if (!allowed) {
+        const ignore = window.confirm(`上传记录与交易表存在冲突：\n订单号=${cloned.order_id || '--'}\n点击“确定”忽略并继续上传，点击“取消”停止上传。`)
+        if (!ignore) return
+      }
+      records.push({
+        ...cloned,
+        source: 'upload',
+      })
+    }
     const res = await fetch('/api/rebate/completed/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -693,9 +1095,81 @@ async function submitBatchUpload() {
   }
 }
 
+async function submitBatchUpload() {
+  if (uploadModal.records.length === 0) return
+  uploadModal.submitting = true
+  try {
+    const records = []
+    for (const row of uploadModal.records) {
+      const cloned = {
+        ...row,
+        ignored_conflicts: Array.isArray(row.ignored_conflicts) ? [...row.ignored_conflicts] : [],
+      }
+      const assistResult = await assistCompletedRecord(cloned, { interactive: false })
+      if (!assistResult.allowed) {
+        const ignore = window.confirm(`上传记录与交易表存在冲突：\n订单号：${cloned.order_id || '--'}\n${conflictMessage(assistResult.conflicts)}\n\n点击“确定”忽略并继续上传，点击“取消”停止上传。`)
+        if (!ignore) return
+        mergeIgnoredConflictSignatures(cloned, assistResult.conflicts)
+      }
+      records.push({
+        ...cloned,
+        source: 'upload',
+      })
+    }
+    const res = await fetch('/api/rebate/completed/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records }),
+    })
+    if (!res.ok) throw new Error('批量上传失败')
+    uploadModal.visible = false
+    uploadModal.records = []
+    await fetchData()
+  } catch {
+    alert('批量上传失败，请重试')
+  } finally {
+    uploadModal.submitting = false
+  }
+}
+
 function cancelUpload() {
   uploadModal.visible = false
   uploadModal.records = []
+}
+
+async function downloadTemplate() {
+  const XLSX = await import('xlsx')
+  const rows = [
+    ['订单号', '航班编号', '产品名称', '客户姓名', '渠道/直客', '本金', '保证金比例', '业务类型', '认购日', '订单状态', '返还人', '渠道返还比例', '', '', '支出流水明细', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '申购费比例', '管理费比例', '业绩报酬比例', '产品表对应类别', '支出金额', '支付时间', '支付年', '支付月', '支付日'],
+  ]
+
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+    { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
+    { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } },
+    { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } },
+    { s: { r: 0, c: 6 }, e: { r: 1, c: 6 } },
+    { s: { r: 0, c: 7 }, e: { r: 1, c: 7 } },
+    { s: { r: 0, c: 8 }, e: { r: 1, c: 8 } },
+    { s: { r: 0, c: 9 }, e: { r: 1, c: 9 } },
+    { s: { r: 0, c: 10 }, e: { r: 1, c: 10 } },
+    { s: { r: 0, c: 11 }, e: { r: 0, c: 13 } },
+    { s: { r: 0, c: 14 }, e: { r: 0, c: 19 } },
+  ]
+  ws['!cols'] = [
+    { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 12 },
+    { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+    { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
+    { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+  ]
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '已返费模板')
+  XLSX.writeFile(wb, `已返费明细导入模板_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 // --- Delete ---
@@ -818,6 +1292,17 @@ function downloadCSV() {
   display: flex;
   gap: 8px;
   margin-left: auto;
+}
+
+.validation-banner {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  color: #9f1239;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* --- Action bar --- */
@@ -957,6 +1442,33 @@ function downloadCSV() {
 }
 
 .source-auto {
+  color: #8a5a00;
+  background: var(--warning-soft);
+}
+
+.validation-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.validation-ok {
+  color: #087c58;
+  background: var(--success-soft);
+}
+
+.validation-error {
+  color: #b42318;
+  background: var(--danger-soft);
+  cursor: help;
+}
+
+.validation-muted {
   color: #8a5a00;
   background: var(--warning-soft);
 }

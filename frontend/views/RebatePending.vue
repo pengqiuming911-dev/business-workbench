@@ -666,7 +666,17 @@ async function fetchData() {
     const res = await fetch(`/api/rebate/pending?${params}`)
     if (!res.ok) throw new Error('加载失败')
     const data = await res.json()
-    items.value = data.items || []
+    items.value = (data.items || []).map(item => {
+      const principal =
+        item.principal != null && item.principal !== 0
+          ? item.principal
+          : item.subscribe_amount != null && item.subscribe_amount !== 0
+            ? item.subscribe_amount
+            : item.amount != null
+              ? item.amount
+              : 0
+      return { ...item, principal }
+    })
   } catch {
     items.value = []
   } finally {
