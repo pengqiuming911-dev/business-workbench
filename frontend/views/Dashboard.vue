@@ -11,8 +11,28 @@
           <button class="btn btn-outline" @click="openDrawer">智能助手</button>
         </div>
       </div>
-      <div class="hero-chart">
-        <img :src="klineChart" alt="趋势图" />
+      <div class="hero-indices">
+        <article
+          v-for="idx in indexItems"
+          :key="idx.code"
+          class="index-card"
+        >
+          <div class="index-header">
+            <span class="index-name">{{ idx.name }}</span>
+            <span class="index-code">{{ idx.code }}</span>
+          </div>
+          <strong class="index-value">{{ idx.value ?? '--' }}</strong>
+          <span
+            class="index-change"
+            :class="{
+              up: idx.changePct > 0,
+              down: idx.changePct < 0,
+            }"
+          >
+            {{ idx.changePct !== null ? (idx.changePct > 0 ? '+' : '') + idx.changePct + '%' : '--' }}
+          </span>
+          <div class="index-chart" :ref="el => setChartRef(el, idx.code)"></div>
+        </article>
       </div>
     </section>
 
@@ -30,7 +50,7 @@
       <div class="main-col">
         <div class="card-head">
           <h3>常用入口</h3>
-          <span class="card-link">6 项</span>
+          <span class="card-link">{{ modules.length }} 项</span>
         </div>
         <div class="module-grid">
           <RouterLink
@@ -58,9 +78,14 @@
               <span>{{ syncStatus.synced_at ? formatTime(syncStatus.synced_at) : '未同步' }}</span>
             </div>
             <div class="sync-row">
-              <span class="sync-dot" :class="{ ready: coinvestStatus.row_count }"></span>
-              <strong>合投用户表</strong>
-              <span>{{ coinvestStatus.synced_at ? formatTime(coinvestStatus.synced_at) : '未同步' }}</span>
+              <span class="sync-dot" :class="{ ready: docStatus.doc_count }"></span>
+              <strong>物料文档</strong>
+              <span>{{ docStatus.synced_at ? formatTime(docStatus.synced_at) : '未同步' }}</span>
+            </div>
+            <div class="sync-row">
+              <span class="sync-dot" :class="{ ready: rebateStatus.row_count }"></span>
+              <strong>返费明细</strong>
+              <span>{{ rebateStatus.synced_at ? formatTime(rebateStatus.synced_at) : '未同步' }}</span>
             </div>
           </div>
         </div>
@@ -71,8 +96,7 @@
           </div>
           <div class="quick-links">
             <RouterLink to="/product-completion" class="quick-link">观察日历</RouterLink>
-            <RouterLink to="/product-report" class="quick-link">产品报告</RouterLink>
-            <RouterLink to="/customer-churn" class="quick-link">流失识别</RouterLink>
+            <RouterLink to="/product-report" class="quick-link">销售物料</RouterLink>
           </div>
         </div>
       </div>
@@ -81,9 +105,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import klineChart from '../assets/kline-chart.svg'
+import * as echarts from 'echarts'
 
 const stats = ref({
   totalProducts: 0,
@@ -91,7 +115,15 @@ const stats = ref({
   totalCustomers: 0,
 })
 const syncStatus = ref({})
-const coinvestStatus = ref({})
+const docStatus = ref({})
+const rebateStatus = ref({})
+
+const indexItems = ref([
+  { code: '000852.SH', name: '中证1000', value: null, changePct: null },
+  { code: '513180.SH', name: '恒科ETF', value: null, changePct: null },
+  { code: '000905.SH', name: '中证500', value: null, changePct: null },
+  { code: '000300.SH', name: '沪深300', value: null, changePct: null },
+])
 
 const statCards = computed(() => [
   { label: '产品总数', value: stats.value.totalProducts.toLocaleString('zh-CN'), note: '全部产品' },
@@ -102,12 +134,17 @@ const statCards = computed(() => [
 const modules = [
   { path: '/data-preparation', title: '数据准备', desc: '飞书同步' },
   { path: '/product-completion', title: '观察日历', desc: '敲出 / 派息' },
-  { path: '/product-report', title: '产品报告', desc: '运行材料' },
-  { path: '/holding-analysis', title: '持有产品分析', desc: '产品与客户持有' },
-  { path: '/rebate-analysis', title: '返费分析', desc: '待返费与已返费' },
-  { path: '/user-profile', title: '用户画像', desc: '条件筛选' },
-  { path: '/customer-churn', title: '流失识别', desc: '未复购客户' },
+  { path: '/product-report', title: '销售物料', desc: '产品物料' },
+  { path: '/holding-analysis', title: '产品&持仓', desc: '产品与客户持有' },
+  { path: '/rebate-analysis', title: '返费', desc: '待返费与已返费' },
 ]
+
+const chartRefs = {}
+const chartInstances = []
+
+function setChartRef(el, code) {
+  if (el) chartRefs[code] = el
+}
 
 function openDrawer() {
   window.dispatchEvent(new CustomEvent('toggle-agent-drawer'))
@@ -130,17 +167,94 @@ async function loadStats() {
   } catch {}
 }
 
-async function loadSyncStatus() {
+async function loadSyncStatuses() {
   try {
     const res1 = await fetch('/api/db/sync-status')
     if (res1.ok) syncStatus.value = await res1.json()
-    const res2 = await fetch('/api/db/sync-coinvest-status')
-    if (res2.ok) coinvestStatus.value = await res2.json()
+    const res2 = await fetch('/api/drive/product-docs/sync-status')
+    if (res2.ok) docStatus.value = await res2.json()
+    const res3 = await fetch('/api/db/rebate-detail-status')
+    if (res3.ok) rebateStatus.value = await res3.json()
   } catch {}
 }
 
+async function loadIndices() {
+  for (const idx of indexItems.value) {
+    const secid = parseCodeForKline(idx.code)
+    if (!secid) continue
+    try {
+      const res = await fetch(`/_em_quote?secid=${secid}&fields=f43,f58,f169,f170`)
+      if (!res.ok) continue
+      const payload = await res.json()
+      if (!payload.data) continue
+      const d = payload.data
+      idx.name = idx.name || d.f58 || idx.name
+      if (d.f43 != null) {
+        const etfLike = idx.code.startsWith('51')
+        idx.value = d.f43 / (etfLike ? 1000 : 100)
+      }
+      if (d.f170 != null) {
+        idx.changePct = +(d.f170 / 100).toFixed(2)
+      }
+    } catch {}
+  }
+}
+
+function parseCodeForKline(code) {
+  const match = code.match(/(\d{6})\s*[.\s]*(\w{2})/)
+  if (!match) return null
+  const [, num, exchange] = match
+  const market = (exchange === 'SH' && (num.startsWith('0') || num.startsWith('5'))) ? '1' : '0'
+  return `${market}.${num}`
+}
+
+async function loadKlines() {
+  for (const idx of indexItems.value) {
+    const secid = parseCodeForKline(idx.code)
+    if (!secid) continue
+    try {
+      const url = `/_em_kline?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&end=20500101&lmt=30`
+      const res = await fetch(url)
+      if (!res.ok) continue
+      const payload = await res.json()
+      if (!payload.data?.klines?.length) continue
+      const el = chartRefs[idx.code]
+      if (!el) continue
+      const chart = echarts.init(el)
+      chartInstances.push(chart)
+      const closes = payload.data.klines.map(line => parseFloat(line.split(',')[2]))
+      const isUp = closes[closes.length - 1] >= closes[0]
+      const color = isUp ? '#dc2626' : '#16a34a'
+      chart.setOption({
+        grid: { top: 2, bottom: 2, left: 2, right: 2 },
+        xAxis: { type: 'category', show: false, boundaryGap: false },
+        yAxis: { type: 'value', show: false, min: 'dataMin', max: 'dataMax' },
+        series: [{
+          type: 'line',
+          data: closes,
+          smooth: true,
+          symbol: 'none',
+          lineStyle: { width: 1.5, color },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: color + '30' },
+              { offset: 1, color: color + '05' },
+            ]),
+          },
+        }],
+      })
+    } catch {}
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadStats(), loadSyncStatus()])
+  await Promise.all([loadStats(), loadSyncStatuses(), loadIndices()])
+  loadKlines()
+  setInterval(loadIndices, 30000)
+})
+
+onUnmounted(() => {
+  chartInstances.forEach(c => c.dispose())
 })
 </script>
 
@@ -189,16 +303,69 @@ onMounted(async () => {
   margin-top: 8px;
 }
 
-.hero-chart {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.hero-indices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 8px;
+  background: var(--bg-hover, #f9fafb);
+  border-radius: 12px;
 }
 
-.hero-chart img {
+.hero-indices .index-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.index-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.index-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.index-code {
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-family: monospace;
+}
+
+.index-value {
+  font-size: 18px;
+  font-weight: 750;
+  color: var(--ink-strong);
+  line-height: 1.2;
+}
+
+.index-change {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-faint);
+}
+
+.index-chart {
   width: 100%;
-  max-width: 420px;
-  height: auto;
+  height: 48px;
+  margin-top: 4px;
+}
+
+.index-change.up {
+  color: #dc2626;
+}
+
+.index-change.down {
+  color: #16a34a;
 }
 
 /* ─── Stats ─── */
@@ -206,7 +373,7 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .stat-card {

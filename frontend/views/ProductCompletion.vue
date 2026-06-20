@@ -130,55 +130,54 @@
       </div>
     </div>
 
-    <div v-if="activeTab === 'calendar'">
-      <p class="text-body" style="margin-bottom: 24px;">按月份查看存续产品观察日，并在对应日期展示需要观察的产品名称。</p>
-
-      <PanelCard title="日历筛选">
-        <div class="form-row">
+    <div v-if="activeTab === 'calendar'" class="calendar-section">
+      <div class="calendar-toolbar">
+        <div class="calendar-month-picker">
           <label>月份</label>
           <input v-model="calendarMonth" type="month" class="input month-input" @change="loadCalendarData" />
           <span v-if="calendarError" class="error-msg" style="margin-left: 12px;">{{ calendarError }}</span>
         </div>
-      </PanelCard>
+        <div class="calendar-summary">本月共 {{ calendarProductCount }} 个产品观察安排</div>
+      </div>
 
       <div v-if="calendarLoading" class="loading-state"><p>加载中...</p></div>
-      <div v-else>
-        <PanelCard title="观察日历">
-          <div class="calendar-weekdays">
-            <div v-for="day in weekDays" :key="day" class="calendar-weekday">{{ day }}</div>
-          </div>
-          <div class="calendar-grid">
-            <div
-              v-for="cell in calendarCells"
-              :key="cell.key"
-              class="calendar-cell"
-              :class="{ muted: !cell.inMonth, 'has-products': cell.products.length }"
-            >
-              <div class="calendar-day">{{ cell.day || '' }}</div>
-              <div v-if="cell.products.length" class="calendar-products">
-                <div
-                  v-for="product in cell.products"
-                  :key="product.id"
-                  class="calendar-product"
-                  :class="calItemClass(product)"
-                  :title="product.name"
-                >
-                  <div class="cal-item-top">
-                    <span class="cal-item-name">{{ truncateCalName(product.name || product.id) }}</span>
-                    <span v-if="product.is_knockout_observable && product.has_dividend_observation" class="cal-tag tag-both">派息+敲出</span>
-                    <span v-else-if="product.is_knockout_observable" class="cal-tag tag-knockout">敲出</span>
-                    <span v-else-if="product.has_dividend_observation" class="cal-tag tag-dividend">派息</span>
-                  </div>
-                  <div class="cal-item-prices">
-                    <span v-if="product.is_knockout_observable && product.knockout_price != null" class="cal-price ko">敲出 {{ fmtCalPrice(product.knockout_price) }}</span>
-                    <span v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-price dv">派息 {{ fmtCalPrice(product.dividend_line) }}</span>
-                  </div>
+      <div v-else class="calendar-wrap">
+        <div class="calendar-weekdays">
+          <div v-for="day in weekDays" :key="day" class="calendar-weekday">{{ day }}</div>
+        </div>
+        <div class="calendar-grid">
+          <div
+            v-for="cell in calendarCells"
+            :key="cell.key"
+            class="calendar-cell"
+            :class="{ muted: !cell.inMonth, today: cell.date === todayDate }"
+          >
+            <div class="calendar-day" :class="{ 'has-items': cell.products.length }">{{ cell.day || '' }}</div>
+            <div v-if="cell.products.length" class="calendar-products">
+              <div
+                v-for="product in cell.products"
+                :key="product.id"
+                class="cal-card"
+                :class="calItemClass(product)"
+                :title="product.name"
+              >
+                <div class="cal-card-head">
+                  <span class="cal-card-name">{{ truncateCalName(product.name || product.id) }}</span>
+                  <span
+                    class="cal-type-badge"
+                    :class="{ 'badge-both': product.is_knockout_observable && product.has_dividend_observation, 'badge-ko': product.is_knockout_observable && !product.has_dividend_observation, 'badge-dv': !product.is_knockout_observable && product.has_dividend_observation }"
+                  >
+                    {{ product.is_knockout_observable && product.has_dividend_observation ? '派息+敲出' : product.is_knockout_observable ? '敲出' : '派息' }}
+                  </span>
+                </div>
+                <div class="cal-card-prices">
+                  <span v-if="product.is_knockout_observable && product.knockout_price != null" class="cal-ko-price">敲出 <b>{{ fmtCalPrice(product.knockout_price) }}</b></span>
+                  <span v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-dv-price">派息 <b>{{ fmtCalPrice(product.dividend_line) }}</b></span>
                 </div>
               </div>
             </div>
           </div>
-          <p class="table-summary">本月共 {{ calendarProductCount }} 个产品观察安排</p>
-        </PanelCard>
+        </div>
       </div>
     </div>
 
@@ -729,92 +728,158 @@ function calItemClass(product) {
   color: var(--ink);
 }
 
+.calendar-section {
+  margin-top: 0;
+}
+
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.calendar-month-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.calendar-month-picker label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.calendar-summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--surface-muted);
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+
+.calendar-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
 .calendar-weekdays {
   display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr));
-  border: 1px solid var(--border-soft);
-  border-bottom: none;
-  background: var(--surface-muted);
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
+  background: #f8f9fb;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .calendar-weekday {
-  padding: 10px 12px;
+  padding: 12px 8px;
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 700;
   text-align: center;
-  border-right: 1px solid var(--border-soft);
+  letter-spacing: 0.05em;
 }
-
-.calendar-weekday:last-child { border-right: none; }
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr));
-  border-left: 1px solid var(--border-soft);
-  border-top: 1px solid var(--border-soft);
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
   overflow-x: auto;
 }
 
 .calendar-cell {
-  min-height: 118px;
-  padding: 8px;
-  border-right: 1px solid var(--border-soft);
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--bg-card);
+  min-height: 120px;
+  padding: 10px 10px 8px;
+  border-right: 1px solid #f0f1f4;
+  border-bottom: 1px solid #f0f1f4;
+  background: #fff;
+  transition: background 0.1s;
 }
 
-.calendar-cell.muted { background: var(--surface-muted); }
-.calendar-cell.has-products { background: #fafbfd; }
+.calendar-cell:nth-child(7n) {
+  border-right: none;
+}
+
+.calendar-cell.muted {
+  background: #fafbfc;
+}
+
+.calendar-cell.today {
+  background: #f0f5ff;
+}
 
 .calendar-day {
-  height: 22px;
-  color: var(--ink-strong);
   font-size: 13px;
-  font-weight: 800;
-  margin-bottom: 6px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.calendar-day.has-items {
+  color: var(--ink-strong);
+}
+
+.calendar-day.has-items::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
 }
 
 .calendar-products {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
-.calendar-product {
-  padding: 5px 7px;
-  border-radius: 6px;
-  border-left: 3px solid var(--brand);
-  background: #fff;
+.cal-card {
+  padding: 7px 9px 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
   font-size: 11px;
-  line-height: 1.4;
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  line-height: 1.45;
+  background: #fff;
+  transition: box-shadow 0.12s;
 }
 
-.calendar-product.item-knockout {
-  border-left-color: #ef4444;
+.cal-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+}
+
+.cal-card.item-knockout {
   background: #fff5f5;
+  border-color: #fecaca;
 }
 
-.calendar-product.item-dividend {
-  border-left-color: #10b981;
+.cal-card.item-dividend {
   background: #f0fdf8;
+  border-color: #bbf7d0;
 }
 
-.calendar-product.item-both {
-  border-left-color: #f59e0b;
-  background: #fffdf5;
+.cal-card.item-both {
+  background: #fffbf0;
+  border-color: #fde68a;
 }
 
-.cal-item-top {
+.cal-card-head {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin-bottom: 3px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
-.cal-item-name {
+.cal-card-name {
   font-weight: 700;
   color: var(--ink-strong);
   font-size: 11.5px;
@@ -825,52 +890,58 @@ function calItemClass(product) {
   min-width: 0;
 }
 
-.cal-tag {
+.cal-type-badge {
   flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: 100px;
-  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
   font-weight: 700;
   line-height: 16px;
   white-space: nowrap;
   letter-spacing: 0.01em;
 }
 
-.tag-knockout {
-  color: #fff;
-  background: #ef4444;
+.cal-type-badge.badge-ko {
+  color: #dc2626;
+  background: #fee2e2;
 }
 
-.tag-dividend {
-  color: #fff;
-  background: #10b981;
+.cal-type-badge.badge-dv {
+  color: #059669;
+  background: #d1fae5;
 }
 
-.tag-both {
-  color: #fff;
-  background: #f59e0b;
+.cal-type-badge.badge-both {
+  color: #d97706;
+  background: #fef3c7;
 }
 
-.cal-item-prices {
+.cal-card-prices {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.cal-price {
+.cal-ko-price,
+.cal-dv-price {
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--ink-soft);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.cal-price.ko {
+.cal-ko-price {
   color: #dc2626;
 }
 
-.cal-price.dv {
+.cal-dv-price {
   color: #059669;
+}
+
+.cal-ko-price b,
+.cal-dv-price b {
+  font-weight: 700;
 }
 
 .poster-grid {

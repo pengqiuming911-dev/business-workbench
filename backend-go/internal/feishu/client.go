@@ -358,6 +358,41 @@ func (c *Client) ExportSheet(ctx context.Context, sheetToken string) ([]byte, st
 	return nil, "", fmt.Errorf("导出超时，请稍后重试")
 }
 
+func (c *Client) GetSheetMetaData(ctx context.Context, spreadsheetToken string) ([]SheetMeta, error) {
+	token := c.UserToken()
+	if token == "" {
+		return nil, fmt.Errorf("未授权，请先登录飞书")
+	}
+	endpoint := fmt.Sprintf("https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/%s", spreadsheetToken)
+	body, err := c.get(ctx, endpoint, token)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			Sheets []SheetMeta `json:"sheets"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	if payload.Code != 0 {
+		return nil, fmt.Errorf("get sheet meta failed (%d): %s", payload.Code, payload.Msg)
+	}
+	return payload.Data.Sheets, nil
+}
+
+type SheetMeta struct {
+	SheetID    string `json:"sheet_id"`
+	Title      string `json:"title"`
+	GridProps  struct {
+		ColumnCount int `json:"column_count"`
+		RowCount    int `json:"row_count"`
+	} `json:"grid_properties"`
+}
+
 func (c *Client) appAccessToken(ctx context.Context) (string, error) {
 	payload := map[string]any{"app_id": c.AppID, "app_secret": c.AppSecret}
 	body, err := c.post(ctx, "https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal", payload, "")

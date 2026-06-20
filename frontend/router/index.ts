@@ -16,6 +16,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/push-settings', component: () => import('../views/PushSettings.vue') },
   { path: '/channel-analysis', redirect: '/' },
   { path: '/activity-log', component: () => import('../views/ActivityLog.vue') },
+  { path: '/user-profile', component: () => import('../views/UserProfile.vue') },
   { path: '/agent', component: () => import('../views/AgentChat.vue') },
 ]
 

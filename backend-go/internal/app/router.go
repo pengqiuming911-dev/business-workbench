@@ -44,6 +44,7 @@ const (
 	coInvestAppToken    = "G1sbbVhL2awTltsOoi8cqci4nJh"
 	coInvestTableID     = "tbl5mm7sQ001Z7p1"
 	productLibraryToken = "W9OGfnjzQl8dOOdqPFwcL6gEnkf"
+	rebateFolderToken   = "HINVfSPnPl266ad6xVschyK4nnb"
 )
 
 func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
@@ -93,6 +94,11 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.GET("/api/drive/product-docs", server.productDocs)
 	router.GET("/api/drive/product-docs/sync-status", server.productDocsSyncStatus)
 	router.POST("/api/drive/sync-product-docs", server.syncProductDocs)
+	router.POST("/api/db/sync-all", server.syncAll)
+	router.POST("/api/db/sync-rebate-detail", server.syncRebateDetail)
+	router.GET("/api/db/rebate-detail-status", server.rebateDetailStatus)
+	router.GET("/api/dashboard/indices", server.dashboardIndices)
+	router.GET("/api/dashboard/klines", server.dashboardKlines)
 	router.GET("/api/dashboard/stats", server.dashboardStats)
 	router.GET("/api/dashboard/charts", server.dashboardCharts)
 	router.GET("/api/observations/calendar", server.observationCalendar)
@@ -121,9 +127,12 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.POST("/api/holding/refresh-price", server.holdingRefreshPrice)
 
 	router.GET("/api/rebate/pending", server.rebatePending)
+	router.POST("/api/rebate/pending/assist", server.rebatePendingAssist)
+	router.POST("/api/rebate/pending/manual-import", server.rebatePendingManualImport)
 	router.PUT("/api/rebate/pending/status", server.rebateUpdateStatus)
 	router.POST("/api/rebate/pending/mark-returned", server.rebateMarkReturned)
 	router.GET("/api/rebate/completed", server.rebateCompleted)
+	router.POST("/api/rebate/completed/assist", server.rebateCompletedAssist)
 	router.POST("/api/rebate/completed", server.rebateAddCompleted)
 	router.POST("/api/rebate/completed/batch", server.rebateBatchCompleted)
 	router.DELETE("/api/rebate/completed/:id", server.rebateDeleteCompleted)
@@ -136,8 +145,10 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 
 func (s *Server) health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"ok":      true,
-		"service": "business-workbench-go",
+		"ok":            true,
+		"service":       "business-workbench-go",
+		"build":         "2026-06-15-pending-route-fix",
+		"database_path": s.store.Path,
 	})
 }
 
@@ -556,6 +567,204 @@ func (s *Server) syncProductDocs(c *gin.Context) {
 		"folder_count": walk.FolderCount,
 		"last_sync":    now,
 	})
+}
+
+func (s *Server) syncAll(c *gin.Context) {
+	if !s.feishu.Authorized() {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录飞书"})
+		return
+	}
+
+	result := gin.H{"ok": true}
+
+	productRows, err := s.feishu.ReadSheetRows(c.Request.Context(), mainSheetToken, productSheetID, 58)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	products := mapProductSheetRows(productRows)
+	if err := s.store.ImportProducts(products); err != nil {
+		writeError(c, err)
+		return
+	}
+	transactionRows, err := s.feishu.ReadSheetRows(c.Request.Context(), mainSheetToken, transactionSheetID, 500)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	transactions := mapTransactionSheetRows(transactionRows)
+	if err := s.store.ImportTransactions(transactions); err != nil {
+		writeError(c, err)
+		return
+	}
+	total := len(products) + len(transactions)
+	_ = s.store.LogSync(total)
+	_ = s.store.LogActivity("sync", "Transaction table synced", fmt.Sprintf("%d rows", total))
+	result["transactionCount"] = total
+
+	ongoing, err := s.store.QueryOngoingProducts()
+	if err == nil {
+		priceResult := prices.FetchAll(c.Request.Context(), uniqueProductCodes(ongoing))
+		today := time.Now().Format("2006-01-02")
+		for code, price := range priceResult.Prices {
+			_ = s.store.UpsertPrice(code, today, price)
+		}
+		_ = s.updateTodayObservationRecords(ongoing, today, priceResult.Prices)
+	}
+
+	walk, err := s.feishu.WalkDriveFolder(c.Request.Context(), productLibraryToken)
+	if err == nil {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		docRows := []map[string]any{}
+		for _, file := range walk.Files {
+			rawContent, err := s.feishu.ReadDocRawContent(c.Request.Context(), file.Token)
+			if err != nil {
+				rawContent = ""
+			}
+			structured := parseProductStructure(rawContent)
+			structureJSON := ""
+			if structured != nil {
+				data, _ := json.Marshal(structured)
+				structureJSON = string(data)
+			}
+			docRows = append(docRows, map[string]any{
+				"doc_token": file.Token, "doc_name": file.Name,
+				"parent_path": file.ParentPath, "folder_token": file.ParentToken,
+				"raw_content": rawContent, "structure_json": structureJSON,
+				"synced_at": now,
+			})
+		}
+		_ = s.store.ImportProductDocs(docRows)
+		_ = s.store.LogProductDocsSync(len(docRows), walk.FolderCount)
+		_ = s.store.LogActivity("sync", "Product docs synced", fmt.Sprintf("%d docs", len(docRows)))
+		result["docCount"] = len(docRows)
+	}
+
+	rebateInfo, rebateErr := s.performRebateDetailSync(c.Request.Context())
+	if rebateErr == nil {
+		result["rebateRowCount"] = rebateInfo["row_count"]
+		result["rebateSheetName"] = rebateInfo["sheet_name"]
+	}
+
+	if rebateErr != nil {
+		result["rebateError"] = rebateErr.Error()
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (s *Server) syncRebateDetail(c *gin.Context) {
+	if !s.feishu.Authorized() {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录飞书"})
+		return
+	}
+	info, err := s.performRebateDetailSync(c.Request.Context())
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "row_count": info["row_count"], "sheet_name": info["sheet_name"]})
+}
+
+func (s *Server) rebateDetailStatus(c *gin.Context) {
+	row, err := s.store.LastRebateDetailSync()
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	if row == nil {
+		c.JSON(http.StatusOK, gin.H{"synced_at": nil, "row_count": 0, "sheet_name": "", "sheet_token": ""})
+		return
+	}
+	c.JSON(http.StatusOK, row)
+}
+
+func (s *Server) dashboardIndices(c *gin.Context) {
+	codes := []string{"000852.SH", "513180.SH", "000905.SH", "000300.SH"}
+	results := prices.FetchIndices(c.Request.Context(), codes)
+	c.JSON(http.StatusOK, gin.H{"indices": results})
+}
+
+func (s *Server) dashboardKlines(c *gin.Context) {
+	codes := []string{"000852.SH", "513180.SH", "000905.SH", "000300.SH"}
+	days := 30
+	results := prices.FetchKlines(c.Request.Context(), codes, days)
+	c.JSON(http.StatusOK, gin.H{"klines": results})
+}
+
+var rebateDateRe = regexp.MustCompile(`(?:^|\D)(\d{2})(\d{2})(\d{2})(?:\D|$)`)
+
+func (s *Server) performRebateDetailSync(ctx context.Context) (gin.H, error) {
+	data, err := s.feishu.DriveFiles(ctx, rebateFolderToken, "", "")
+	if err != nil {
+		return nil, fmt.Errorf("读取返费文件夹失败: %w", err)
+	}
+	filesRaw, _ := data["files"].([]any)
+
+	type rebateFile struct {
+		Token string
+		Name  string
+		Date  string
+	}
+	var rebateFiles []rebateFile
+	for _, f := range filesRaw {
+		fmap, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		token := fmt.Sprint(fmap["token"])
+		name := fmt.Sprint(fmap["name"])
+		fileType := fmt.Sprint(fmap["type"])
+		if fileType == "folder" || fileType == "shortcut" || token == "" {
+			continue
+		}
+		if !strings.Contains(name, "返款明细") && !strings.Contains(name, "返费明细") {
+			continue
+		}
+		match := rebateDateRe.FindStringSubmatch(name)
+		if len(match) >= 4 {
+			y, m, d := match[1], match[2], match[3]
+			if len(m) == 1 {
+				m = "0" + m
+			}
+			if len(d) == 1 {
+				d = "0" + d
+			}
+			rebateFiles = append(rebateFiles, rebateFile{Token: token, Name: name, Date: "20" + y + m + d})
+		}
+	}
+	if len(rebateFiles) == 0 {
+		return nil, fmt.Errorf("返费文件夹下未找到返费明细表")
+	}
+
+	latest := rebateFiles[0]
+	for _, rf := range rebateFiles[1:] {
+		if rf.Date > latest.Date {
+			latest = rf
+		}
+	}
+
+	meta, err := s.feishu.GetSheetMetaData(ctx, latest.Token)
+	if err != nil {
+		return nil, fmt.Errorf("获取返费明细元数据失败: %w", err)
+	}
+	if len(meta) == 0 {
+		return nil, fmt.Errorf("返费明细表无可用工作表")
+	}
+	sheet := meta[0]
+	colCount := 20
+	if sheet.GridProps.ColumnCount > 0 {
+		colCount = sheet.GridProps.ColumnCount
+	}
+	rows, err := s.feishu.ReadSheetRows(ctx, latest.Token, sheet.SheetID, colCount)
+	if err != nil {
+		return nil, fmt.Errorf("读取返费明细数据失败: %w", err)
+	}
+	if err := s.store.SaveRebateDetail(rows, latest.Name, latest.Token); err != nil {
+		return nil, err
+	}
+	_ = s.store.LogActivity("sync", "Rebate detail synced", fmt.Sprintf("%d rows from %s", len(rows), latest.Name))
+	return gin.H{"row_count": len(rows), "sheet_name": latest.Name, "sheet_token": latest.Token}, nil
 }
 
 func (s *Server) observations(c *gin.Context) {
@@ -1509,7 +1718,9 @@ func mapTransactionSheetRows(rows []map[string]any) []map[string]any {
 			"transaction_date":      excelDateToString(row["交易日期"]),
 			"flight_id":             flightID,
 			"counterparty":          cellString(firstValue(row, "交易对手", "对手方")),
+			"channel_or_direct":     cellString(firstValue(row, "直客/渠道")),
 			"subscribe_amount":      numberFromCell(row["认购金额"]),
+			"subscribe_fee_rate":    parseRatioValue(findSheetField(row, "申购费率")),
 			"product_name":          cellString(row["产品名字"]),
 			"customer_name":         cellString(row["姓名"]),
 			"actual_buyer":          cellString(row["实际申购人"]),
@@ -1683,21 +1894,31 @@ func firstValue(row map[string]any, keys ...string) any {
 		if value, ok := row[key]; ok {
 			return value
 		}
+		normalizedKey := normalizeSheetFieldName(key)
+		for rowKey, value := range row {
+			if normalizeSheetFieldName(rowKey) == normalizedKey {
+				return value
+			}
+		}
 	}
 	return nil
 }
 
 func findSheetField(row map[string]any, patterns ...string) any {
 	for _, pattern := range patterns {
-		normalizedPattern := strings.ReplaceAll(pattern, " ", "")
+		normalizedPattern := normalizeSheetFieldName(pattern)
 		for key, value := range row {
-			normalizedKey := strings.ReplaceAll(key, " ", "")
+			normalizedKey := normalizeSheetFieldName(key)
 			if normalizedKey == normalizedPattern || strings.Contains(normalizedKey, normalizedPattern) {
 				return value
 			}
 		}
 	}
 	return nil
+}
+
+func normalizeSheetFieldName(value string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(value)), "")
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -1707,6 +1928,35 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func conflictSignature(field, expected string) string {
+	return strings.TrimSpace(field) + "|" + strings.TrimSpace(expected)
+}
+
+func filterIgnoredConflicts(conflicts []gin.H, ignored []string) []gin.H {
+	if len(conflicts) == 0 || len(ignored) == 0 {
+		return conflicts
+	}
+	ignoredSet := make(map[string]struct{}, len(ignored))
+	for _, signature := range ignored {
+		signature = strings.TrimSpace(signature)
+		if signature == "" {
+			continue
+		}
+		ignoredSet[signature] = struct{}{}
+	}
+	filtered := make([]gin.H, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		signature := strings.TrimSpace(fmt.Sprint(conflict["signature"]))
+		if signature != "" {
+			if _, ok := ignoredSet[signature]; ok {
+				continue
+			}
+		}
+		filtered = append(filtered, conflict)
+	}
+	return filtered
 }
 
 func cellString(value any) string {
@@ -1958,9 +2208,18 @@ func (s *Server) rebatePending(c *gin.Context) {
 	var result []map[string]any
 	for _, row := range rows {
 		principal := numberValue(row["subscribe_amount"])
+		if principal <= 0 {
+			principal = numberValue(row["amount"])
+			if principal > 0 && principal < 10000 {
+				principal = principal * 10000
+			}
+		}
+		subFeeRate := numberValue(row["subscribe_fee_rate"])
 		subRatio := numberValue(row["subscribe_fee_ratio"])
-		mgmtRatio := numberValue(row["management_fee_ratio"])
-		perfRatio := numberValue(row["performance_fee_ratio"])
+		managementReceivable := numberValue(row["management_fee_received"])
+		performanceReceivable := numberValue(row["performance_fee_receivable"])
+		managementRatio := numberValue(row["management_fee_ratio"])
+		performanceRatio := numberValue(row["performance_fee_ratio"])
 
 		returnedSub := numberValue(row["returned_subscribe"])
 		returnedMgmt := numberValue(row["returned_management"])
@@ -1970,21 +2229,22 @@ func (s *Server) rebatePending(c *gin.Context) {
 		taxMgmt := numberValue(row["tax_management_ratio"])
 		taxPerf := numberValue(row["tax_performance_ratio"])
 
-		expectedSub := principal * subRatio * (1 - taxSub)
-		expectedMgmt := principal * mgmtRatio * (1 - taxMgmt)
-		expectedPerf := principal * perfRatio * (1 - taxPerf)
+		subscribeReceivable := principal * subFeeRate
+		expectedSub := subscribeReceivable * subRatio * (1 - taxSub)
+		expectedMgmt := managementReceivable * managementRatio * (1 - taxMgmt)
+		expectedPerf := performanceReceivable * performanceRatio * (1 - taxPerf)
 
 		outstandingSub := expectedSub - returnedSub
 		outstandingMgmt := expectedMgmt - returnedMgmt
 		outstandingPerf := expectedPerf - returnedPerf
 
-		if outstandingSub <= 0 && outstandingMgmt <= 0 && outstandingPerf <= 0 {
-			continue
-		}
-
 		row["expected_subscribe"] = expectedSub
 		row["expected_management"] = expectedMgmt
 		row["expected_performance"] = expectedPerf
+		row["principal"] = principal
+		row["subscribe_receivable"] = subscribeReceivable
+		row["management_fee_received"] = managementReceivable
+		row["performance_fee_receivable"] = performanceReceivable
 		row["returned_subscribe"] = returnedSub
 		row["returned_management"] = returnedMgmt
 		row["returned_performance"] = returnedPerf
@@ -1994,12 +2254,266 @@ func (s *Server) rebatePending(c *gin.Context) {
 		row["tax_subscribe_ratio"] = taxSub
 		row["tax_management_ratio"] = taxMgmt
 		row["tax_performance_ratio"] = taxPerf
+
+		if _, manualExists := row["manual_order_id"]; manualExists {
+			applyManualNumber := func(target string) {
+				manualKey := "manual_" + target
+				if v, ok := row[manualKey]; ok {
+					if v == nil {
+						row[target] = nil
+						return
+					}
+					row[target] = numberValue(v)
+				}
+			}
+			for _, field := range []string{
+				"principal",
+				"subscribe_receivable",
+				"management_fee_received",
+				"performance_fee_receivable",
+				"subscribe_fee_ratio",
+				"management_fee_ratio",
+				"performance_fee_ratio",
+				"tax_subscribe_ratio",
+				"tax_management_ratio",
+				"tax_performance_ratio",
+				"expected_subscribe",
+				"expected_management",
+				"expected_performance",
+				"returned_subscribe",
+				"returned_management",
+				"returned_performance",
+				"outstanding_subscribe",
+				"outstanding_management",
+				"outstanding_performance",
+			} {
+				applyManualNumber(field)
+			}
+			if v, ok := row["manual_is_returnable"]; ok {
+				if v == nil {
+					row["is_returnable"] = ""
+				} else {
+					row["is_returnable"] = strings.TrimSpace(fmt.Sprint(v))
+				}
+			}
+		}
 		result = append(result, row)
 	}
 	if result == nil {
 		result = []map[string]any{}
 	}
 	c.JSON(http.StatusOK, gin.H{"items": result, "total": len(result)})
+}
+
+func (s *Server) rebatePendingAssist(c *gin.Context) {
+	var req struct {
+		OrderID     string `json:"order_id"`
+		FlightID    string `json:"flight_id"`
+		ProductName string `json:"product_name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp := gin.H{
+		"issues": []string{},
+	}
+
+	flightID := strings.TrimSpace(req.FlightID)
+	if flightID == "" && strings.TrimSpace(req.OrderID) != "" {
+		txRow, err := s.store.GetTransactionByOrderID(req.OrderID)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		if txRow != nil {
+			flightID = txRow.FlightID
+			if strings.TrimSpace(req.ProductName) == "" {
+				req.ProductName = txRow.ProductName
+			}
+		}
+	}
+
+	issues := []string{}
+	if flightID == "" {
+		issues = append(issues, "缺少航班编号，无法校验产品表")
+		resp["issues"] = issues
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+
+	product, err := s.store.GetProductByID(flightID)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	if product == nil {
+		issues = append(issues, "产品表未匹配到该航班编号")
+		resp["issues"] = issues
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+	if strings.TrimSpace(req.ProductName) != "" && strings.TrimSpace(product.Name) != "" && strings.TrimSpace(req.ProductName) != strings.TrimSpace(product.Name) {
+		issues = append(issues, fmt.Sprintf("产品名称与产品表不一致：当前=%s，产品表=%s", req.ProductName, product.Name))
+	}
+	resp["issues"] = issues
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) rebatePendingManualImport(c *gin.Context) {
+	var req struct {
+		Records []struct {
+			OrderID                  string   `json:"order_id"`
+			Principal                *float64 `json:"principal"`
+			SubscribeReceivable      *float64 `json:"subscribe_receivable"`
+			ManagementFeeReceived    *float64 `json:"management_fee_received"`
+			PerformanceFeeReceivable *float64 `json:"performance_fee_receivable"`
+			SubscribeFeeRatio        *float64 `json:"subscribe_fee_ratio"`
+			ManagementFeeRatio       *float64 `json:"management_fee_ratio"`
+			PerformanceFeeRatio      *float64 `json:"performance_fee_ratio"`
+			TaxSubscribeRatio        *float64 `json:"tax_subscribe_ratio"`
+			TaxManagementRatio       *float64 `json:"tax_management_ratio"`
+			TaxPerformanceRatio      *float64 `json:"tax_performance_ratio"`
+			ExpectedSubscribe        *float64 `json:"expected_subscribe"`
+			ExpectedManagement       *float64 `json:"expected_management"`
+			ExpectedPerformance      *float64 `json:"expected_performance"`
+			ReturnedSubscribe        *float64 `json:"returned_subscribe"`
+			ReturnedManagement       *float64 `json:"returned_management"`
+			ReturnedPerformance      *float64 `json:"returned_performance"`
+			OutstandingSubscribe     *float64 `json:"outstanding_subscribe"`
+			OutstandingManagement    *float64 `json:"outstanding_management"`
+			OutstandingPerformance   *float64 `json:"outstanding_performance"`
+			IsReturnable             string   `json:"is_returnable"`
+		} `json:"records"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Records) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "records is required"})
+		return
+	}
+
+	if _, err := s.store.DB.Exec(`
+		CREATE TABLE IF NOT EXISTS rebate_pending_manual (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			order_id TEXT NOT NULL UNIQUE,
+			principal REAL,
+			subscribe_receivable REAL,
+			management_fee_received REAL,
+			performance_fee_receivable REAL,
+			subscribe_fee_ratio REAL,
+			management_fee_ratio REAL,
+			performance_fee_ratio REAL,
+			tax_subscribe_ratio REAL,
+			tax_management_ratio REAL,
+			tax_performance_ratio REAL,
+			expected_subscribe REAL,
+			expected_management REAL,
+			expected_performance REAL,
+			returned_subscribe REAL,
+			returned_management REAL,
+			returned_performance REAL,
+			outstanding_subscribe REAL,
+			outstanding_management REAL,
+			outstanding_performance REAL,
+			is_returnable TEXT,
+			created_at TEXT DEFAULT (datetime('now')),
+			updated_at TEXT DEFAULT (datetime('now'))
+		)
+	`); err != nil {
+		writeError(c, err)
+		return
+	}
+
+	tx, err := s.store.DB.Begin()
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO rebate_pending_manual (
+			order_id, principal, subscribe_receivable, management_fee_received, performance_fee_receivable,
+			subscribe_fee_ratio, management_fee_ratio, performance_fee_ratio,
+			tax_subscribe_ratio, tax_management_ratio, tax_performance_ratio,
+			expected_subscribe, expected_management, expected_performance,
+			returned_subscribe, returned_management, returned_performance,
+			outstanding_subscribe, outstanding_management, outstanding_performance,
+			is_returnable, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+		ON CONFLICT(order_id) DO UPDATE SET
+			principal = excluded.principal,
+			subscribe_receivable = excluded.subscribe_receivable,
+			management_fee_received = excluded.management_fee_received,
+			performance_fee_receivable = excluded.performance_fee_receivable,
+			subscribe_fee_ratio = excluded.subscribe_fee_ratio,
+			management_fee_ratio = excluded.management_fee_ratio,
+			performance_fee_ratio = excluded.performance_fee_ratio,
+			tax_subscribe_ratio = excluded.tax_subscribe_ratio,
+			tax_management_ratio = excluded.tax_management_ratio,
+			tax_performance_ratio = excluded.tax_performance_ratio,
+			expected_subscribe = excluded.expected_subscribe,
+			expected_management = excluded.expected_management,
+			expected_performance = excluded.expected_performance,
+			returned_subscribe = excluded.returned_subscribe,
+			returned_management = excluded.returned_management,
+			returned_performance = excluded.returned_performance,
+			outstanding_subscribe = excluded.outstanding_subscribe,
+			outstanding_management = excluded.outstanding_management,
+			outstanding_performance = excluded.outstanding_performance,
+			is_returnable = excluded.is_returnable,
+			updated_at = datetime('now')
+	`)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	defer stmt.Close()
+
+	updated := 0
+	for _, row := range req.Records {
+		orderID := strings.TrimSpace(row.OrderID)
+		if orderID == "" {
+			continue
+		}
+		if _, err := stmt.Exec(
+			orderID,
+			nullableFloat(row.Principal),
+			nullableFloat(row.SubscribeReceivable),
+			nullableFloat(row.ManagementFeeReceived),
+			nullableFloat(row.PerformanceFeeReceivable),
+			nullableFloat(row.SubscribeFeeRatio),
+			nullableFloat(row.ManagementFeeRatio),
+			nullableFloat(row.PerformanceFeeRatio),
+			nullableFloat(row.TaxSubscribeRatio),
+			nullableFloat(row.TaxManagementRatio),
+			nullableFloat(row.TaxPerformanceRatio),
+			nullableFloat(row.ExpectedSubscribe),
+			nullableFloat(row.ExpectedManagement),
+			nullableFloat(row.ExpectedPerformance),
+			nullableFloat(row.ReturnedSubscribe),
+			nullableFloat(row.ReturnedManagement),
+			nullableFloat(row.ReturnedPerformance),
+			nullableFloat(row.OutstandingSubscribe),
+			nullableFloat(row.OutstandingManagement),
+			nullableFloat(row.OutstandingPerformance),
+			nullableString(strings.TrimSpace(row.IsReturnable)),
+		); err != nil {
+			writeError(c, err)
+			return
+		}
+		updated++
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "count": updated})
 }
 
 func (s *Server) rebateUpdateStatus(c *gin.Context) {
@@ -2058,12 +2572,38 @@ func (s *Server) rebateMarkReturned(c *gin.Context) {
 		return
 	}
 
+	txRow, err := s.store.GetTransactionByOrderID(req.OrderID)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	now := time.Now()
+	paymentDate := now.Format("2006-01-02")
 	record := model.RebateCompleted{
 		OrderID:         req.OrderID,
+		PaymentTime:     paymentDate,
+		PaymentYear:     now.Format("2006"),
+		PaymentMonth:    now.Format("01"),
+		PaymentDay:      now.Format("02"),
 		ExpenseCategory: req.Category,
 		ExpenseAmount:   &req.Amount,
 		Source:          "auto_pending",
 	}
+	if txRow != nil {
+		record.FlightID = txRow.FlightID
+		record.ProductName = txRow.ProductName
+		record.CustomerName = txRow.CustomerName
+		record.ChannelOrDirect = firstNonEmptyString(txRow.ChannelOrDirect, txRow.Counterparty)
+		record.Principal = txRow.SubscribeAmount
+		record.SubscribeDate = txRow.TransactionDate
+		record.OrderStatus = txRow.HoldingStatus
+		record.RebateTarget = txRow.RebateTarget
+		record.ChannelSubscribeRatio = txRow.SubscribeFeeRatio
+		record.ChannelManagementRatio = txRow.ManagementFeeRatio
+		record.ChannelPerformanceRatio = txRow.PerformanceFeeRatio
+	}
+
 	id, err := s.store.InsertRebateCompleted(record)
 	if err != nil {
 		writeError(c, err)
@@ -2088,6 +2628,113 @@ func (s *Server) rebateCompleted(c *gin.Context) {
 		rows = []model.RebateCompleted{}
 	}
 	c.JSON(http.StatusOK, gin.H{"items": rows, "total": len(rows)})
+}
+
+func (s *Server) rebateCompletedAssist(c *gin.Context) {
+	var record model.RebateCompleted
+	if err := c.ShouldBindJSON(&record); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	matches, err := s.store.FindMatchingTransactions(record)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	resp := gin.H{
+		"matched_count": len(matches),
+		"autofill":      gin.H{},
+		"conflicts":     []gin.H{},
+	}
+	if len(matches) != 1 {
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+
+	tx := matches[0]
+	autofill := gin.H{}
+	if strings.TrimSpace(record.OrderID) == "" && tx.OrderID != "" {
+		autofill["order_id"] = tx.OrderID
+	}
+	if strings.TrimSpace(record.FlightID) == "" && tx.FlightID != "" {
+		autofill["flight_id"] = tx.FlightID
+	}
+	if strings.TrimSpace(record.ProductName) == "" && tx.ProductName != "" {
+		autofill["product_name"] = tx.ProductName
+	}
+	if strings.TrimSpace(record.CustomerName) == "" && tx.CustomerName != "" {
+		autofill["customer_name"] = tx.CustomerName
+	}
+	if strings.TrimSpace(record.RebateTarget) == "" && tx.RebateTarget != "" {
+		autofill["rebate_target"] = tx.RebateTarget
+	}
+	if record.Principal == nil && tx.SubscribeAmount != nil {
+		autofill["principal"] = *tx.SubscribeAmount
+	}
+	if strings.TrimSpace(record.ChannelOrDirect) == "" && tx.ChannelOrDirect != "" {
+		autofill["channel_or_direct"] = tx.ChannelOrDirect
+	}
+	if strings.TrimSpace(record.SubscribeDate) == "" && tx.TransactionDate != "" {
+		autofill["subscribe_date"] = tx.TransactionDate
+	}
+	if strings.TrimSpace(record.OrderStatus) == "" && tx.HoldingStatus != "" {
+		autofill["order_status"] = tx.HoldingStatus
+	}
+	if record.ChannelSubscribeRatio == nil && tx.SubscribeFeeRatio != nil {
+		autofill["channel_subscribe_ratio"] = *tx.SubscribeFeeRatio
+	}
+	if record.ChannelManagementRatio == nil && tx.ManagementFeeRatio != nil {
+		autofill["channel_management_ratio"] = *tx.ManagementFeeRatio
+	}
+	if record.ChannelPerformanceRatio == nil && tx.PerformanceFeeRatio != nil {
+		autofill["channel_performance_ratio"] = *tx.PerformanceFeeRatio
+	}
+
+	product, err := s.store.GetProductByID(tx.FlightID)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	if product != nil && record.MarginRatio == nil && product.MarginRatio != nil {
+		autofill["margin_ratio"] = *product.MarginRatio
+	}
+	resp["autofill"] = autofill
+
+	conflicts := []gin.H{}
+	addConflict := func(field, current, expected string) {
+		if strings.TrimSpace(current) == "" || strings.TrimSpace(expected) == "" || strings.TrimSpace(current) == strings.TrimSpace(expected) {
+			return
+		}
+		conflicts = append(conflicts, gin.H{
+			"field":     field,
+			"current":   current,
+			"expected":  expected,
+			"signature": conflictSignature(field, expected),
+		})
+	}
+	addConflict("order_id", record.OrderID, tx.OrderID)
+	addConflict("flight_id", record.FlightID, tx.FlightID)
+	addConflict("product_name", record.ProductName, tx.ProductName)
+	addConflict("customer_name", record.CustomerName, tx.CustomerName)
+	addConflict("rebate_target", record.RebateTarget, tx.RebateTarget)
+	addConflict("channel_or_direct", record.ChannelOrDirect, tx.ChannelOrDirect)
+	addConflict("subscribe_date", record.SubscribeDate, tx.TransactionDate)
+	addConflict("order_status", record.OrderStatus, tx.HoldingStatus)
+	if record.Principal != nil && tx.SubscribeAmount != nil && math.Abs(*record.Principal-*tx.SubscribeAmount) > 0.0001 {
+		conflicts = append(conflicts, gin.H{"field": "principal", "current": fmt.Sprintf("%.2f", *record.Principal), "expected": fmt.Sprintf("%.2f", *tx.SubscribeAmount), "signature": conflictSignature("principal", fmt.Sprintf("%.2f", *tx.SubscribeAmount))})
+	}
+	if product == nil {
+		conflicts = append(conflicts, gin.H{"field": "product_ref", "current": tx.FlightID, "expected": "产品表未匹配到该航班编号", "signature": conflictSignature("product_ref", "产品表未匹配到该航班编号")})
+	} else {
+		addConflict("product_name(product_table)", record.ProductName, product.Name)
+		if record.MarginRatio != nil && product.MarginRatio != nil && math.Abs(*record.MarginRatio-*product.MarginRatio) > 0.0001 {
+			conflicts = append(conflicts, gin.H{"field": "margin_ratio", "current": fmt.Sprintf("%.4f", *record.MarginRatio), "expected": fmt.Sprintf("%.4f", *product.MarginRatio), "signature": conflictSignature("margin_ratio", fmt.Sprintf("%.4f", *product.MarginRatio))})
+		}
+	}
+	resp["conflicts"] = filterIgnoredConflicts(conflicts, record.IgnoredConflicts)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (s *Server) rebateAddCompleted(c *gin.Context) {

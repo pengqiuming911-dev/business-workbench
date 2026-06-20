@@ -86,6 +86,130 @@ func resolveSecID(code string) (string, parsedCode, error) {
 	return market + "." + parsed.Num, parsed, nil
 }
 
+type IndexResult struct {
+	Code      string   `json:"code"`
+	Name      string   `json:"name"`
+	Value     *float64 `json:"value"`
+	ChangePct *float64 `json:"change_pct"`
+}
+
+func FetchIndices(ctx context.Context, codes []string) []IndexResult {
+	results := make([]IndexResult, len(codes))
+	for i, code := range codes {
+		results[i].Code = code
+		parsed, ok := parseCode(code)
+		if !ok {
+			continue
+		}
+		market := "1"
+		if parsed.Exchange == "SZ" {
+			market = "0"
+		}
+		secid := market + "." + parsed.Num
+		client := &http.Client{Timeout: 5 * time.Second}
+		endpoint := eastmoneyAPI + "?secid=" + secid + "&fields=f43,f58,f169,f170"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+		req.Header.Set("Referer", "https://quote.eastmoney.com/")
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		var payload struct {
+			Data struct {
+				F43  *float64 `json:"f43"`
+				F58  string   `json:"f58"`
+				F169 *float64 `json:"f169"`
+				F170 *float64 `json:"f170"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			resp.Body.Close()
+			continue
+		}
+		resp.Body.Close()
+
+		results[i].Name = payload.Data.F58
+		if payload.Data.F43 != nil {
+			divisor := 100.0
+			if strings.HasPrefix(parsed.Num, "51") {
+				divisor = 1000.0
+			}
+			v := *payload.Data.F43 / divisor
+			results[i].Value = &v
+		}
+		if payload.Data.F170 != nil {
+			pct := *payload.Data.F170 / 100
+			results[i].ChangePct = &pct
+		}
+	}
+	return results
+}
+
+type KlinePoint struct {
+	Date  string  `json:"date"`
+	Close float64 `json:"close"`
+}
+
+type KlineResult struct {
+	Code   string       `json:"code"`
+	Name   string       `json:"name"`
+	Klines []KlinePoint `json:"klines"`
+}
+
+func FetchKlines(ctx context.Context, codes []string, days int) []KlineResult {
+	results := make([]KlineResult, len(codes))
+	for i, code := range codes {
+		results[i].Code = code
+		parsed, ok := parseCode(code)
+		if !ok {
+			continue
+		}
+		market := "1"
+		if parsed.Exchange == "SZ" {
+			market = "0"
+		}
+		secid := market + "." + parsed.Num
+		client := &http.Client{Timeout: 5 * time.Second}
+		endpoint := fmt.Sprintf("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&end=20500101&lmt=%d", secid, days)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+		req.Header.Set("Referer", "https://quote.eastmoney.com/")
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		var payload struct {
+			Data struct {
+				Name   string   `json:"name"`
+				Klines []string `json:"klines"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			resp.Body.Close()
+			continue
+		}
+		resp.Body.Close()
+		results[i].Name = payload.Data.Name
+		for _, line := range payload.Data.Klines {
+			parts := strings.Split(line, ",")
+			if len(parts) < 3 {
+				continue
+			}
+			var closePrice float64
+			fmt.Sscanf(parts[2], "%f", &closePrice)
+			results[i].Klines = append(results[i].Klines, KlinePoint{Date: parts[0], Close: closePrice})
+		}
+	}
+	return results
+}
+
 func parseCode(rawCode string) (parsedCode, bool) {
 	rawCode = strings.TrimSpace(rawCode)
 	if rawCode == "" {

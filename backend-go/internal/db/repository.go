@@ -108,13 +108,13 @@ func (s *Store) ImportTransactions(rows []map[string]any) error {
 	}
 	stmt, err := tx.Prepare(`
 		INSERT INTO transactions
-			(transaction_date, flight_id, counterparty, subscribe_amount,
+			(transaction_date, flight_id, counterparty, channel_or_direct, subscribe_amount, subscribe_fee_rate,
 			 product_name, customer_name, actual_buyer, amount,
 			 subscribe_fee_ratio, management_fee_ratio, performance_fee_ratio,
 			 rebate_target, flight_date, holding_status, complete_date,
 			 underlying, structure_type, lock_period,
 			 dividend_barrier, monthly_coupon, coupon_1st, raw, order_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		_ = tx.Rollback()
@@ -123,7 +123,7 @@ func (s *Store) ImportTransactions(rows []map[string]any) error {
 	defer stmt.Close()
 	for _, row := range rows {
 		if _, err := stmt.Exec(
-			row["transaction_date"], row["flight_id"], row["counterparty"], row["subscribe_amount"],
+			row["transaction_date"], row["flight_id"], row["counterparty"], row["channel_or_direct"], row["subscribe_amount"], row["subscribe_fee_rate"],
 			row["product_name"], row["customer_name"], row["actual_buyer"], row["amount"],
 			row["subscribe_fee_ratio"], row["management_fee_ratio"], row["performance_fee_ratio"],
 			row["rebate_target"], row["flight_date"], row["holding_status"], row["complete_date"],
@@ -1169,6 +1169,28 @@ func normalizeDBValue(value any) any {
 	}
 }
 
+func mustJSONString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(values)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func parseJSONStringSlice(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(value), &out); err != nil {
+		return nil
+	}
+	return out
+}
+
 func intPtr(value sql.NullInt64) *int {
 	if !value.Valid {
 		return nil
@@ -1527,16 +1549,39 @@ func toIntPtr(v any) *int {
 func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any, error) {
 	query := `
 		SELECT t.id, t.order_id, t.flight_id, t.product_name, t.customer_name,
-		       t.counterparty, t.subscribe_amount, t.amount, t.rebate_target,
-		       t.subscribe_fee_ratio, t.management_fee_ratio, t.performance_fee_ratio,
+		       t.counterparty, t.channel_or_direct, t.subscribe_amount, t.amount, t.rebate_target,
+		       t.subscribe_fee_rate, t.subscribe_fee_ratio, t.management_fee_ratio, t.performance_fee_ratio,
+		       t.management_fee_received, t.performance_fee_receivable,
 		       t.tax_subscribe_ratio, t.tax_management_ratio, t.tax_performance_ratio,
 		       t.flight_date, t.holding_status, t.complete_date,
 		       rs.is_returnable, rs.plan_subscribe, rs.plan_management, rs.plan_performance,
+		       rpm.order_id AS manual_order_id,
+		       rpm.principal AS manual_principal,
+		       rpm.subscribe_receivable AS manual_subscribe_receivable,
+		       rpm.management_fee_received AS manual_management_fee_received,
+		       rpm.performance_fee_receivable AS manual_performance_fee_receivable,
+		       rpm.subscribe_fee_ratio AS manual_subscribe_fee_ratio,
+		       rpm.management_fee_ratio AS manual_management_fee_ratio,
+		       rpm.performance_fee_ratio AS manual_performance_fee_ratio,
+		       rpm.tax_subscribe_ratio AS manual_tax_subscribe_ratio,
+		       rpm.tax_management_ratio AS manual_tax_management_ratio,
+		       rpm.tax_performance_ratio AS manual_tax_performance_ratio,
+		       rpm.expected_subscribe AS manual_expected_subscribe,
+		       rpm.expected_management AS manual_expected_management,
+		       rpm.expected_performance AS manual_expected_performance,
+		       rpm.returned_subscribe AS manual_returned_subscribe,
+		       rpm.returned_management AS manual_returned_management,
+		       rpm.returned_performance AS manual_returned_performance,
+		       rpm.outstanding_subscribe AS manual_outstanding_subscribe,
+		       rpm.outstanding_management AS manual_outstanding_management,
+		       rpm.outstanding_performance AS manual_outstanding_performance,
+		       rpm.is_returnable AS manual_is_returnable,
 		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '申购费'), 0) AS returned_subscribe,
 		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '管理费'), 0) AS returned_management,
 		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '业绩报酬'), 0) AS returned_performance
 		FROM transactions t
 		LEFT JOIN rebate_status rs ON t.order_id = rs.order_id
+		LEFT JOIN rebate_pending_manual rpm ON t.order_id = rpm.order_id
 		WHERE t.order_id IS NOT NULL AND t.order_id != ''
 	`
 	args := []any{}
@@ -1566,6 +1611,170 @@ func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any
 	}
 	query += " ORDER BY t.flight_date DESC"
 	return s.queryMaps(query, args...)
+}
+
+func (s *Store) GetTransactionByOrderID(orderID string) (*model.TransactionRow, error) {
+	rows, err := s.DB.Query(`
+		SELECT id, transaction_date, flight_id, counterparty, channel_or_direct, subscribe_amount, subscribe_fee_rate,
+		       product_name, customer_name, actual_buyer, amount,
+		       subscribe_fee_ratio, management_fee_ratio, performance_fee_ratio,
+		       rebate_target, flight_date, holding_status, complete_date,
+		       underlying, structure_type, lock_period, dividend_barrier, monthly_coupon, coupon_1st, raw, order_id
+		FROM transactions
+		WHERE order_id = ?
+		LIMIT 1
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, nil
+	}
+
+	var row model.TransactionRow
+	var subscribeAmount, subscribeFeeRate, amount, subscribeFeeRatio sql.NullFloat64
+	var managementFeeRatio, performanceFeeRatio, dividendBarrier, monthlyCoupon, coupon1st sql.NullFloat64
+	var transactionDate, flightID, counterparty, channelOrDirect, productName, customerName sql.NullString
+	var actualBuyer, rebateTarget, flightDate, holdingStatus, completeDate sql.NullString
+	var underlying, structureType, lockPeriod, raw, storedOrderID sql.NullString
+	if err := rows.Scan(
+		&row.ID, &transactionDate, &flightID, &counterparty, &channelOrDirect, &subscribeAmount, &subscribeFeeRate,
+		&productName, &customerName, &actualBuyer, &amount,
+		&subscribeFeeRatio, &managementFeeRatio, &performanceFeeRatio,
+		&rebateTarget, &flightDate, &holdingStatus, &completeDate,
+		&underlying, &structureType, &lockPeriod, &dividendBarrier, &monthlyCoupon, &coupon1st, &raw, &storedOrderID,
+	); err != nil {
+		return nil, err
+	}
+
+	row.TransactionDate = nullString(transactionDate)
+	row.FlightID = nullString(flightID)
+	row.Counterparty = nullString(counterparty)
+	row.ChannelOrDirect = nullString(channelOrDirect)
+	row.SubscribeAmount = floatPtr(subscribeAmount)
+	row.SubscribeFeeRate = floatPtr(subscribeFeeRate)
+	row.ProductName = nullString(productName)
+	row.CustomerName = nullString(customerName)
+	row.ActualBuyer = nullString(actualBuyer)
+	row.Amount = floatPtr(amount)
+	row.SubscribeFeeRatio = floatPtr(subscribeFeeRatio)
+	row.ManagementFeeRatio = floatPtr(managementFeeRatio)
+	row.PerformanceFeeRatio = floatPtr(performanceFeeRatio)
+	row.RebateTarget = nullString(rebateTarget)
+	row.FlightDate = nullString(flightDate)
+	row.HoldingStatus = nullString(holdingStatus)
+	row.CompleteDate = nullString(completeDate)
+	row.Underlying = nullString(underlying)
+	row.StructureType = nullString(structureType)
+	row.LockPeriod = nullString(lockPeriod)
+	row.DividendBarrier = floatPtr(dividendBarrier)
+	row.MonthlyCoupon = floatPtr(monthlyCoupon)
+	row.Coupon1st = floatPtr(coupon1st)
+	row.Raw = nullString(raw)
+	row.OrderID = nullString(storedOrderID)
+	return &row, rows.Err()
+}
+
+func (s *Store) FindMatchingTransactions(record model.RebateCompleted) ([]model.TransactionRow, error) {
+	query := `
+		SELECT id, transaction_date, flight_id, counterparty, channel_or_direct, subscribe_amount, subscribe_fee_rate,
+		       product_name, customer_name, actual_buyer, amount,
+		       subscribe_fee_ratio, management_fee_ratio, performance_fee_ratio,
+		       rebate_target, flight_date, holding_status, complete_date,
+		       underlying, structure_type, lock_period, dividend_barrier, monthly_coupon, coupon_1st, raw, order_id
+		FROM transactions
+		WHERE 1=1
+	`
+	args := []any{}
+
+	if strings.TrimSpace(record.OrderID) != "" {
+		query += " AND order_id = ?"
+		args = append(args, strings.TrimSpace(record.OrderID))
+	}
+	if strings.TrimSpace(record.FlightID) != "" {
+		query += " AND flight_id = ?"
+		args = append(args, strings.TrimSpace(record.FlightID))
+	}
+	if strings.TrimSpace(record.ProductName) != "" {
+		query += " AND product_name = ?"
+		args = append(args, strings.TrimSpace(record.ProductName))
+	}
+	if strings.TrimSpace(record.CustomerName) != "" {
+		query += " AND customer_name = ?"
+		args = append(args, strings.TrimSpace(record.CustomerName))
+	}
+	if strings.TrimSpace(record.RebateTarget) != "" {
+		query += " AND rebate_target = ?"
+		args = append(args, strings.TrimSpace(record.RebateTarget))
+	}
+	if record.Principal != nil {
+		query += " AND subscribe_amount = ?"
+		args = append(args, *record.Principal)
+	}
+
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []model.TransactionRow
+	for rows.Next() {
+		var row model.TransactionRow
+		var subscribeAmount, subscribeFeeRate, amount, subscribeFeeRatio sql.NullFloat64
+		var managementFeeRatio, performanceFeeRatio, dividendBarrier, monthlyCoupon, coupon1st sql.NullFloat64
+		var transactionDate, flightID, counterparty, channelOrDirect, productName, customerName sql.NullString
+		var actualBuyer, rebateTarget, flightDate, holdingStatus, completeDate sql.NullString
+		var underlying, structureType, lockPeriod, raw, storedOrderID sql.NullString
+		if err := rows.Scan(
+			&row.ID, &transactionDate, &flightID, &counterparty, &channelOrDirect, &subscribeAmount, &subscribeFeeRate,
+			&productName, &customerName, &actualBuyer, &amount,
+			&subscribeFeeRatio, &managementFeeRatio, &performanceFeeRatio,
+			&rebateTarget, &flightDate, &holdingStatus, &completeDate,
+			&underlying, &structureType, &lockPeriod, &dividendBarrier, &monthlyCoupon, &coupon1st, &raw, &storedOrderID,
+		); err != nil {
+			return nil, err
+		}
+		row.TransactionDate = nullString(transactionDate)
+		row.FlightID = nullString(flightID)
+		row.Counterparty = nullString(counterparty)
+		row.ChannelOrDirect = nullString(channelOrDirect)
+		row.SubscribeAmount = floatPtr(subscribeAmount)
+		row.SubscribeFeeRate = floatPtr(subscribeFeeRate)
+		row.ProductName = nullString(productName)
+		row.CustomerName = nullString(customerName)
+		row.ActualBuyer = nullString(actualBuyer)
+		row.Amount = floatPtr(amount)
+		row.SubscribeFeeRatio = floatPtr(subscribeFeeRatio)
+		row.ManagementFeeRatio = floatPtr(managementFeeRatio)
+		row.PerformanceFeeRatio = floatPtr(performanceFeeRatio)
+		row.RebateTarget = nullString(rebateTarget)
+		row.FlightDate = nullString(flightDate)
+		row.HoldingStatus = nullString(holdingStatus)
+		row.CompleteDate = nullString(completeDate)
+		row.Underlying = nullString(underlying)
+		row.StructureType = nullString(structureType)
+		row.LockPeriod = nullString(lockPeriod)
+		row.DividendBarrier = floatPtr(dividendBarrier)
+		row.MonthlyCoupon = floatPtr(monthlyCoupon)
+		row.Coupon1st = floatPtr(coupon1st)
+		row.Raw = nullString(raw)
+		row.OrderID = nullString(storedOrderID)
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) GetProductByID(id string) (*model.Product, error) {
+	products, err := s.scanProducts("SELECT * FROM products WHERE id = ? LIMIT 1", id)
+	if err != nil {
+		return nil, err
+	}
+	if len(products) == 0 {
+		return nil, nil
+	}
+	return &products[0], nil
 }
 
 func (s *Store) UpsertRebateStatus(orderID string, fields map[string]any) error {
@@ -1622,7 +1831,7 @@ func (s *Store) QueryRebateCompleted(filters map[string]string) ([]model.RebateC
 		       principal, margin_ratio, business_type, subscribe_date, order_status,
 		       rebate_target, channel_subscribe_ratio, channel_management_ratio,
 		       channel_performance_ratio, expense_category, expense_amount,
-		       payment_time, payment_year, payment_month, payment_day,
+		       payment_time, payment_year, payment_month, payment_day, ignored_conflicts,
 		       source, created_at, updated_at
 		FROM rebate_completed WHERE 1=1
 	`
@@ -1669,14 +1878,14 @@ func (s *Store) QueryRebateCompleted(filters map[string]string) ([]model.RebateC
 		var principal, marginRatio, chSubRatio, chMgmtRatio, chPerfRatio, expAmount sql.NullFloat64
 		var orderID, flightID, productName, customerName, channelOrDirect sql.NullString
 		var businessType, subscribeDate, orderStatus, rebateTarget sql.NullString
-		var expCategory, paymentTime, paymentYear, paymentMonth, paymentDay sql.NullString
+		var expCategory, paymentTime, paymentYear, paymentMonth, paymentDay, ignoredConflicts sql.NullString
 		var source, createdAt, updatedAt sql.NullString
 		if err := rows.Scan(
 			&row.ID, &orderID, &flightID, &productName, &customerName, &channelOrDirect,
 			&principal, &marginRatio, &businessType, &subscribeDate, &orderStatus,
 			&rebateTarget, &chSubRatio, &chMgmtRatio, &chPerfRatio,
 			&expCategory, &expAmount,
-			&paymentTime, &paymentYear, &paymentMonth, &paymentDay,
+			&paymentTime, &paymentYear, &paymentMonth, &paymentDay, &ignoredConflicts,
 			&source, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, err
@@ -1701,6 +1910,7 @@ func (s *Store) QueryRebateCompleted(filters map[string]string) ([]model.RebateC
 		row.PaymentYear = nullString(paymentYear)
 		row.PaymentMonth = nullString(paymentMonth)
 		row.PaymentDay = nullString(paymentDay)
+		row.IgnoredConflicts = parseJSONStringSlice(nullString(ignoredConflicts))
 		row.Source = nullString(source)
 		row.CreatedAt = nullString(createdAt)
 		row.UpdatedAt = nullString(updatedAt)
@@ -1716,8 +1926,8 @@ func (s *Store) InsertRebateCompleted(record model.RebateCompleted) (int64, erro
 			 principal, margin_ratio, business_type, subscribe_date, order_status,
 			 rebate_target, channel_subscribe_ratio, channel_management_ratio,
 			 channel_performance_ratio, expense_category, expense_amount,
-			 payment_time, payment_year, payment_month, payment_day, source)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 payment_time, payment_year, payment_month, payment_day, ignored_conflicts, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		nullableDBString(record.OrderID), nullableDBString(record.FlightID),
 		nullableDBString(record.ProductName), nullableDBString(record.CustomerName),
@@ -1730,6 +1940,7 @@ func (s *Store) InsertRebateCompleted(record model.RebateCompleted) (int64, erro
 		nullableDBString(record.ExpenseCategory), nullableFloat(record.ExpenseAmount),
 		nullableDBString(record.PaymentTime), nullableDBString(record.PaymentYear),
 		nullableDBString(record.PaymentMonth), nullableDBString(record.PaymentDay),
+		nullableDBString(mustJSONString(record.IgnoredConflicts)),
 		nullableDBString(record.Source),
 	)
 	if err != nil {
@@ -1749,8 +1960,8 @@ func (s *Store) BulkInsertRebateCompleted(records []model.RebateCompleted) error
 			 principal, margin_ratio, business_type, subscribe_date, order_status,
 			 rebate_target, channel_subscribe_ratio, channel_management_ratio,
 			 channel_performance_ratio, expense_category, expense_amount,
-			 payment_time, payment_year, payment_month, payment_day, source)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 payment_time, payment_year, payment_month, payment_day, ignored_conflicts, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		_ = tx.Rollback()
@@ -1770,6 +1981,7 @@ func (s *Store) BulkInsertRebateCompleted(records []model.RebateCompleted) error
 			nullableDBString(r.ExpenseCategory), nullableFloat(r.ExpenseAmount),
 			nullableDBString(r.PaymentTime), nullableDBString(r.PaymentYear),
 			nullableDBString(r.PaymentMonth), nullableDBString(r.PaymentDay),
+			nullableDBString(mustJSONString(r.IgnoredConflicts)),
 			nullableDBString(r.Source),
 		); err != nil {
 			_ = tx.Rollback()
@@ -1834,4 +2046,55 @@ func (s *Store) QueryDistinctValues(table, column string) ([]string, error) {
 		results = append(results, val)
 	}
 	return results, nil
+}
+
+func (s *Store) SaveRebateDetail(rows []map[string]any, sheetName string, sheetToken string) error {
+	rawJSON, err := json.Marshal(rows)
+	if err != nil {
+		return err
+	}
+	now := isoNow()
+	_, err = s.DB.Exec(`
+		INSERT INTO rebate_detail_data (id, raw_json, sheet_name, sheet_token, updated_at)
+		VALUES (1, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			raw_json = excluded.raw_json,
+			sheet_name = excluded.sheet_name,
+			sheet_token = excluded.sheet_token,
+			updated_at = excluded.updated_at
+	`, string(rawJSON), sheetName, sheetToken, now)
+	if err != nil {
+		return err
+	}
+	_, err = s.DB.Exec(`
+		INSERT INTO rebate_detail_sync_log (synced_at, row_count, sheet_name, sheet_token)
+		VALUES (?, ?, ?, ?)
+	`, now, len(rows), sheetName, sheetToken)
+	return err
+}
+
+func (s *Store) LastRebateDetailSync() (map[string]any, error) {
+	row, err := s.queryOneMap(`
+		SELECT synced_at, row_count, sheet_name, sheet_token
+		FROM rebate_detail_sync_log ORDER BY synced_at DESC LIMIT 1
+	`)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	return row, nil
+}
+
+func (s *Store) RebateDetailData() ([]byte, error) {
+	row, err := s.queryOneMap(`SELECT raw_json FROM rebate_detail_data WHERE id = 1`)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return []byte("[]"), nil
+	}
+	raw, ok := row["raw_json"].(string)
+	if !ok {
+		return []byte("[]"), nil
+	}
+	return []byte(raw), nil
 }

@@ -52,6 +52,7 @@ import {
   User,
   ChevronsLeft,
   Receipt,
+  CalendarDays,
 } from '@lucide/vue'
 import logoImg from '../assets/business-workbench-logo.jpg'
 
@@ -68,10 +69,11 @@ const currentPath = computed(() => route.path)
 const navItems = [
   { path: '/', title: '总览', icon: LayoutDashboard },
   { path: '/data-preparation', title: '数据准备', icon: FileSpreadsheet },
-  { path: '/holding-analysis', title: '持有产品分析', icon: Activity },
-  { path: '/rebate-analysis', title: '返费分析', icon: Receipt },
-  { path: '/product-report', title: '报告', icon: FileText },
-  { path: '/push-settings', title: '推送', icon: Send },
+  { path: '/holding-analysis', title: '产品&持仓', icon: Activity },
+  { path: '/rebate-analysis', title: '返费', icon: Receipt },
+  { path: '/product-report', title: '销售物料', icon: FileText },
+  { path: '/product-completion', title: '观察日历', icon: CalendarDays },
+  { path: '/push-settings', title: '推送设置', icon: Send },
 ]
 </script>
 
