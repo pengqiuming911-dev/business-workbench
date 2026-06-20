@@ -53,6 +53,7 @@
                   <th class="col-left">最近观察日</th>
                   <th class="col-left">下个观察日</th>
                   <th class="col-right">标的价格</th>
+                  <th class="col-right">降敲</th>
                   <th class="col-right">敲出价</th>
                   <th class="col-right">派息线</th>
                   <th class="col-center">是否敲出</th>
@@ -77,6 +78,7 @@
                     <td class="col-left">{{ latestObs(p)?.date || '--' }}</td>
                     <td class="col-left next-date">{{ p.next_observation_date || '--' }}</td>
                     <td class="col-right">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
+                    <td class="col-right">{{ p.monthly_decrease ?? '--' }}</td>
                     <td class="col-right">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
                     <td class="col-right">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
                     <td class="col-center" :class="knockoutClass(latestObs(p)?.is_knocked_out)">
@@ -87,7 +89,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && p.observations.length" class="detail-row">
-                    <td colspan="16" class="detail-cell">
+                    <td colspan="17" class="detail-cell">
                       <div class="detail-label">历史观察日明细</div>
                       <table class="detail-table">
                         <thead>
@@ -114,7 +116,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && !p.observations.length" class="detail-row">
-                    <td colspan="16" class="detail-cell">
+                    <td colspan="17" class="detail-cell">
                       <div class="detail-empty">暂无观察日记录</div>
                     </td>
                   </tr>
@@ -593,7 +595,10 @@ function fmtCalPrice(val) {
 
 .overview-table {
   width: 100%;
-  border-collapse: collapse;
+  /* border-collapse: separate 让 sticky 列/表头背景能正确盖住横向滚动内容，
+     避免 collapse 下表头与首列透出相邻列（与 holding/rebate 表一致） */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
   min-width: 1400px;
 }
