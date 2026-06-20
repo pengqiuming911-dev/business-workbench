@@ -1,7 +1,9 @@
 <template>
   <div class="push-settings-page">
-    <h1 class="text-page-title">飞书推送设置</h1>
-    <p class="text-body" style="margin-bottom:24px">配置今日观察的飞书群机器人推送。设置推送时间后，系统将每天定时把今日观察内容推送到飞书群。</p>
+    <div class="page-header">
+      <h1 class="text-page-title">飞书推送设置</h1>
+      <p class="text-body">配置今日观察的飞书群机器人推送。设置推送时间后，系统将每天定时把今日观察内容推送到飞书群。</p>
+    </div>
 
     <PanelCard title="推送配置">
       <div class="form-row">

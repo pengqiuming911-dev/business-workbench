@@ -1,6 +1,8 @@
 <template>
   <div class="product-completion-page">
-    <h1 class="text-page-title">派息/敲出观察</h1>
+    <div class="page-header">
+      <h1 class="text-page-title">派息/敲出观察</h1>
+    </div>
 
     <div class="tab-bar">
       <button class="btn tab-btn" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">全量</button>

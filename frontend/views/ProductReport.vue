@@ -1,6 +1,8 @@
 <template>
   <div class="product-report-page">
-    <h1 class="text-page-title">销售物料</h1>
+    <div class="page-header">
+      <h1 class="text-page-title">销售物料</h1>
+    </div>
 
     <PanelCard title="物料展示">
       <div class="month-search">

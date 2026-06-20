@@ -1,5 +1,5 @@
 :root {
-  --bg-page: #f5f7fb;
+  --bg-page: #f8f9fb;
   --bg-sidebar: #ffffff;
   --bg-card: #ffffff;
   --bg-card-solid: #ffffff;
@@ -138,8 +138,12 @@ input, select, textarea {
 .page-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.page-header .text-body {
+  margin-bottom: 0;
 }
 
 /* ── Buttons ────────────────────────────────────────────────── */

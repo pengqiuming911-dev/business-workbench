@@ -1,7 +1,9 @@
 <template>
   <div class="user-profile-page">
-    <h1 class="text-page-title">用户画像</h1>
-    <p class="text-body">查询合投用户画像，支持按实际购买人、名义购买人、是否专户客户、客户是否竞品群、客户行业等条件筛选。</p>
+    <div class="page-header">
+      <h1 class="text-page-title">用户画像</h1>
+      <p class="text-body">查询合投用户画像，支持按实际购买人、名义购买人、是否专户客户、客户是否竞品群、客户行业等条件筛选。</p>
+    </div>
 
     <PanelCard title="搜索条件">
       <div class="form-row">

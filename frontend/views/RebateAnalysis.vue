@@ -1,7 +1,9 @@
 <template>
   <div class="rebate-analysis-page">
-    <h1 class="text-page-title">返费分析</h1>
-    <p class="text-body" style="margin-bottom: 20px;">在同一页面切换查看待返费和已返费数据。</p>
+    <div class="page-header">
+      <h1 class="text-page-title">返费分析</h1>
+      <p class="text-body">在同一页面切换查看待返费和已返费数据。</p>
+    </div>
 
     <div class="tab-bar">
       <button
