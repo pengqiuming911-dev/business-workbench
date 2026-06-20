@@ -100,27 +100,27 @@
               <th class="sticky-col sticky-col-3 name-cell" :title="''">产品名称</th>
               <th>持有状态</th>
               <th>申购日期</th>
-              <th>存续时间（月）</th>
+              <th class="num">存续时间（月）</th>
               <th>结构类型</th>
               <th>挂钩标的</th>
-              <th>锁定期</th>
-              <th>保证金比例</th>
-              <th>敲入</th>
-              <th>首月敲出</th>
-              <th>入场价</th>
+              <th class="num">锁定期</th>
+              <th class="num">保证金比例</th>
+              <th class="num">敲入</th>
+              <th class="num">首月敲出</th>
+              <th class="num">入场价</th>
               <th>是否敲入</th>
-              <th>每月递减</th>
+              <th class="num">每月递减</th>
               <th>托管券商</th>
               <th>交易对手</th>
               <th>期限</th>
               <th>完结日期</th>
-              <th>降落伞</th>
-              <th>派息障碍</th>
-              <th>月票息（税费后）</th>
-              <th>第一段票息（税费后）</th>
-              <th>第二段票息（税费后）</th>
-              <th>第三段票息（税费后）</th>
-              <th>绝对收益率</th>
+              <th class="num">降落伞</th>
+              <th class="num">派息障碍</th>
+              <th class="num">月票息（税费后）</th>
+              <th class="num">第一段票息（税费后）</th>
+              <th class="num">第二段票息（税费后）</th>
+              <th class="num">第三段票息（税费后）</th>
+              <th class="num">绝对收益率</th>
             </tr>
           </thead>
           <tbody>
@@ -134,27 +134,27 @@
                 </span>
               </td>
               <td>{{ item.issue_date || '--' }}</td>
-              <td>{{ formatDuration(item) }}</td>
+              <td class="num">{{ formatDuration(item) }}</td>
               <td>{{ item.structure_type || '--' }}</td>
               <td>{{ stripParentheses(item.code) }}</td>
-              <td>{{ item.lock_months ?? '--' }}</td>
-              <td>{{ item.margin_ratio ?? '--' }}</td>
-              <td>{{ item.knock_in ?? '--' }}</td>
-              <td>{{ formatRatio2(item.first_knockout_ratio) }}</td>
-              <td>{{ item.entry_price ?? '--' }}</td>
+              <td class="num">{{ item.lock_months ?? '--' }}</td>
+              <td class="num">{{ item.margin_ratio ?? '--' }}</td>
+              <td class="num">{{ item.knock_in ?? '--' }}</td>
+              <td class="num">{{ formatRatio2(item.first_knockout_ratio) }}</td>
+              <td class="num">{{ item.entry_price ?? '--' }}</td>
               <td>{{ item.knocked_in ?? '--' }}</td>
-              <td>{{ item.monthly_decrease ?? '--' }}</td>
+              <td class="num">{{ item.monthly_decrease ?? '--' }}</td>
               <td>{{ item.custodian || '--' }}</td>
               <td>{{ item.counterparty || '--' }}</td>
               <td>{{ item.term || '--' }}</td>
               <td>{{ item.complete_date || '--' }}</td>
-              <td>{{ item.parachute ?? '--' }}</td>
-              <td>{{ item.dividend_barrier ?? '--' }}</td>
-              <td>{{ item.monthly_coupon ?? '--' }}</td>
-              <td>{{ item.coupon_1st ?? '--' }}</td>
-              <td>{{ item.coupon_2nd ?? '--' }}</td>
-              <td>{{ item.coupon_3rd ?? '--' }}</td>
-              <td>{{ item.absolute_return ?? '--' }}</td>
+              <td class="num">{{ item.parachute ?? '--' }}</td>
+              <td class="num">{{ item.dividend_barrier ?? '--' }}</td>
+              <td class="num">{{ item.monthly_coupon ?? '--' }}</td>
+              <td class="num">{{ item.coupon_1st ?? '--' }}</td>
+              <td class="num">{{ item.coupon_2nd ?? '--' }}</td>
+              <td class="num">{{ item.coupon_3rd ?? '--' }}</td>
+              <td class="num">{{ item.absolute_return ?? '--' }}</td>
             </tr>
           </tbody>
         </table>
@@ -413,8 +413,7 @@ onMounted(async () => {
 
 .product-table {
   min-width: 3200px;
-  font-size: 15px;
-  /* border-collapse: separate 让 sticky 列/表头背景能正确盖住横向滚动内容 */
+  font-size: 13px;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -426,22 +425,36 @@ onMounted(async () => {
 }
 
 .product-table th {
-  padding: 11px 14px;
-  font-size: 14px;
-  font-weight: 700;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 800;
   text-transform: none;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
-  background: #f1f5f9;
-  border-bottom: 1px solid var(--border-soft);
+  color: var(--ink-soft);
+  background: var(--bg-card);
+  border-bottom: 2px solid var(--border);
+  text-align: left;
+}
+
+.product-table th.num {
+  text-align: right;
 }
 
 .product-table td {
-  padding: 11px 14px;
+  padding: 7px 12px;
   white-space: nowrap;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 1px solid #f0f2f5;
   color: var(--ink-strong);
-  font-size: 15px;
+  font-size: 13px;
+}
+
+.product-table td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
 }
 
 .name-cell {
@@ -449,6 +462,7 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: default;
+  font-weight: 600;
 }
 
 .status-cell {
@@ -458,11 +472,16 @@ onMounted(async () => {
   width: 1%;
 }
 
+/* 斑马纹 */
+.product-table tbody tr:nth-child(even) td {
+  background: #fafbfd;
+}
+
 .product-table tr:hover td {
   background: #eef2f7;
 }
 
-/* sticky 列：背景必须不透明，否则横向滚动时右侧内容透出 */
+/* sticky 列 */
 .sticky-col {
   position: sticky;
   z-index: 2;
@@ -471,6 +490,14 @@ onMounted(async () => {
 .sticky-col-1 { left: 0; }
 .sticky-col-2 { left: 120px; box-shadow: -4px 0 0 0 var(--bg-card); }
 .sticky-col-3 { left: 230px; box-shadow: -4px 0 0 0 var(--bg-card); }
+
+.product-table tbody tr:nth-child(even) .sticky-col {
+  background: #fafbfd;
+}
+.product-table tbody tr:nth-child(even) .sticky-col-2,
+.product-table tbody tr:nth-child(even) .sticky-col-3 {
+  box-shadow: -4px 0 0 0 #fafbfd;
+}
 
 .product-table tr:hover .sticky-col {
   background: #eef2f7;
@@ -482,11 +509,11 @@ onMounted(async () => {
 
 .product-table th.sticky-col {
   z-index: 5;
-  background: #f1f5f9;
+  background: var(--bg-card);
 }
 .product-table th.sticky-col-2,
 .product-table th.sticky-col-3 {
-  box-shadow: -4px 0 0 0 #f1f5f9;
+  box-shadow: -4px 0 0 0 var(--bg-card);
 }
 
 .input-narrow {
