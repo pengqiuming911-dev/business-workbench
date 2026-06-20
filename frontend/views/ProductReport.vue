@@ -154,9 +154,9 @@ onMounted(async () => {
 .month-search {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border-soft);
   flex-wrap: wrap;
 }
@@ -177,36 +177,36 @@ onMounted(async () => {
 
 .product-card:hover {
   border-color: var(--brand);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
   background: var(--brand);
   color: #fff;
-  padding: 11px 14px;
+  padding: 9px 12px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.card-icon { font-size: 17px; }
+.card-icon { font-size: 15px; }
 
 .card-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.card-body { padding: 5px 0; }
+.card-body { padding: 4px 0; }
 
 .info-row {
   display: grid;
-  grid-template-columns: 76px 1fr;
+  grid-template-columns: 70px 1fr;
   align-items: start;
-  padding: 6px 14px;
-  gap: 8px;
+  padding: 5px 12px;
+  gap: 6px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -223,6 +223,7 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--ink-strong);
   line-height: 1.55;
+  font-family: var(--font-mono);
 }
 
 .info-val.multiline {
@@ -238,7 +239,7 @@ onMounted(async () => {
   white-space: pre-wrap;
   max-height: 150px;
   overflow: auto;
-  padding: 14px;
+  padding: 12px;
 }
 
 @media (max-width: 1400px) {
