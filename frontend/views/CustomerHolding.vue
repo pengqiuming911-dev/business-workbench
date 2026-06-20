@@ -88,10 +88,10 @@
               <th class="sticky-col sticky-col-1">产品名称</th>
               <th class="sticky-col sticky-col-2">姓名</th>
               <th>实际申购人</th>
-              <th>金额 / 万</th>
-              <th>申购费返还比例</th>
-              <th>管理费返还比例</th>
-              <th>业绩报酬返还比例</th>
+              <th class="num">金额 / 万</th>
+              <th class="num">申购费返还比例</th>
+              <th class="num">管理费返还比例</th>
+              <th class="num">业绩报酬返还比例</th>
               <th>返佣对象</th>
               <th>申购日期</th>
               <th>持有状态</th>
@@ -100,18 +100,18 @@
               <th>结构类型</th>
               <th>锁定期</th>
               <th>观察日</th>
-              <th>入场价</th>
-              <th>首月敲出</th>
-              <th>每月递减</th>
-              <th>敲出价</th>
+              <th class="num">入场价</th>
+              <th class="num">首月敲出</th>
+              <th class="num">每月递减</th>
+              <th class="num">敲出价</th>
               <th>今日点位</th>
               <th>敲出线以上 / 以下</th>
               <th>降落伞</th>
               <th>派息障碍（如有）</th>
-              <th>月票息（税费后）</th>
-              <th>第一段票息（税费后）</th>
-              <th>第二段票息（税费后）</th>
-              <th>第三段票息（税费后）</th>
+              <th class="num">月票息（税费后）</th>
+              <th class="num">第一段票息（税费后）</th>
+              <th class="num">第二段票息（税费后）</th>
+              <th class="num">第三段票息（税费后）</th>
             </tr>
           </thead>
           <tbody>
@@ -119,10 +119,10 @@
               <td class="sticky-col sticky-col-1 name-cell" :title="item.product_name">{{ item.product_name || '--' }}</td>
               <td class="sticky-col sticky-col-2">{{ item.customer_name || '--' }}</td>
               <td>{{ item.actual_buyer || '--' }}</td>
-              <td>{{ item.amount ?? '--' }}</td>
-              <td>{{ item.subscribe_fee_ratio ?? '--' }}</td>
-              <td>{{ item.management_fee_ratio ?? '--' }}</td>
-              <td>{{ item.performance_fee_ratio ?? '--' }}</td>
+              <td class="num">{{ item.amount ?? '--' }}</td>
+              <td class="num">{{ item.subscribe_fee_ratio ?? '--' }}</td>
+              <td class="num">{{ item.management_fee_ratio ?? '--' }}</td>
+              <td class="num">{{ item.performance_fee_ratio ?? '--' }}</td>
               <td>{{ item.rebate_target || '--' }}</td>
               <td>{{ item.flight_date || '--' }}</td>
               <td>
@@ -138,10 +138,10 @@
                 <span>{{ displayObservationDay(item) }}</span>
                 <span v-if="displayObservationType(item)" class="obs-type">{{ displayObservationType(item) }}</span>
               </td>
-              <td>{{ item.entry_price ?? '--' }}</td>
-              <td>{{ item.first_knockout_ratio != null ? Number(item.first_knockout_ratio).toFixed(2) : '--' }}</td>
-              <td>{{ item.monthly_decrease ?? '--' }}</td>
-              <td>{{ item.knockout_price ?? '--' }}</td>
+              <td class="num">{{ item.entry_price ?? '--' }}</td>
+              <td class="num">{{ item.first_knockout_ratio != null ? Number(item.first_knockout_ratio).toFixed(2) : '--' }}</td>
+              <td class="num">{{ item.monthly_decrease ?? '--' }}</td>
+              <td class="num">{{ item.knockout_price ?? '--' }}</td>
               <td>
                 <span>{{ displayTodayPrice(item) }}</span>
                 <button
@@ -156,10 +156,10 @@
               </td>
               <td>{{ item.parachute ?? '--' }}</td>
               <td>{{ item.dividend_barrier ?? '--' }}</td>
-              <td>{{ item.monthly_coupon ?? '--' }}</td>
-              <td>{{ item.coupon_1st ?? '--' }}</td>
-              <td>{{ item.coupon_2nd ?? '--' }}</td>
-              <td>{{ item.coupon_3rd ?? '--' }}</td>
+              <td class="num">{{ item.monthly_coupon ?? '--' }}</td>
+              <td class="num">{{ item.coupon_1st ?? '--' }}</td>
+              <td class="num">{{ item.coupon_2nd ?? '--' }}</td>
+              <td class="num">{{ item.coupon_3rd ?? '--' }}</td>
             </tr>
           </tbody>
         </table>
@@ -367,53 +367,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-end;
-  margin-bottom: 18px;
-  padding: 22px 26px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-group label {
-  color: var(--ink-soft);
-  font-size: 15px;
-  font-weight: 600;
-  white-space: nowrap;
-  letter-spacing: 0.01em;
-}
-
-.input-sm {
-  height: 36px;
-  min-height: 36px;
-  padding: 0 12px;
-  font-size: 15px;
-  width: auto;
-  min-width: 120px;
-}
-
-.filter-sep {
-  color: var(--ink-faint);
-  font-size: 15px;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
 .checkbox-label {
   display: inline-flex;
   align-items: center;
@@ -472,10 +425,6 @@ onMounted(async () => {
 
 .tx-table {
   min-width: 3400px;
-  font-size: 15px;
-  /* border-collapse: separate 让 sticky 列/表头背景能正确盖住横向滚动内容 */
-  border-collapse: separate;
-  border-spacing: 0;
 }
 
 .tx-table thead {
@@ -485,26 +434,7 @@ onMounted(async () => {
 }
 
 .tx-table th {
-  padding: 11px 14px;
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: none;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
   background: #f1f5f9;
-  border-bottom: 1px solid var(--border-soft);
-}
-
-.tx-table td {
-  padding: 11px 14px;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--border-soft);
-  color: var(--ink-strong);
-  font-size: 15px;
-}
-
-.tx-table tr:hover td {
-  background: #eef2f7;
 }
 
 .name-cell {
@@ -513,33 +443,20 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-/* sticky 列：背景必须不透明，否则横向滚动时右侧内容透出 */
-.sticky-col {
-  position: sticky;
-  z-index: 2;
-  background: var(--bg-card);
-}
+/* sticky 列定位（base .sticky-col 规则已在 main.css 中定义） */
 .sticky-col-1 { left: 0; }
 .sticky-col-2 { left: 180px; box-shadow: -4px 0 0 0 var(--bg-card); }
 
-.tx-table tr:hover .sticky-col {
-  background: #eef2f7;
-}
 .tx-table tr:hover .sticky-col-2 {
   box-shadow: -4px 0 0 0 #eef2f7;
 }
 
 .tx-table th.sticky-col {
-  z-index: 5;
   background: #f1f5f9;
 }
+
 .tx-table th.sticky-col-2 {
   box-shadow: -4px 0 0 0 #f1f5f9;
-}
-
-.input-narrow {
-  min-width: 90px;
-  width: 120px;
 }
 
 .obs-cell {
@@ -573,26 +490,6 @@ onMounted(async () => {
 .refresh-btn:hover {
   background: var(--brand-soft);
   border-color: var(--brand);
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 18px;
-  padding: 0 4px;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.page-info {
-  font-size: 15px;
-  color: var(--ink-soft);
-  font-weight: 600;
 }
 
 .pos-above { color: var(--success); }
