@@ -123,6 +123,8 @@ const indexItems = ref([
   { code: '513180.SH', name: '恒科ETF', value: null, changePct: null },
   { code: '000905.SH', name: '中证500', value: null, changePct: null },
   { code: '000300.SH', name: '沪深300', value: null, changePct: null },
+  { code: '000001.SH', name: '上证指数', value: null, changePct: null },
+  { code: '399006.SZ', name: '创业板指', value: null, changePct: null },
 ])
 
 const statCards = computed(() => [
@@ -140,7 +142,8 @@ const modules = [
 ]
 
 const chartRefs = {}
-const chartInstances = []
+const chartInstances = new Map()
+let indicesRefreshTimer = null
 
 function setChartRef(el, code) {
   if (el) chartRefs[code] = el
@@ -179,50 +182,36 @@ async function loadSyncStatuses() {
 }
 
 async function loadIndices() {
-  for (const idx of indexItems.value) {
-    const secid = parseCodeForKline(idx.code)
-    if (!secid) continue
-    try {
-      const res = await fetch(`/_em_quote?secid=${secid}&fields=f43,f58,f169,f170`)
-      if (!res.ok) continue
-      const payload = await res.json()
-      if (!payload.data) continue
-      const d = payload.data
-      idx.name = idx.name || d.f58 || idx.name
-      if (d.f43 != null) {
-        const etfLike = idx.code.startsWith('51')
-        idx.value = d.f43 / (etfLike ? 1000 : 100)
-      }
-      if (d.f170 != null) {
-        idx.changePct = +(d.f170 / 100).toFixed(2)
-      }
-    } catch {}
-  }
-}
-
-function parseCodeForKline(code) {
-  const match = code.match(/(\d{6})\s*[.\s]*(\w{2})/)
-  if (!match) return null
-  const [, num, exchange] = match
-  const market = (exchange === 'SH' && (num.startsWith('0') || num.startsWith('5'))) ? '1' : '0'
-  return `${market}.${num}`
+  try {
+    const res = await fetch('/api/dashboard/indices')
+    if (!res.ok) return
+    const payload = await res.json()
+    const results = new Map((payload.indices || []).map(item => [item.code, item]))
+    for (const idx of indexItems.value) {
+      const result = results.get(idx.code)
+      if (!result) continue
+      if (result.name) idx.name = result.name
+      if (result.value != null) idx.value = result.value
+      if (result.change_pct != null) idx.changePct = +result.change_pct.toFixed(2)
+    }
+  } catch {}
 }
 
 async function loadKlines() {
-  for (const idx of indexItems.value) {
-    const secid = parseCodeForKline(idx.code)
-    if (!secid) continue
-    try {
-      const url = `/_em_kline?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&end=20500101&lmt=30`
-      const res = await fetch(url)
-      if (!res.ok) continue
-      const payload = await res.json()
-      if (!payload.data?.klines?.length) continue
+  try {
+    const res = await fetch('/api/dashboard/klines')
+    if (!res.ok) return
+    const payload = await res.json()
+    const results = new Map((payload.klines || []).map(item => [item.code, item]))
+    for (const idx of indexItems.value) {
+      const result = results.get(idx.code)
+      if (!result?.klines?.length) continue
       const el = chartRefs[idx.code]
       if (!el) continue
+      chartInstances.get(idx.code)?.dispose()
       const chart = echarts.init(el)
-      chartInstances.push(chart)
-      const closes = payload.data.klines.map(line => parseFloat(line.split(',')[2]))
+      chartInstances.set(idx.code, chart)
+      const closes = result.klines.map(point => point.close)
       const isUp = closes[closes.length - 1] >= closes[0]
       const color = isUp ? '#dc2626' : '#16a34a'
       chart.setOption({
@@ -243,18 +232,20 @@ async function loadKlines() {
           },
         }],
       })
-    } catch {}
-  }
+    }
+  } catch {}
 }
 
 onMounted(async () => {
   await Promise.all([loadStats(), loadSyncStatuses(), loadIndices()])
   loadKlines()
-  setInterval(loadIndices, 30000)
+  indicesRefreshTimer = window.setInterval(loadIndices, 30000)
 })
 
 onUnmounted(() => {
-  chartInstances.forEach(c => c.dispose())
+  if (indicesRefreshTimer) window.clearInterval(indicesRefreshTimer)
+  chartInstances.forEach(chart => chart.dispose())
+  chartInstances.clear()
 })
 </script>
 
@@ -266,60 +257,60 @@ onUnmounted(() => {
 /* ─── Hero ─── */
 .hero-section {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 32px;
+  grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.5fr);
+  gap: 22px;
   align-items: center;
-  margin-bottom: 28px;
-  padding: 32px;
+  margin-bottom: 22px;
+  padding: 22px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
 
 .hero-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .hero-title {
   color: var(--ink-strong);
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 750;
   line-height: 1.15;
 }
 
 .hero-desc {
   color: var(--ink-soft);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
   max-width: 400px;
 }
 
 .hero-actions {
   display: flex;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .hero-indices {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
   background: var(--bg-hover, #f9fafb);
-  border-radius: 12px;
+  border-radius: var(--radius);
 }
 
 .hero-indices .index-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
+  gap: 3px;
+  padding: 12px 14px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
 
@@ -338,14 +329,15 @@ onUnmounted(() => {
 .index-code {
   font-size: 11px;
   color: var(--ink-faint);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .index-value {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 750;
   color: var(--ink-strong);
   line-height: 1.2;
+  font-family: var(--font-mono);
 }
 
 .index-change {
@@ -379,54 +371,55 @@ onUnmounted(() => {
 .stat-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 20px;
+  gap: 3px;
+  padding: 16px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
 
 .stat-label {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--ink-soft);
 }
 
 .stat-value {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 750;
   color: var(--ink-strong);
   line-height: 1.1;
+  font-family: var(--font-mono);
 }
 
 .stat-note {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--ink-faint);
 }
 
 /* ─── Content Grid ─── */
 .content-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 20px;
+  grid-template-columns: 1fr 320px;
+  gap: 18px;
 }
 
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .card-head h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--ink-strong);
 }
 
 .card-link {
-  font-size: 15px;
+  font-size: 13px;
   color: var(--ink-soft);
   font-weight: 600;
 }
@@ -434,34 +427,34 @@ onUnmounted(() => {
 .module-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 10px;
 }
 
 .module-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 20px;
+  gap: 3px;
+  padding: 16px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .module-item:hover {
-  transform: translateY(-2px);
+  border-color: var(--border);
   box-shadow: var(--shadow-md);
 }
 
 .module-item strong {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--ink-strong);
 }
 
 .module-item span {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--ink-soft);
 }
 
@@ -473,17 +466,17 @@ onUnmounted(() => {
 }
 
 .side-card {
-  padding: 20px;
+  padding: 18px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
 
 .sync-info {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .sync-row {
@@ -493,14 +486,14 @@ onUnmounted(() => {
 }
 
 .sync-row strong {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--ink-strong);
   flex: 1;
 }
 
 .sync-row span {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--ink-soft);
 }
 
@@ -519,14 +512,14 @@ onUnmounted(() => {
 .quick-links {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .quick-link {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--brand);
-  padding: 8px 0;
+  padding: 6px 0;
   border-bottom: 1px solid var(--border-soft);
   transition: color 150ms ease;
 }
@@ -540,7 +533,7 @@ onUnmounted(() => {
 }
 
 /* ─── Responsive ─── */
-@media (max-width: 960px) {
+@media (max-width: 1180px) {
   .hero-section {
     grid-template-columns: 1fr;
   }
@@ -562,6 +555,12 @@ onUnmounted(() => {
   }
 }
 
+@media (max-width: 760px) {
+  .hero-indices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
   .stats-row {
     grid-template-columns: 1fr;
@@ -572,7 +571,11 @@ onUnmounted(() => {
   }
 
   .hero-section {
-    padding: 20px;
+    padding: 18px;
+  }
+
+  .hero-indices {
+    grid-template-columns: 1fr;
   }
 }
 </style>
