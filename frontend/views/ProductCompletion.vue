@@ -71,7 +71,7 @@
                     </td>
                     <td class="col-left">{{ p.name }}</td>
                     <td class="col-left">{{ p.manager }}</td>
-                    <td class="col-left"><span class="badge badge-green">{{ p.holding_status }}</span></td>
+                    <td class="col-left"><span class="status-dot status-active">{{ p.holding_status }}</span></td>
                     <td class="col-left code-cell">{{ p.code }}</td>
                     <td class="num">{{ formatPrice(p.entry_price, p) }}</td>
                     <td class="col-left">{{ p.issue_date || '--' }}</td>

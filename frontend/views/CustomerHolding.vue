@@ -126,7 +126,7 @@
               <td>{{ item.rebate_target || '--' }}</td>
               <td>{{ item.flight_date || '--' }}</td>
               <td>
-                <span class="badge" :class="isActiveStatus(item.holding_status) ? 'badge-green' : 'badge-amber'">
+                <span class="status-dot" :class="isActiveStatus(item.holding_status) ? 'status-active' : 'status-inactive'">
                   {{ normalizeHoldingStatus(item.holding_status) }}
                 </span>
               </td>

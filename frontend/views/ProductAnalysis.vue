@@ -129,7 +129,7 @@
               <td class="sticky-col sticky-col-2">{{ item.manager || '--' }}</td>
               <td class="sticky-col sticky-col-3 name-cell" :title="item.name">{{ truncateName(item.name) }}</td>
               <td class="status-cell">
-                <span class="badge" :class="isActiveStatus(item.holding_status) ? 'badge-green' : 'badge-amber'">
+                <span class="status-dot" :class="isActiveStatus(item.holding_status) ? 'status-active' : 'status-inactive'">
                   {{ normalizeHoldingStatus(item.holding_status) }}
                 </span>
               </td>
