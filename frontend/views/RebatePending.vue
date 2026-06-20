@@ -812,8 +812,7 @@ function downloadCSV() {
 }
 
 .table-wrap {
-  overflow: auto;
-  max-height: calc(100vh - 280px);
+  overflow-x: auto;
 }
 
 .input-compact {
@@ -873,7 +872,7 @@ function downloadCSV() {
   min-width: 120px;
   text-align: left;
   cursor: pointer;
-  background: #fff;
+  background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   color: var(--ink);
@@ -979,7 +978,7 @@ function downloadCSV() {
   white-space: nowrap;
   color: var(--ink-strong);
   border-bottom: 1px solid var(--border-soft);
-  background: rgba(20, 20, 20, 0.03);
+  background: var(--bg-card);
   letter-spacing: 0;
   position: sticky;
   top: 0;
@@ -988,7 +987,7 @@ function downloadCSV() {
 
 .header-group-row th[rowspan="2"] {
   vertical-align: middle;
-  background: rgba(20, 20, 20, 0.03);
+  background: var(--bg-card);
   text-align: left;
 }
 
@@ -1001,7 +1000,7 @@ function downloadCSV() {
   color: var(--ink-soft);
   border-bottom: 1px solid var(--border-soft);
   letter-spacing: 0;
-  background: #fff;
+  background: var(--bg-card);
   position: sticky;
   top: 44px;
   z-index: 10;
@@ -1129,7 +1128,7 @@ function downloadCSV() {
   color: var(--ink-strong);
   font-size: 15px;
   line-height: 1.6;
-  background: #fff;
+  background: var(--bg-card);
 }
 
 .row-alt .sticky-col {
