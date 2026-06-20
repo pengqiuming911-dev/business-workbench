@@ -3,7 +3,7 @@
     <div class="filter-bar">
       <div class="filter-group">
         <label>客户</label>
-        <input v-model="filters.customerName" type="text" class="input input-sm" placeholder="输入客户关键词" />
+        <input v-model="filters.customerName" type="text" class="input input-sm input-narrow" placeholder="客户关键词" />
         <label class="checkbox-label">
           <input v-model="filters.matchName" type="checkbox" />
           姓名
@@ -12,6 +12,38 @@
           <input v-model="filters.matchBuyer" type="checkbox" />
           实际申购人
         </label>
+      </div>
+      <div class="filter-group">
+        <label>持有状态</label>
+        <select v-model="filters.holdingStatus" class="input input-sm">
+          <option value="">全部</option>
+          <option v-for="opt in filterOptions.holdingStatuses" :key="opt" :value="opt">
+            {{ normalizeHoldingStatus(opt) }}
+          </option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>返佣对象</label>
+        <select v-model="filters.rebateTarget" class="input input-sm">
+          <option value="">全部</option>
+          <option v-for="opt in filterOptions.rebateTargets" :key="opt" :value="opt">{{ opt }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>产品名称</label>
+        <input v-model="filters.productName" type="text" class="input input-sm input-narrow" placeholder="模糊搜索" />
+      </div>
+      <div class="filter-group">
+        <label>申购日期</label>
+        <input v-model="filters.flightDateStart" type="date" class="input input-sm" />
+        <span class="filter-sep">至</span>
+        <input v-model="filters.flightDateEnd" type="date" class="input input-sm" />
+      </div>
+      <div class="filter-group">
+        <label>完结日期</label>
+        <input v-model="filters.completeDateStart" type="date" class="input input-sm" />
+        <span class="filter-sep">至</span>
+        <input v-model="filters.completeDateEnd" type="date" class="input input-sm" />
       </div>
       <div class="filter-group">
         <label>观察日</label>
@@ -27,49 +59,9 @@
           敲出
         </label>
       </div>
-      <div class="filter-group">
-        <label>返佣对象</label>
-        <select v-model="filters.rebateTarget" class="input input-sm">
-          <option value="">全部</option>
-          <option v-for="opt in filterOptions.rebateTargets" :key="opt" :value="opt">{{ opt }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>持有状态</label>
-        <select v-model="filters.holdingStatus" class="input input-sm">
-          <option value="">全部</option>
-          <option v-for="opt in filterOptions.holdingStatuses" :key="opt" :value="opt">
-            {{ normalizeHoldingStatus(opt) }}
-          </option>
-        </select>
-      </div>
       <div class="filter-actions">
         <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
-      </div>
-    </div>
-
-    <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
-      <span class="chevron" :class="{ open: showAdvanced }">▸</span>
-      高级筛选
-    </div>
-
-    <div v-show="showAdvanced" class="filter-bar advanced-bar">
-      <div class="filter-group">
-        <label>产品名称</label>
-        <input v-model="filters.productName" type="text" class="input input-sm" placeholder="模糊搜索" />
-      </div>
-      <div class="filter-group">
-        <label>申购日期</label>
-        <input v-model="filters.flightDateStart" type="date" class="input input-sm" />
-        <span class="filter-sep">至</span>
-        <input v-model="filters.flightDateEnd" type="date" class="input input-sm" />
-      </div>
-      <div class="filter-group">
-        <label>完结日期</label>
-        <input v-model="filters.completeDateStart" type="date" class="input input-sm" />
-        <span class="filter-sep">至</span>
-        <input v-model="filters.completeDateEnd" type="date" class="input input-sm" />
       </div>
     </div>
 
@@ -79,10 +71,14 @@
     <div v-else-if="items.length > 0">
       <div class="table-wrap">
         <table class="data-table tx-table">
+          <colgroup>
+            <col style="width: 180px" /><!-- 产品名称(sticky) -->
+            <col style="width: 90px" /><!-- 姓名(sticky) -->
+          </colgroup>
           <thead>
             <tr>
-              <th>产品名称</th>
-              <th>姓名</th>
+              <th class="sticky-col sticky-col-1">产品名称</th>
+              <th class="sticky-col sticky-col-2">姓名</th>
               <th>实际申购人</th>
               <th>金额 / 万</th>
               <th>申购费返还比例</th>
@@ -112,8 +108,8 @@
           </thead>
           <tbody>
             <tr v-for="(item, idx) in items" :key="idx">
-              <td>{{ item.product_name || '--' }}</td>
-              <td>{{ item.customer_name || '--' }}</td>
+              <td class="sticky-col sticky-col-1 name-cell" :title="item.product_name">{{ item.product_name || '--' }}</td>
+              <td class="sticky-col sticky-col-2">{{ item.customer_name || '--' }}</td>
               <td>{{ item.actual_buyer || '--' }}</td>
               <td>{{ item.amount ?? '--' }}</td>
               <td>{{ item.subscribe_fee_ratio ?? '--' }}</td>
@@ -135,7 +131,7 @@
                 <span v-if="displayObservationType(item)" class="obs-type">{{ displayObservationType(item) }}</span>
               </td>
               <td>{{ item.entry_price ?? '--' }}</td>
-              <td>{{ item.first_knockout_ratio ?? '--' }}</td>
+              <td>{{ item.first_knockout_ratio != null ? Number(item.first_knockout_ratio).toFixed(2) : '--' }}</td>
               <td>{{ item.monthly_decrease ?? '--' }}</td>
               <td>{{ item.knockout_price ?? '--' }}</td>
               <td>
@@ -469,6 +465,15 @@ onMounted(async () => {
 .tx-table {
   min-width: 3400px;
   font-size: 15px;
+  /* border-collapse: separate 让 sticky 列/表头背景能正确盖住横向滚动内容 */
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tx-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 4;
 }
 
 .tx-table th {
@@ -478,7 +483,7 @@ onMounted(async () => {
   text-transform: none;
   letter-spacing: 0.03em;
   white-space: nowrap;
-  background: rgba(241, 245, 249, 0.5);
+  background: #f1f5f9;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -491,7 +496,36 @@ onMounted(async () => {
 }
 
 .tx-table tr:hover td {
-  background: rgba(241, 245, 249, 0.5);
+  background: #eef2f7;
+}
+
+.name-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* sticky 列：背景必须不透明，否则横向滚动时右侧内容透出 */
+.sticky-col {
+  position: sticky;
+  z-index: 2;
+  background: var(--bg-card);
+}
+.sticky-col-1 { left: 0; }
+.sticky-col-2 { left: 180px; }
+
+.tx-table tr:hover .sticky-col {
+  background: #eef2f7;
+}
+
+.tx-table th.sticky-col {
+  z-index: 5;
+  background: #f1f5f9;
+}
+
+.input-narrow {
+  min-width: 90px;
+  width: 120px;
 }
 
 .obs-cell {

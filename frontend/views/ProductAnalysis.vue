@@ -8,6 +8,12 @@
         <input v-model="filters.issueDateEnd" type="date" class="input input-sm" />
       </div>
       <div class="filter-group">
+        <label>完结日期</label>
+        <input v-model="filters.completeDateStart" type="date" class="input input-sm" />
+        <span class="filter-sep">至</span>
+        <input v-model="filters.completeDateEnd" type="date" class="input input-sm" />
+      </div>
+      <div class="filter-group">
         <label>持有状态</label>
         <select v-model="filters.holdingStatus" class="input input-sm">
           <option value="">全部</option>
@@ -22,18 +28,12 @@
           v-model="filters.manager"
           list="manager-options"
           type="text"
-          class="input input-sm"
-          placeholder="输入关键字模糊匹配"
+          class="input input-sm input-narrow"
+          placeholder="模糊匹配"
         />
         <datalist id="manager-options">
           <option v-for="opt in filterOptions.managers" :key="opt" :value="opt">{{ opt }}</option>
         </datalist>
-      </div>
-      <div class="filter-group">
-        <label>完结日期</label>
-        <input v-model="filters.completeDateStart" type="date" class="input input-sm" />
-        <span class="filter-sep">至</span>
-        <input v-model="filters.completeDateEnd" type="date" class="input input-sm" />
       </div>
       <div class="filter-actions">
         <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
@@ -88,11 +88,16 @@
     <div v-else-if="items.length > 0">
       <div class="table-wrap">
         <table class="data-table product-table">
+          <colgroup>
+            <col style="width: 120px" /><!-- 航班编号(sticky) -->
+            <col style="width: 110px" /><!-- 管理人(sticky) -->
+            <col style="width: 170px" /><!-- 产品名称(sticky) -->
+          </colgroup>
           <thead>
             <tr>
-              <th class="sticky-col">航班编号</th>
-              <th>管理人</th>
-              <th>产品名称</th>
+              <th class="sticky-col sticky-col-1">航班编号</th>
+              <th class="sticky-col sticky-col-2">管理人</th>
+              <th class="sticky-col sticky-col-3 name-cell" :title="''">产品名称</th>
               <th>持有状态</th>
               <th>申购日期</th>
               <th>存续时间（月）</th>
@@ -120,9 +125,9 @@
           </thead>
           <tbody>
             <tr v-for="item in items" :key="item.id">
-              <td class="sticky-col">{{ item.id }}</td>
-              <td>{{ item.manager || '--' }}</td>
-              <td class="name-cell" :title="item.name">{{ truncateName(item.name) }}</td>
+              <td class="sticky-col sticky-col-1">{{ item.id }}</td>
+              <td class="sticky-col sticky-col-2">{{ item.manager || '--' }}</td>
+              <td class="sticky-col sticky-col-3 name-cell" :title="item.name">{{ truncateName(item.name) }}</td>
               <td class="status-cell">
                 <span class="badge" :class="isActiveStatus(item.holding_status) ? 'badge-green' : 'badge-amber'">
                   {{ normalizeHoldingStatus(item.holding_status) }}
@@ -135,7 +140,7 @@
               <td>{{ item.lock_months ?? '--' }}</td>
               <td>{{ item.margin_ratio ?? '--' }}</td>
               <td>{{ item.knock_in ?? '--' }}</td>
-              <td>{{ item.first_knockout_ratio ?? '--' }}</td>
+              <td>{{ formatRatio2(item.first_knockout_ratio) }}</td>
               <td>{{ item.entry_price ?? '--' }}</td>
               <td>{{ item.knocked_in ?? '--' }}</td>
               <td>{{ item.monthly_decrease ?? '--' }}</td>
@@ -226,6 +231,13 @@ function normalizeHoldingStatus(val) {
 function stripParentheses(val) {
   if (!val) return '--'
   return val.replace(/[（(].*?[)）]/g, '').trim() || val
+}
+
+function formatRatio2(val) {
+  if (val === null || val === undefined || val === '') return '--'
+  const n = Number(val)
+  if (isNaN(n)) return '--'
+  return n.toFixed(2)
 }
 
 function formatDuration(item) {
@@ -402,6 +414,15 @@ onMounted(async () => {
 .product-table {
   min-width: 3200px;
   font-size: 15px;
+  /* border-collapse: separate 让 sticky 列/表头背景能正确盖住横向滚动内容 */
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.product-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 4;
 }
 
 .product-table th {
@@ -411,7 +432,7 @@ onMounted(async () => {
   text-transform: none;
   letter-spacing: 0.03em;
   white-space: nowrap;
-  background: rgba(241, 245, 249, 0.5);
+  background: #f1f5f9;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -425,6 +446,8 @@ onMounted(async () => {
 
 .name-cell {
   max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: default;
 }
 
@@ -436,23 +459,31 @@ onMounted(async () => {
 }
 
 .product-table tr:hover td {
-  background: rgba(241, 245, 249, 0.5);
+  background: #eef2f7;
 }
 
+/* sticky 列：背景必须不透明，否则横向滚动时右侧内容透出 */
 .sticky-col {
   position: sticky;
-  left: 0;
   z-index: 2;
   background: var(--bg-card);
 }
+.sticky-col-1 { left: 0; }
+.sticky-col-2 { left: 120px; }
+.sticky-col-3 { left: 230px; }
 
 .product-table tr:hover .sticky-col {
-  background: rgba(241, 245, 249, 0.5);
+  background: #eef2f7;
 }
 
 .product-table th.sticky-col {
-  z-index: 3;
-  background: rgba(241, 245, 249, 0.5);
+  z-index: 5;
+  background: #f1f5f9;
+}
+
+.input-narrow {
+  min-width: 90px;
+  width: 110px;
 }
 
 .pagination {
