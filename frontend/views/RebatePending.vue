@@ -60,8 +60,8 @@
         <label>是否可返</label>
         <select v-model="filters.isReturnable" class="input input-sm input-select-compact">
           <option value="">全部</option>
-          <option value="是">是</option>
-          <option value="否">否</option>
+          <option value="待返">待返</option>
+          <option value="暂不可返">暂不可返</option>
         </select>
       </div>
       <div class="filter-group">
@@ -180,7 +180,8 @@
           <col span="3" style="min-width: 100px" /><!-- 已返 x3 -->
           <col span="3" style="min-width: 100px" /><!-- 未返 x3 -->
           <col style="min-width: 80px" /><!-- 是否可返 -->
-          <col span="4" style="min-width: 100px" /><!-- 本次拟返 x3 + 合计 -->
+          <col span="3" style="min-width: 74px" /><!-- 校验 x3 -->
+          <col span="4" style="min-width: 72px" /><!-- 本次拟返 x3 + 合计 -->
           <col style="min-width: 120px" /><!-- 操作 -->
         </colgroup>
         <thead>
@@ -190,8 +191,8 @@
             <th rowspan="2">航班名称</th>
             <th rowspan="2">客户姓名</th>
             <th rowspan="2">返还人</th>
-            <th rowspan="2" class="num-col">本金</th>
-            <th rowspan="2" class="num-col">申购费率</th>
+            <th rowspan="2" class="num">本金</th>
+            <th rowspan="2" class="num">申购费率</th>
             <th colspan="3" class="group-header group-receivable">应收</th>
             <th colspan="3" class="group-header group-ratio">返还比例</th>
             <th colspan="3" class="group-header group-tax">扣税比例</th>
@@ -199,39 +200,44 @@
             <th colspan="3" class="group-header group-returned">已返</th>
             <th colspan="3" class="group-header group-unreturned">未返</th>
             <th rowspan="2">是否可返</th>
+            <th colspan="3" class="group-header group-check">校验</th>
             <th colspan="4" class="group-header group-plan">本次拟返</th>
             <th rowspan="2">操作</th>
           </tr>
           <tr class="header-sub-row">
             <!-- 应收 -->
-            <th class="num-col sub-receivable">申购费</th>
-            <th class="num-col sub-receivable">管理费实收</th>
-            <th class="num-col sub-receivable">业绩报酬应收</th>
+            <th class="num sub-receivable">申购费</th>
+            <th class="num sub-receivable">管理费实收</th>
+            <th class="num sub-receivable">业绩报酬应收</th>
             <!-- 返还比例 -->
-            <th class="num-col sub-ratio">申购费</th>
-            <th class="num-col sub-ratio">管理费</th>
-            <th class="num-col sub-ratio">业绩报酬</th>
+            <th class="num sub-ratio">申购费</th>
+            <th class="num sub-ratio">管理费</th>
+            <th class="num sub-ratio">业绩报酬</th>
             <!-- 扣税比例 -->
-            <th class="num-col sub-tax">申购费</th>
-            <th class="num-col sub-tax">管理费</th>
-            <th class="num-col sub-tax">业绩报酬</th>
+            <th class="num sub-tax">申购费</th>
+            <th class="num sub-tax">管理费</th>
+            <th class="num sub-tax">业绩报酬</th>
             <!-- 应返 -->
-            <th class="num-col sub-should">申购费</th>
-            <th class="num-col sub-should">管理费</th>
-            <th class="num-col sub-should">业绩报酬</th>
+            <th class="num sub-should">申购费</th>
+            <th class="num sub-should">管理费</th>
+            <th class="num sub-should">业绩报酬</th>
             <!-- 已返 -->
-            <th class="num-col sub-returned">申购费</th>
-            <th class="num-col sub-returned">管理费</th>
-            <th class="num-col sub-returned">业绩报酬</th>
+            <th class="num sub-returned">申购费</th>
+            <th class="num sub-returned">管理费</th>
+            <th class="num sub-returned">业绩报酬</th>
             <!-- 未返 -->
-            <th class="num-col sub-unreturned">申购费</th>
-            <th class="num-col sub-unreturned">管理费</th>
-            <th class="num-col sub-unreturned">业绩报酬</th>
+            <th class="num sub-unreturned">申购费</th>
+            <th class="num sub-unreturned">管理费</th>
+            <th class="num sub-unreturned">业绩报酬</th>
+            <!-- 校验 -->
+            <th class="sub-check">申购费</th>
+            <th class="sub-check">管理费</th>
+            <th class="sub-check">业绩报酬</th>
             <!-- 本次拟返 -->
             <th class="sub-plan">申购费</th>
             <th class="sub-plan">管理费</th>
             <th class="sub-plan">业绩报酬</th>
-            <th class="num-col sub-plan">合计</th>
+            <th class="num sub-plan">合计</th>
           </tr>
         </thead>
         <tbody>
@@ -241,41 +247,50 @@
             <td class="name-cell" :title="item.product_name">{{ truncate(item.product_name, 12) }}</td>
             <td>{{ item.customer_name || '--' }}</td>
             <td>{{ item.rebate_target || '--' }}</td>
-            <td class="num-col">{{ fmtNum(item.principal) }}</td>
-            <td class="num-col">{{ fmtPct(item.subscribe_fee_rate) }}</td>
+            <td class="num">{{ fmtNum(item.principal) }}</td>
+            <td class="num">{{ fmtPct(item.subscribe_fee_rate) }}</td>
             <!-- 应收 -->
-            <td class="num-col">{{ fmtNum(calcSubscribeFee(item)) }}</td>
-            <td class="num-col">{{ fmtNum(calcManagementFeeReceived(item)) }}</td>
-            <td class="num-col">{{ fmtNum(calcPerformanceFeeReceivable(item)) }}</td>
+            <td class="num">{{ fmtNum(calcSubscribeFee(item)) }}</td>
+            <td class="num">{{ fmtNum(calcManagementFeeReceived(item)) }}</td>
+            <td class="num">{{ fmtNum(calcPerformanceFeeReceivable(item)) }}</td>
             <!-- 返还比例 -->
-            <td class="num-col">{{ fmtPct(item.subscribe_fee_ratio) }}</td>
-            <td class="num-col">{{ fmtPct(item.management_fee_ratio) }}</td>
-            <td class="num-col">{{ fmtPct(item.performance_fee_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.subscribe_fee_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.management_fee_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.performance_fee_ratio) }}</td>
             <!-- 扣税比例 -->
-            <td class="num-col">{{ fmtPct(item.tax_subscribe_ratio) }}</td>
-            <td class="num-col">{{ fmtPct(item.tax_management_ratio) }}</td>
-            <td class="num-col">{{ fmtPct(item.tax_performance_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.tax_subscribe_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.tax_management_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.tax_performance_ratio) }}</td>
             <!-- 应返 -->
-            <td class="num-col">{{ fmtNum(item.expected_subscribe ?? calcShouldReturn(item, 'subscribe')) }}</td>
-            <td class="num-col">{{ fmtNum(item.expected_management ?? calcShouldReturn(item, 'management')) }}</td>
-            <td class="num-col">{{ fmtNum(item.expected_performance ?? calcShouldReturn(item, 'performance')) }}</td>
+            <td class="num">{{ fmtNum(item.expected_subscribe ?? calcShouldReturn(item, 'subscribe')) }}</td>
+            <td class="num">{{ fmtNum(item.expected_management ?? calcShouldReturn(item, 'management')) }}</td>
+            <td class="num">{{ fmtNum(item.expected_performance ?? calcShouldReturn(item, 'performance')) }}</td>
             <!-- 已返 -->
-            <td class="num-col">{{ fmtNum(item.returned_subscribe) }}</td>
-            <td class="num-col">{{ fmtNum(item.returned_management) }}</td>
-            <td class="num-col">{{ fmtNum(item.returned_performance) }}</td>
+            <td class="num">{{ fmtNum(item.returned_subscribe) }}</td>
+            <td class="num">{{ fmtNum(item.returned_management) }}</td>
+            <td class="num">{{ fmtNum(item.returned_performance) }}</td>
             <!-- 未返 -->
-            <td class="num-col">{{ fmtNum(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) }}</td>
-            <td class="num-col">{{ fmtNum(item.outstanding_management ?? calcUnreturned(item, 'management')) }}</td>
-            <td class="num-col">{{ fmtNum(item.outstanding_performance ?? calcUnreturned(item, 'performance')) }}</td>
+            <td class="num">{{ fmtNum(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) }}</td>
+            <td class="num">{{ fmtNum(item.outstanding_management ?? calcUnreturned(item, 'management')) }}</td>
+            <td class="num">{{ fmtNum(item.outstanding_performance ?? calcUnreturned(item, 'performance')) }}</td>
             <!-- 是否可返 -->
             <td class="returnable-cell">
-              <button
-                class="returnable-btn"
+              <span
+                class="returnable-pill"
                 :class="returnableClass(item.is_returnable)"
-                @click="toggleReturnable(item)"
               >
                 {{ item.is_returnable || '暂不可返' }}
-              </button>
+              </span>
+            </td>
+            <!-- 校验 -->
+            <td class="check-cell">
+              <span class="check-pill" :class="checkClass(item.check_subscribe)">{{ item.check_subscribe || '--' }}</span>
+            </td>
+            <td class="check-cell">
+              <span class="check-pill" :class="checkClass(item.check_management)">{{ item.check_management || '--' }}</span>
+            </td>
+            <td class="check-cell">
+              <span class="check-pill" :class="checkClass(item.check_performance)">{{ item.check_performance || '--' }}</span>
             </td>
             <!-- 本次拟返 checkboxes -->
             <td class="plan-cell">
@@ -305,7 +320,7 @@
                 />
               </label>
             </td>
-            <td class="num-col plan-total">{{ fmtNum(calcPlanTotal(item)) }}</td>
+            <td class="num plan-total">{{ fmtNum(calcPlanTotal(item)) }}</td>
             <td class="action-cell">
               <button
                 v-if="(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) > 0"
@@ -329,9 +344,9 @@
     </div>
 
     <!-- 分页 -->
-    <div v-if="items.length > 0" class="pager">
-      <span class="pager-info">共 {{ items.length }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
-      <div class="pager-btns">
+    <div v-if="items.length > 0" class="pagination">
+      <span class="text-label">共 {{ items.length }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
+      <div class="pagination-controls">
         <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
         <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
       </div>
@@ -470,7 +485,7 @@ function fmtNum(val) {
 }
 
 function fmtPct(val) {
-  if (val === '暂不可返') return '暂不可返'
+  if (val === '-' || val === '暂不可返' || val === '不可返') return '-'
   if (val == null || val === '') return '--'
   const n = Number(val)
   if (isNaN(n)) return '--'
@@ -532,34 +547,16 @@ function calcPlanTotal(item) {
   return total
 }
 
-// --- Returnable toggle ---
 function returnableClass(val) {
-  if (val === '是') return 'returnable-yes'
-  if (val === '否') return 'returnable-no'
+  if (val === '待返') return 'returnable-ready'
+  if (val === '暂不可返') return 'returnable-waiting'
   return 'returnable-empty'
 }
 
-async function toggleReturnable(item) {
-  const cycle = ['', '是', '否']
-  const idx = cycle.indexOf(item.is_returnable)
-  const next = cycle[(idx + 1) % cycle.length]
-  item.is_returnable = next
-  try {
-    await fetch('/api/rebate/pending/status', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        order_id: item.order_id,
-        is_returnable: item.is_returnable,
-        plan_subscribe: item.plan_subscribe,
-        plan_management: item.plan_management,
-        plan_performance: item.plan_performance,
-      }),
-    })
-  } catch {
-    // Revert on failure
-    item.is_returnable = cycle[idx]
-  }
+function checkClass(val) {
+  if (val === 'T') return 'check-pass'
+  if (val === 'F') return 'check-fail'
+  return 'check-empty'
 }
 
 // --- Plan toggle ---
@@ -572,7 +569,6 @@ async function togglePlan(item, field, event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         order_id: item.order_id,
-        is_returnable: item.is_returnable,
         plan_subscribe: item.plan_subscribe,
         plan_management: item.plan_management,
         plan_performance: item.plan_performance,
@@ -608,7 +604,6 @@ function applyBatch() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         order_id: item.order_id,
-        is_returnable: item.is_returnable,
         plan_subscribe: item.plan_subscribe,
         plan_management: item.plan_management,
         plan_performance: item.plan_performance,
@@ -722,6 +717,7 @@ function downloadCSV() {
     '已返-申购费', '已返-管理费', '已返-业绩报酬',
     '未返-申购费', '未返-管理费', '未返-业绩报酬',
     '是否可返',
+    '校验-申购费', '校验-管理费', '校验-业绩报酬',
     '本次拟返-申购费', '本次拟返-管理费', '本次拟返-业绩报酬', '本次拟返-合计',
   ]
 
@@ -752,6 +748,9 @@ function downloadCSV() {
     fmtNum(item.outstanding_management ?? calcUnreturned(item, 'management')),
     fmtNum(item.outstanding_performance ?? calcUnreturned(item, 'performance')),
     item.is_returnable || '',
+    item.check_subscribe || '--',
+    item.check_management || '--',
+    item.check_performance || '--',
     item.plan_subscribe ? fmtNum(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) : '0.00',
     item.plan_management ? fmtNum(item.outstanding_management ?? calcUnreturned(item, 'management')) : '0.00',
     item.plan_performance ? fmtNum(item.outstanding_performance ?? calcUnreturned(item, 'performance')) : '0.00',
@@ -779,42 +778,6 @@ function downloadCSV() {
   max-width: none;
 }
 
-/* --- Filter bar --- */
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 14px;
-  align-items: flex-end;
-  margin-bottom: 16px;
-  padding: 20px 24px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-group label {
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.input-sm {
-  height: 34px;
-  min-height: 34px;
-  padding: 0 12px;
-  font-size: 13px;
-  width: auto;
-  min-width: 120px;
-}
-
 .input-compact {
   min-width: 102px;
 }
@@ -826,13 +789,6 @@ function downloadCSV() {
 
 .input-select-compact {
   min-width: 112px;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 .advanced-toggle {
@@ -1010,6 +966,7 @@ function downloadCSV() {
 .group-should     { background: #eff6ff !important; }
 .group-returned   { background: #f0fdf4 !important; }
 .group-unreturned { background: #fef2f2 !important; }
+.group-check      { background: #eef6f3 !important; }
 .group-plan       { background: #faf5ff !important; }
 
 .sub-receivable   { background: #f5f7ff !important; }
@@ -1018,6 +975,7 @@ function downloadCSV() {
 .sub-should       { background: #f5f9ff !important; }
 .sub-returned     { background: #f7fef9 !important; }
 .sub-unreturned   { background: #fef8f8 !important; }
+.sub-check        { background: #f3faf6 !important; }
 .sub-plan         { background: #fdf8ff !important; }
 
 .rebate-table td {
@@ -1026,30 +984,6 @@ function downloadCSV() {
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
   font-size: 14px;
-}
-
-.rebate-table .num-col {
-  text-align: left;
-  font-variant-numeric: tabular-nums;
-}
-
-.rebate-table thead .num-col {
-  text-align: center;
-}
-
-.row-alt td {
-  background: var(--bg-page);
-}
-
-.rebate-table tr:hover td {
-  background: rgba(41, 98, 255, 0.04);
-}
-
-.sticky-col {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--bg-card);
 }
 
 .row-alt .sticky-col {
@@ -1084,66 +1018,72 @@ function downloadCSV() {
   cursor: default;
 }
 
-/* --- Pager --- */
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 4px 0;
-}
-.pager-info {
-  font-size: 13px;
-  color: var(--ink-soft);
-}
-.pager-btns {
-  display: flex;
-  gap: 8px;
-}
-
 /* --- Returnable button --- */
 .returnable-cell {
   text-align: center;
 }
 
-.returnable-btn {
+.returnable-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 64px;
-  height: 26px;
-  padding: 0 10px;
+  min-width: 68px;
+  min-height: 22px;
+  padding: 2px 8px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 150ms ease;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
   background: var(--bg-card);
   color: var(--ink-faint);
 }
 
-.returnable-yes {
+.returnable-ready {
   color: #087c58;
   background: var(--success-soft);
   border-color: rgba(16, 185, 129, 0.2);
 }
 
-.returnable-no {
-  color: #b43227;
-  background: var(--danger-soft);
-  border-color: rgba(239, 68, 68, 0.2);
+.returnable-waiting {
+  color: #8a5a00;
+  background: var(--warning-soft);
+  border-color: rgba(245, 158, 11, 0.24);
 }
 
 .returnable-empty {
   color: var(--ink-faint);
-  font-style: italic;
   background: var(--bg-card);
 }
 
-.returnable-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+.check-cell {
+  text-align: center;
+}
+
+.check-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.check-pass {
+  color: #087c58;
+  background: var(--success-soft);
+}
+
+.check-fail {
+  color: #b42318;
+  background: var(--danger-soft);
+}
+
+.check-empty {
+  color: var(--ink-faint);
+  background: #f8fafc;
 }
 
 /* --- Plan checkboxes --- */
