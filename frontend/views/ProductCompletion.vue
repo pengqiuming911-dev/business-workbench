@@ -1,6 +1,8 @@
 <template>
   <div class="product-completion-page">
-    <h1 class="text-page-title">派息/敲出观察</h1>
+    <div class="page-header">
+      <h1 class="text-page-title">派息/敲出观察</h1>
+    </div>
 
     <div class="tab-bar">
       <button class="btn tab-btn" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">全量</button>
@@ -46,15 +48,16 @@
                   <th class="col-left">私募管理人</th>
                   <th class="col-left">持有状态</th>
                   <th class="col-left">代码</th>
-                  <th class="col-right">入场价</th>
+                  <th class="num">入场价</th>
                   <th class="col-left">入场日</th>
-                  <th class="col-right">存续月</th>
-                  <th class="col-right">锁定期(月)</th>
+                  <th class="num">存续月</th>
+                  <th class="num">锁定期(月)</th>
                   <th class="col-left">最近观察日</th>
                   <th class="col-left">下个观察日</th>
-                  <th class="col-right">标的价格</th>
-                  <th class="col-right">敲出价</th>
-                  <th class="col-right">派息线</th>
+                  <th class="num">标的价格</th>
+                  <th class="num">降敲</th>
+                  <th class="num">敲出价</th>
+                  <th class="num">派息线</th>
                   <th class="col-center">是否敲出</th>
                   <th class="col-center">是否派息</th>
                 </tr>
@@ -68,17 +71,18 @@
                     </td>
                     <td class="col-left">{{ p.name }}</td>
                     <td class="col-left">{{ p.manager }}</td>
-                    <td class="col-left"><span class="badge badge-green">{{ p.holding_status }}</span></td>
+                    <td class="col-left"><span class="status-dot status-active">{{ p.holding_status }}</span></td>
                     <td class="col-left code-cell">{{ p.code }}</td>
-                    <td class="col-right">{{ formatPrice(p.entry_price, p) }}</td>
+                    <td class="num">{{ formatPrice(p.entry_price, p) }}</td>
                     <td class="col-left">{{ p.issue_date || '--' }}</td>
-                    <td class="col-right">{{ computeMonthsSince(p) }}</td>
-                    <td class="col-right">{{ p.lock_months || '--' }}</td>
+                    <td class="num">{{ computeMonthsSince(p) }}</td>
+                    <td class="num">{{ p.lock_months || '--' }}</td>
                     <td class="col-left">{{ latestObs(p)?.date || '--' }}</td>
                     <td class="col-left next-date">{{ p.next_observation_date || '--' }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
-                    <td class="col-right">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
+                    <td class="num">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
+                    <td class="num">{{ p.monthly_decrease ?? '--' }}</td>
+                    <td class="num">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
+                    <td class="num">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
                     <td class="col-center" :class="knockoutClass(latestObs(p)?.is_knocked_out)">
                       {{ latestObs(p)?.is_knocked_out || '--' }}
                     </td>
@@ -87,15 +91,15 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && p.observations.length" class="detail-row">
-                    <td colspan="16" class="detail-cell">
+                    <td colspan="17" class="detail-cell">
                       <div class="detail-label">历史观察日明细</div>
                       <table class="detail-table">
                         <thead>
                           <tr>
                             <th>观察日</th>
-                            <th>标的价格</th>
-                            <th>敲出价</th>
-                            <th>派息线</th>
+                            <th class="num">标的价格</th>
+                            <th class="num">敲出价</th>
+                            <th class="num">派息线</th>
                             <th>是否敲出</th>
                             <th>是否派息</th>
                           </tr>
@@ -103,9 +107,9 @@
                         <tbody>
                           <tr v-for="obs in p.observations" :key="obs.date">
                             <td>{{ obs.date }}</td>
-                            <td>{{ formatPrice(obs.underlying_price, p) }}</td>
-                            <td>{{ formatPrice(obs.knockout_price, p) }}</td>
-                            <td>{{ formatPrice(obs.dividend_line, p) }}</td>
+                            <td class="num">{{ formatPrice(obs.underlying_price, p) }}</td>
+                            <td class="num">{{ formatPrice(obs.knockout_price, p) }}</td>
+                            <td class="num">{{ formatPrice(obs.dividend_line, p) }}</td>
                             <td :class="knockoutClass(obs.is_knocked_out)">{{ obs.is_knocked_out }}</td>
                             <td :class="dividendClass(obs.is_dividend)">{{ obs.is_dividend }}</td>
                           </tr>
@@ -114,7 +118,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && !p.observations.length" class="detail-row">
-                    <td colspan="16" class="detail-cell">
+                    <td colspan="17" class="detail-cell">
                       <div class="detail-empty">暂无观察日记录</div>
                     </td>
                   </tr>
@@ -135,6 +139,11 @@
         <div class="calendar-month-picker">
           <label>月份</label>
           <input v-model="calendarMonth" type="month" class="input month-input" @change="loadCalendarData" />
+          <label style="margin-left: 16px;">状态</label>
+          <select v-model="calendarStatus" class="input month-input" @change="loadCalendarData">
+            <option value="ongoing">存续</option>
+            <option value="completed">已完结</option>
+          </select>
           <span v-if="calendarError" class="error-msg" style="margin-left: 12px;">{{ calendarError }}</span>
         </div>
         <div class="calendar-summary">本月共 {{ calendarProductCount }} 个产品观察安排</div>
@@ -158,21 +167,25 @@
                 v-for="product in cell.products"
                 :key="product.id"
                 class="cal-card"
-                :class="calItemClass(product)"
                 :title="product.name"
               >
-                <div class="cal-card-head">
-                  <span class="cal-card-name">{{ truncateCalName(product.name || product.id) }}</span>
-                  <span
-                    class="cal-type-badge"
-                    :class="{ 'badge-both': product.is_knockout_observable && product.has_dividend_observation, 'badge-ko': product.is_knockout_observable && !product.has_dividend_observation, 'badge-dv': !product.is_knockout_observable && product.has_dividend_observation }"
-                  >
-                    {{ product.is_knockout_observable && product.has_dividend_observation ? '派息+敲出' : product.is_knockout_observable ? '敲出' : '派息' }}
-                  </span>
-                </div>
-                <div class="cal-card-prices">
-                  <span v-if="product.is_knockout_observable && product.knockout_price != null" class="cal-ko-price">敲出 <b>{{ fmtCalPrice(product.knockout_price) }}</b></span>
-                  <span v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-dv-price">派息 <b>{{ fmtCalPrice(product.dividend_line) }}</b></span>
+                <div class="cal-card-name">{{ product.name || product.id }}</div>
+                <div class="cal-card-details">
+                  <div v-if="product.is_knockout_observable && product.knockout_price != null"
+                       class="cal-detail-block cal-detail-knockout-spot">
+                    <div class="cal-detail-row">
+                      <span class="cal-detail-label">敲出</span>
+                      <strong>{{ fmtCalPrice(product.knockout_price) }}</strong>
+                    </div>
+                  </div>
+                  <div v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-detail-row cal-detail-dividend">
+                    <span class="cal-detail-label">派息</span>
+                    <strong>{{ fmtCalPrice(product.dividend_line) }}</strong>
+                  </div>
+                  <div v-if="product.spot_price != null" class="cal-detail-row cal-spot-row">
+                    <span class="cal-detail-label">{{ calendarStatus === 'completed' ? '当日' : '今日' }}</span>
+                    <strong>{{ fmtCalPrice(product.spot_price) }}</strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -194,11 +207,11 @@
                   <th class="col-left">产品名称</th>
                   <th class="col-left">私募管理人</th>
                   <th class="col-left">代码</th>
-                  <th class="col-right">入场价</th>
-                  <th class="col-right">存续月</th>
-                  <th class="col-right">标的价格</th>
-                  <th class="col-right">敲出价</th>
-                  <th class="col-right">派息线</th>
+                  <th class="num">入场价</th>
+                  <th class="num">存续月</th>
+                  <th class="num">标的价格</th>
+                  <th class="num">敲出价</th>
+                  <th class="num">派息线</th>
                   <th class="col-center">是否敲出</th>
                   <th class="col-center">是否派息</th>
                 </tr>
@@ -209,11 +222,11 @@
                   <td class="col-left">{{ p.name }}</td>
                   <td class="col-left">{{ p.manager }}</td>
                   <td class="col-left code-cell">{{ p.code }}</td>
-                  <td class="col-right">{{ formatPrice(p.entry_price, p) }}</td>
-                  <td class="col-right">{{ computeMonthsSince(p) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.underlying_price, p) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.knockout_price, p) }}</td>
-                  <td class="col-right">{{ formatPrice(todayObs(p)?.dividend_line, p) }}</td>
+                  <td class="num">{{ formatPrice(p.entry_price, p) }}</td>
+                  <td class="num">{{ computeMonthsSince(p) }}</td>
+                  <td class="num">{{ formatPrice(todayObs(p)?.underlying_price, p) }}</td>
+                  <td class="num">{{ formatPrice(todayObs(p)?.knockout_price, p) }}</td>
+                  <td class="num">{{ formatPrice(todayObs(p)?.dividend_line, p) }}</td>
                   <td class="col-center" :class="knockoutClass(todayObs(p)?.is_knocked_out)">
                     {{ todayObs(p)?.is_knocked_out || '--' }}
                   </td>
@@ -299,6 +312,7 @@ const todayLoading = ref(false)
 const todayLoaded = ref(false)
 
 const calendarMonth = ref(new Date().toISOString().slice(0, 7))
+const calendarStatus = ref('ongoing')
 const calendarItems = ref([])
 const calendarLoading = ref(false)
 const calendarLoaded = ref(false)
@@ -350,7 +364,7 @@ async function loadCalendarData() {
   calendarLoading.value = true
   calendarError.value = ''
   try {
-    const res = await fetch(`/api/observations/calendar?month=${calendarMonth.value}`)
+    const res = await fetch(`/api/observations/calendar?month=${calendarMonth.value}&status=${calendarStatus.value}`)
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '加载失败')
     calendarItems.value = data.calendar || []
@@ -540,54 +554,20 @@ function dividendClass(status) {
   return ''
 }
 
-function truncateCalName(name) {
-  if (!name) return '--'
-  return name.length > 8 ? name.slice(0, 8) + '…' : name
-}
-
 function fmtCalPrice(val) {
   if (val == null) return '--'
-  return Number(val).toFixed(2)
-}
-
-function calItemClass(product) {
-  if (product.is_knockout_observable && product.has_dividend_observation) return 'item-both'
-  if (product.is_knockout_observable) return 'item-knockout'
-  if (product.has_dividend_observation) return 'item-dividend'
-  return ''
+  const value = Number(val)
+  const decimals = Math.abs(value) < 10 ? 3 : 2
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
 }
 </script>
 
 <style scoped>
 :deep(.workbench-main) {
   max-width: none;
-}
-
-.tab-bar {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 24px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  padding: 4px;
-  width: fit-content;
-}
-
-.tab-btn {
-  border: none;
-  background: transparent;
-  color: var(--ink-soft);
-}
-
-.tab-btn:hover {
-  background: var(--surface-muted);
-  color: var(--ink);
-}
-
-.tab-btn.active {
-  background: var(--brand);
-  color: #fff;
 }
 
 .file-source { flex: 1; display: flex; align-items: center; gap: 10px; }
@@ -603,23 +583,22 @@ function calItemClass(product) {
 
 .overview-table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
+  font-size: 13px;
   min-width: 1400px;
 }
 
 .overview-table th {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 2px solid var(--border);
   color: var(--ink-soft);
-  font-weight: 600;
-  background: var(--surface-muted);
+  font-weight: 800;
   font-size: 11px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   position: sticky;
   top: 0;
   z-index: 1;
+  background: var(--bg-card);
 }
 
 .data-row {
@@ -629,15 +608,22 @@ function calItemClass(product) {
 .data-row:hover { background: var(--surface-muted); }
 
 .overview-table td {
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 7px 12px;
+  border-bottom: 1px solid #f0f2f5;
   color: var(--ink-strong);
   white-space: nowrap;
 }
 
+.overview-table tbody tr:nth-child(even) td {
+  background: var(--bg-zebra);
+}
+
+.overview-table tr:hover td {
+  background: #eef2f7;
+}
+
 .col-left { text-align: left; }
-.col-right { text-align: right; }
-.col-center { text-align: center; }
+.col-center { text-align: left; }
 
 .sticky-col {
   position: sticky;
@@ -645,8 +631,11 @@ function calItemClass(product) {
   background: var(--bg-card);
   z-index: 2;
 }
-.data-row:hover .sticky-col { background: var(--surface-muted); }
-.overview-table th.sticky-col { z-index: 3; background: var(--surface-muted); }
+.overview-table tbody tr:nth-child(even) .sticky-col {
+  background: var(--bg-zebra);
+}
+.data-row:hover .sticky-col { background: #eef2f7; }
+.overview-table th.sticky-col { z-index: 3; background: var(--bg-card); }
 
 .chevron {
   font-size: 14px;
@@ -714,18 +703,35 @@ function calItemClass(product) {
 }
 
 .detail-table th {
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-soft);
-  font-weight: 600;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.04em;
   background: transparent;
   text-align: left;
 }
 
+.detail-table th.num {
+  text-align: right;
+}
+
 .detail-table td {
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink);
+}
+
+.detail-table td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.detail-table tbody tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.015);
 }
 
 .calendar-section {
@@ -739,8 +745,9 @@ function calItemClass(product) {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 16px 20px;
+  padding: 14px 18px;
   margin-bottom: 16px;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.04);
 }
 
 .calendar-month-picker {
@@ -759,28 +766,27 @@ function calItemClass(product) {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-soft);
-  background: var(--surface-muted);
-  border-radius: 999px;
-  padding: 6px 14px;
+  padding: 6px 0;
 }
 
 .calendar-wrap {
   background: var(--bg-card);
-  border: 1px solid var(--border-soft);
+  border: 1px solid #dfe8f3;
   border-radius: var(--radius);
   overflow: hidden;
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.05);
 }
 
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, minmax(140px, 1fr));
-  background: #f8f9fb;
-  border-bottom: 1px solid var(--border-soft);
+  background: #f5f9ff;
+  border-bottom: 1px solid #dfe8f3;
 }
 
 .calendar-weekday {
   padding: 12px 8px;
-  color: var(--ink-soft);
+  color: #52657a;
   font-size: 12px;
   font-weight: 700;
   text-align: center;
@@ -794,12 +800,11 @@ function calItemClass(product) {
 }
 
 .calendar-cell {
-  min-height: 120px;
+  min-height: 132px;
   padding: 10px 10px 8px;
-  border-right: 1px solid #f0f1f4;
-  border-bottom: 1px solid #f0f1f4;
+  border-right: 1px solid #edf2f7;
+  border-bottom: 1px solid #edf2f7;
   background: #fff;
-  transition: background 0.1s;
 }
 
 .calendar-cell:nth-child(7n) {
@@ -807,11 +812,11 @@ function calItemClass(product) {
 }
 
 .calendar-cell.muted {
-  background: #fafbfc;
+  background: #fbfcfe;
 }
 
 .calendar-cell.today {
-  background: #f0f5ff;
+  background: #f1f7ff;
 }
 
 .calendar-day {
@@ -833,115 +838,127 @@ function calItemClass(product) {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--brand);
+  background: #60a5fa;
   flex-shrink: 0;
 }
 
 .calendar-products {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .cal-card {
-  padding: 7px 9px 6px;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
   font-size: 11px;
   line-height: 1.45;
   background: #fff;
-  transition: box-shadow 0.12s;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .cal-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
-}
-
-.cal-card.item-knockout {
-  background: #fff5f5;
-  border-color: #fecaca;
-}
-
-.cal-card.item-dividend {
-  background: #f0fdf8;
-  border-color: #bbf7d0;
-}
-
-.cal-card.item-both {
-  background: #fffbf0;
-  border-color: #fde68a;
-}
-
-.cal-card-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  border-color: #c7d6e8;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
 }
 
 .cal-card-name {
   font-weight: 700;
   color: var(--ink-strong);
-  font-size: 11.5px;
+  font-size: 12px;
+  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
+  padding-bottom: 5px;
 }
 
-.cal-type-badge {
-  flex-shrink: 0;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 9.5px;
-  font-weight: 700;
-  line-height: 16px;
-  white-space: nowrap;
-  letter-spacing: 0.01em;
-}
-
-.cal-type-badge.badge-ko {
-  color: #dc2626;
-  background: #fee2e2;
-}
-
-.cal-type-badge.badge-dv {
-  color: #059669;
-  background: #d1fae5;
-}
-
-.cal-type-badge.badge-both {
-  color: #d97706;
-  background: #fef3c7;
-}
-
-.cal-card-prices {
+.cal-card-details {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 5px;
+  border-top: 1px solid #f0f3f7;
 }
 
-.cal-ko-price,
-.cal-dv-price {
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--ink-soft);
+.cal-card-details:empty {
+  display: none;
+}
+
+.cal-detail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  padding: 2px 7px 2px 9px;
+  border-left: 3px solid transparent;
+  border-radius: 0 5px 5px 0;
+  font-size: 11px;
+}
+
+.cal-detail-block {
+  border-left: 3px solid transparent;
+  border-radius: 0 5px 5px 0;
+  padding: 2px 0;
+}
+
+.cal-detail-block .cal-detail-row {
+  border-left: none;
+  border-radius: 0;
+  padding: 2px 7px 2px 6px;
+}
+
+.cal-detail-label {
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 2em;
+  display: inline-block;
 }
 
-.cal-ko-price {
-  color: #dc2626;
-}
-
-.cal-dv-price {
-  color: #059669;
-}
-
-.cal-ko-price b,
-.cal-dv-price b {
+.cal-detail-row strong {
   font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cal-detail-knockout-spot {
+  border-left-color: #2563a8;
+  background: #eef4ff;
+  color: #2563a8;
+}
+
+.cal-detail-knockout-spot .cal-detail-row strong {
+  color: #1a4f8a;
+}
+
+.cal-spot-row {
+  border-left: 3px solid #7c6baa;
+  background: #f1edfb;
+  color: #6b5b95;
+  border-radius: 0 5px 5px 0;
+  padding: 2px 7px 2px 6px;
+}
+
+.cal-spot-row .cal-detail-label {
+  color: #6b5b95;
+}
+
+.cal-spot-row strong {
+  color: #4c3f73;
+}
+
+
+.cal-detail-dividend {
+  border-left-color: #0d9668;
+  background: #eafaf3;
+  color: #0d9668;
+}
+
+.cal-detail-dividend strong {
+  color: #0a7a54;
 }
 
 .poster-grid {

@@ -17,35 +17,8 @@
         />
       </div>
       <div class="filter-group">
-        <label>航班编号</label>
-        <input
-          v-model="filters.flightId"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入航班编号"
-        />
-      </div>
-      <div class="filter-group">
-        <label>客户姓名</label>
-        <input
-          v-model="filters.customerName"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入客户姓名"
-        />
-      </div>
-      <div class="filter-group">
-        <label>返还人</label>
-        <input
-          v-model="filters.rebateTarget"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入返还人"
-        />
-      </div>
-      <div class="filter-group">
         <label>费用类别</label>
-        <select v-model="filters.expenseCategory" class="input input-sm">
+        <select v-model="filters.expenseCategory" class="input input-sm input-select-compact">
           <option value="">全部</option>
           <option value="申购费">申购费</option>
           <option value="管理费">管理费</option>
@@ -54,12 +27,39 @@
       </div>
       <div class="filter-group">
         <label>来源</label>
-        <select v-model="filters.source" class="input input-sm">
+        <select v-model="filters.source" class="input input-sm input-select-compact">
           <option value="">全部</option>
           <option value="manual">手工录入</option>
           <option value="upload">批量上传</option>
           <option value="auto_sync">自动同步</option>
         </select>
+      </div>
+      <div class="filter-group">
+        <label>航班编号</label>
+        <input
+          v-model="filters.flightId"
+          type="text"
+          class="input input-sm input-compact"
+          placeholder="请输入航班编号"
+        />
+      </div>
+      <div class="filter-group">
+        <label>客户姓名</label>
+        <input
+          v-model="filters.customerName"
+          type="text"
+          class="input input-sm input-compact"
+          placeholder="请输入客户姓名"
+        />
+      </div>
+      <div class="filter-group">
+        <label>返还人</label>
+        <input
+          v-model="filters.rebateTarget"
+          type="text"
+          class="input input-sm input-compact"
+          placeholder="请输入返还人"
+        />
       </div>
       <div class="filter-actions">
         <button class="btn btn-primary btn-sm" @click="fetchData">
@@ -136,8 +136,8 @@
             <th rowspan="2">产品名称</th>
             <th rowspan="2">客户姓名</th>
             <th rowspan="2">渠道/直客</th>
-            <th rowspan="2" class="num-col">本金</th>
-            <th rowspan="2" class="num-col">保证金比例</th>
+            <th rowspan="2" class="num">本金</th>
+            <th rowspan="2" class="num">保证金比例</th>
             <th rowspan="2">业务类型</th>
             <th rowspan="2">认购日</th>
             <th rowspan="2">订单状态</th>
@@ -150,12 +150,12 @@
           </tr>
           <tr class="header-sub-row">
             <!-- 渠道返还比例 -->
-            <th class="num-col sub-channel-ratio">申购费</th>
-            <th class="num-col sub-channel-ratio">管理费</th>
-            <th class="num-col sub-channel-ratio">业绩报酬</th>
+            <th class="num sub-channel-ratio">申购费</th>
+            <th class="num sub-channel-ratio">管理费</th>
+            <th class="num sub-channel-ratio">业绩报酬</th>
             <!-- 支出流水明细 -->
             <th class="sub-expense">类别</th>
-            <th class="num-col sub-expense">金额</th>
+            <th class="num sub-expense">金额</th>
             <th class="sub-expense">支付时间</th>
             <th class="sub-expense">年</th>
             <th class="sub-expense">月</th>
@@ -169,19 +169,19 @@
             <td class="name-cell" :title="item.product_name">{{ truncate(item.product_name, 12) }}</td>
             <td>{{ item.customer_name || '--' }}</td>
             <td>{{ item.channel_or_direct || '--' }}</td>
-            <td class="num-col">{{ fmtNum(item.principal) }}</td>
-            <td class="num-col">{{ fmtPct(item.margin_ratio) }}</td>
+            <td class="num">{{ fmtNum(item.principal) }}</td>
+            <td class="num">{{ fmtPct(item.margin_ratio) }}</td>
             <td>{{ item.business_type || '--' }}</td>
             <td>{{ item.subscribe_date || '--' }}</td>
             <td>{{ item.order_status || '--' }}</td>
             <td>{{ item.rebate_target || '--' }}</td>
             <!-- 渠道返还比例 -->
-            <td class="num-col">{{ fmtPct(item.channel_subscribe_ratio) }}</td>
-            <td class="num-col">{{ fmtPct(item.channel_management_ratio) }}</td>
-            <td class="num-col">{{ fmtPct(item.channel_performance_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.channel_subscribe_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.channel_management_ratio) }}</td>
+            <td class="num">{{ fmtPct(item.channel_performance_ratio) }}</td>
             <!-- 支出流水明细 -->
             <td>{{ item.expense_category || '--' }}</td>
-            <td class="num-col">{{ fmtNum(item.expense_amount) }}</td>
+            <td class="num">{{ fmtNum(item.expense_amount) }}</td>
             <td>{{ item.payment_time || '--' }}</td>
             <td>{{ item.payment_year || '--' }}</td>
             <td>{{ item.payment_month || '--' }}</td>
@@ -1252,46 +1252,13 @@ function downloadCSV() {
   max-width: none;
 }
 
-/* --- Filter bar --- */
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-end;
-  margin-bottom: 16px;
-  padding: 20px 24px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+.input-compact {
+  min-width: 80px !important;
+  width: 100px !important;
 }
 
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-group label {
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.input-sm {
-  height: 34px;
-  min-height: 34px;
-  padding: 0 12px;
-  font-size: 13px;
-  width: auto;
-  min-width: 120px;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
+.input-select-compact {
+  min-width: 116px;
 }
 
 .validation-banner {
@@ -1320,96 +1287,117 @@ function downloadCSV() {
   pointer-events: none;
 }
 
+/* --- Scrollable table container --- */
+.rebate-completed-page > .table-wrap {
+  overflow-x: auto;
+}
+
 /* --- Table --- */
 .completed-table {
   min-width: 2800px;
-  font-size: 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--bg-card);
 }
 
 .completed-table thead {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 10;
 }
 
-.header-group-row th {
-  padding: 8px 10px;
-  font-size: 13px;
-  font-weight: 800;
-  text-align: center;
-  white-space: nowrap;
-  color: var(--ink-soft);
-  border-bottom: 1px solid var(--border);
-  background: #f1f5f9;
-  letter-spacing: 0.02em;
-}
-
-.header-group-row th[rowspan="2"] {
-  vertical-align: middle;
-  background: #f1f5f9;
-}
-
-.header-sub-row th {
-  padding: 6px 10px;
-  font-size: 12px;
+.completed-table .header-group-row th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 12px 14px;
+  font-size: 15px;
   font-weight: 700;
-  text-align: center;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--ink-strong);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-card);
+  letter-spacing: 0;
+}
+
+.completed-table .header-group-row th[rowspan="2"] {
+  vertical-align: middle;
+  background: var(--bg-card);
+}
+
+.completed-table .header-sub-row th {
+  position: sticky;
+  top: 44px;
+  z-index: 10;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
   white-space: nowrap;
   color: var(--ink-soft);
-  border-bottom: 2px solid var(--border);
-  letter-spacing: 0.01em;
+  border-bottom: 1px solid var(--border-soft);
+  letter-spacing: 0;
+  background: var(--bg-card);
 }
 
 /* Group header colors */
-.group-channel-ratio { background: #f0fdf4 !important; }
-.group-expense       { background: #eef2ff !important; }
+.completed-table .group-channel-ratio,
+.completed-table .group-expense { background: var(--bg-card) !important; }
 
-.sub-channel-ratio   { background: #f7fef9 !important; }
-.sub-expense         { background: #f5f7ff !important; }
+.completed-table .sub-channel-ratio,
+.completed-table .sub-expense { background: var(--bg-card) !important; }
 
 .completed-table td {
-  padding: 8px 10px;
+  padding: 12px 14px;
   white-space: nowrap;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+  background: var(--bg-card);
 }
 
-.completed-table .num-col {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.completed-table thead .num-col {
-  text-align: center;
-}
-
-.row-alt td {
-  background: var(--bg-page);
-}
-
-.completed-table tr:hover td {
-  background: rgba(41, 98, 255, 0.04);
-}
-
-.sticky-col {
+/* Sticky first column — body cells */
+.completed-table tbody .sticky-col {
   position: sticky;
   left: 0;
-  z-index: 2;
+  z-index: 5;
   background: var(--bg-card);
 }
 
 .row-alt .sticky-col {
-  background: var(--bg-page);
+  background: #fcfcfd;
 }
 
-.completed-table tr:hover .sticky-col {
-  background: rgba(41, 98, 255, 0.04);
+.row-alt td {
+  background: #fcfcfd;
 }
 
-.header-group-row .sticky-col {
-  z-index: 5;
+.completed-table tbody tr:hover .sticky-col {
+  background: #f7f8fa;
+}
+
+.completed-table tbody tr:hover td {
+  background: #f7f8fa;
+}
+
+/* Sticky first column — header cells need higher z-index */
+.completed-table thead .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 15;
   text-align: left;
+}
+
+@media (max-width: 1440px) {
+  .filter-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 
 .name-cell {

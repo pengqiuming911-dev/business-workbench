@@ -15,6 +15,7 @@ frontend/.env
 *.sqlite.backup*
 backend-go/server-dev.exe
 backend-go/server-dev.exe~
+backend-go/.feishu-user-token
 
 .DS_Store
 Thumbs.db

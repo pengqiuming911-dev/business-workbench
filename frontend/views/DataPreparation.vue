@@ -1,7 +1,9 @@
 <template>
   <div class="data-preparation-page">
-    <h1 class="text-page-title">数据准备</h1>
-    <p class="text-body">连接飞书账号后，同步数据到本地数据库，供后续业务页面使用。</p>
+    <div class="page-header">
+      <h1 class="text-page-title">数据准备</h1>
+      <p class="text-body">连接飞书账号后，同步数据到本地数据库，供后续业务页面使用。</p>
+    </div>
 
     <PanelCard title="飞书账号连接">
       <div v-if="authorized" class="auth-row">
@@ -31,9 +33,17 @@
           </span>
         </div>
         <div class="source-status">
-          <span v-if="syncStatus.synced_at && !syncing" class="badge badge-green">已就绪</span>
-          <span v-else-if="syncing" class="badge">同步中...</span>
+          <span v-if="syncStatus.synced_at && !syncing && !syncingTransactions" class="badge badge-green">已就绪</span>
+          <span v-else-if="syncing || syncingTransactions" class="badge">同步中...</span>
           <span v-else class="badge badge-red">未同步</span>
+          <button
+            class="btn btn-sm btn-outline source-sync-btn"
+            :disabled="!authorized || syncing || syncingTransactions"
+            @click="syncTransactions"
+          >
+            {{ syncingTransactions ? '同步中' : '同步' }}
+          </button>
+          <span v-if="txMsg" class="source-msg" :class="{ 'msg-error': txMsgIsError }">{{ txMsg }}</span>
         </div>
       </div>
 
@@ -49,9 +59,17 @@
           </span>
         </div>
         <div class="source-status">
-          <span v-if="docStatus.synced_at && !syncing" class="badge badge-green">已就绪</span>
-          <span v-else-if="syncing" class="badge">同步中...</span>
+          <span v-if="docStatus.synced_at && !syncing && !syncingDocs" class="badge badge-green">已就绪</span>
+          <span v-else-if="syncing || syncingDocs" class="badge">同步中...</span>
           <span v-else class="badge badge-red">未同步</span>
+          <button
+            class="btn btn-sm btn-outline source-sync-btn"
+            :disabled="!authorized || syncing || syncingDocs"
+            @click="syncDocs"
+          >
+            {{ syncingDocs ? '同步中' : '同步' }}
+          </button>
+          <span v-if="docMsg" class="source-msg" :class="{ 'msg-error': docMsgIsError }">{{ docMsg }}</span>
         </div>
       </div>
 
@@ -69,9 +87,17 @@
           </span>
         </div>
         <div class="source-status">
-          <span v-if="rebateStatus.synced_at && !syncing" class="badge badge-green">已就绪</span>
-          <span v-else-if="syncing" class="badge">同步中...</span>
+          <span v-if="rebateStatus.synced_at && !syncing && !syncingRebate" class="badge badge-green">已就绪</span>
+          <span v-else-if="syncing || syncingRebate" class="badge">同步中...</span>
           <span v-else class="badge badge-red">未同步</span>
+          <button
+            class="btn btn-sm btn-outline source-sync-btn"
+            :disabled="!authorized || syncing || syncingRebate"
+            @click="syncRebate"
+          >
+            {{ syncingRebate ? '同步中' : '同步' }}
+          </button>
+          <span v-if="rebateMsg" class="source-msg" :class="{ 'msg-error': rebateMsgIsError }">{{ rebateMsg }}</span>
         </div>
       </div>
 
@@ -111,6 +137,14 @@ const syncSuccess = ref('')
 const syncStatus = ref({ synced_at: null, row_count: 0 })
 const docStatus = ref({ synced_at: null, doc_count: 0 })
 const rebateStatus = ref({ synced_at: null, row_count: 0, sheet_name: '' })
+
+// 单项同步状态
+const syncingTransactions = ref(false)
+const syncingDocs = ref(false)
+const syncingRebate = ref(false)
+const txMsg = ref(''); const txMsgIsError = ref(false)
+const docMsg = ref(''); const docMsgIsError = ref(false)
+const rebateMsg = ref(''); const rebateMsgIsError = ref(false)
 
 onMounted(async () => {
   await checkAuth()
@@ -319,6 +353,80 @@ async function syncAll() {
   }
 }
 
+async function syncTransactions() {
+  if (!authorized.value || syncingTransactions.value || syncing.value) return
+  syncingTransactions.value = true
+  txMsg.value = ''
+  try {
+    const res = await fetch('/api/db/sync', { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      txMsg.value = `同步成功：交易表 ${data.rowCount ?? ''} 条`
+      txMsgIsError.value = false
+      await loadSyncStatus()
+    } else {
+      const e = await res.json().catch(() => ({}))
+      txMsg.value = '同步失败：' + (e.error || res.status)
+      txMsgIsError.value = true
+    }
+  } catch (e) {
+    txMsg.value = '同步失败：' + e.message
+    txMsgIsError.value = true
+  } finally {
+    syncingTransactions.value = false
+  }
+}
+
+async function syncDocs() {
+  if (!authorized.value || syncingDocs.value || syncing.value) return
+  syncingDocs.value = true
+  docMsg.value = ''
+  try {
+    const res = await fetch('/api/drive/sync-product-docs', { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      docMsg.value = `同步成功：物料 ${data.doc_count ?? ''} 份`
+      docMsgIsError.value = false
+      await loadDocStatus()
+    } else {
+      const e = await res.json().catch(() => ({}))
+      docMsg.value = '同步失败：' + (e.error || res.status)
+      docMsgIsError.value = true
+    }
+  } catch (e) {
+    docMsg.value = '同步失败：' + e.message
+    docMsgIsError.value = true
+  } finally {
+    syncingDocs.value = false
+  }
+}
+
+async function syncRebate() {
+  if (!authorized.value || syncingRebate.value || syncing.value) return
+  syncingRebate.value = true
+  rebateMsg.value = ''
+  try {
+    const res = await fetch('/api/db/sync-rebate-detail', { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      rebateMsg.value = `同步成功：返费明细 ${data.row_count ?? ''} 条${data.sheet_name ? '（' + data.sheet_name + '）' : ''}`
+      rebateMsgIsError.value = false
+      await loadRebateStatus()
+      return
+    }
+    // 后端导出失败时回退到客户端解析
+    const info = await syncRebateDetailClientSide()
+    rebateMsg.value = `同步成功：返费明细 ${info.row_count} 条（${info.sheet_name}）`
+    rebateMsgIsError.value = false
+    await loadRebateStatus()
+  } catch (e) {
+    rebateMsg.value = '同步失败：' + e.message
+    rebateMsgIsError.value = true
+  } finally {
+    syncingRebate.value = false
+  }
+}
+
 function formatTime(iso) {
   const d = new Date(iso)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
@@ -333,6 +441,9 @@ function formatTime(iso) {
 .source-name { font-size: 14px; font-weight: 700; color: var(--ink-strong); }
 .source-desc { font-size: 12px; color: var(--ink-soft); }
 .source-sheet { color: var(--ink-faint); font-style: italic; }
-.source-status { flex-shrink: 0; }
+.source-status { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.source-sync-btn { font-size: 12px; padding: 2px 12px; }
+.source-msg { font-size: 12px; color: var(--brand); max-width: 220px; text-align: right; }
+.source-msg.msg-error { color: #e5484d; }
 .sync-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 </style>

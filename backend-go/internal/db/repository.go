@@ -225,6 +225,10 @@ func (s *Store) QueryOngoingProducts() ([]model.Product, error) {
 	return s.scanProducts("SELECT * FROM products WHERE holding_status LIKE ? OR holding_status LIKE ?", "%存续%", "%持有%")
 }
 
+func (s *Store) QueryCompletedProducts() ([]model.Product, error) {
+	return s.scanProducts("SELECT * FROM products WHERE holding_status LIKE ?", "%完结%")
+}
+
 func (s *Store) LastSync() (map[string]any, error) {
 	return s.queryOneMap("SELECT * FROM sync_log ORDER BY synced_at DESC LIMIT 1")
 }
@@ -1096,9 +1100,24 @@ func (s *Store) scanProducts(query string, args ...any) ([]model.Product, error)
 			DurationDays:       toIntPtr(v("duration_days")),
 			MarginRatio:        toFloatPtr(v("margin_ratio")),
 		}
+		p.FirstKnockoutRatio = normalizeFirstKnockoutRatioPtr(p.FirstKnockoutRatio, p.EntryPrice)
 		result = append(result, p)
 	}
 	return result, rows.Err()
+}
+
+func normalizeFirstKnockoutRatioPtr(value, entryPrice *float64) *float64 {
+	if value == nil || entryPrice == nil {
+		return value
+	}
+	if *value <= 0 || *entryPrice <= 0 {
+		return value
+	}
+	if *value > 2 || *value < 1 {
+		normalized := *value / *entryPrice
+		return &normalized
+	}
+	return value
 }
 
 func (s *Store) queryOneMap(query string, args ...any) (map[string]any, error) {
@@ -1583,6 +1602,8 @@ func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any
 		LEFT JOIN rebate_status rs ON t.order_id = rs.order_id
 		LEFT JOIN rebate_pending_manual rpm ON t.order_id = rpm.order_id
 		WHERE t.order_id IS NOT NULL AND t.order_id != ''
+		  AND t.rebate_target IS NOT NULL AND TRIM(t.rebate_target) != ''
+		  AND TRIM(t.rebate_target) NOT IN ('-', '--', '0')
 	`
 	args := []any{}
 	if v, ok := filters["customer_name"]; ok && v != "" {
@@ -1604,10 +1625,6 @@ func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any
 	if v, ok := filters["product_name"]; ok && v != "" {
 		query += " AND t.product_name LIKE ?"
 		args = append(args, LikeContains(v))
-	}
-	if v, ok := filters["is_returnable"]; ok && v != "" {
-		query += " AND rs.is_returnable = ?"
-		args = append(args, v)
 	}
 	query += " ORDER BY t.flight_date DESC"
 	return s.queryMaps(query, args...)

@@ -83,7 +83,7 @@ const navItems = [
   top: 0;
   left: 0;
   bottom: 0;
-  width: 230px;
+  width: 208px;
   z-index: 100;
   background: var(--bg-card);
   border-right: 1px solid var(--border-soft);
@@ -160,15 +160,16 @@ const navItems = [
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 44px;
+  height: 40px;
   padding: 0 12px;
-  border-radius: 10px;
-  font-size: 16px;
+  border-radius: 8px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--ink-soft);
   text-decoration: none;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 120ms ease, color 120ms ease;
   white-space: nowrap;
+  border-left: 3px solid transparent;
 }
 
 .nav-item:hover {
@@ -179,6 +180,8 @@ const navItems = [
 .nav-item.active {
   background: var(--brand-soft);
   color: var(--brand);
+  border-left-color: var(--brand);
+  font-weight: 700;
 }
 
 .sidebar-bottom {
@@ -196,7 +199,7 @@ const navItems = [
   }
 
   .sidebar.collapsed {
-    width: 230px;
+    width: 208px;
   }
 }
 </style>

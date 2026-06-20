@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,6 +22,7 @@ type Client struct {
 
 	mu        sync.RWMutex
 	userToken string
+	tokenPath string // 非空时 user token 持久化到此文件，重启不丢
 }
 
 type DriveFile struct {
@@ -44,6 +47,36 @@ func New(appID, appSecret, redirectURI string) *Client {
 	}
 }
 
+// SetTokenPersistPath 设置 user token 持久化文件路径，并尝试从文件加载已存在的 token。
+func (c *Client) SetTokenPersistPath(path string) {
+	c.mu.Lock()
+	c.tokenPath = path
+	c.mu.Unlock()
+	if b, err := os.ReadFile(path); err == nil {
+		t := strings.TrimSpace(string(b))
+		if t != "" {
+			c.mu.Lock()
+			c.userToken = t
+			c.mu.Unlock()
+		}
+	}
+}
+
+func (c *Client) persistToken() {
+	c.mu.RLock()
+	path := c.tokenPath
+	tok := c.userToken
+	c.mu.RUnlock()
+	if path == "" {
+		return
+	}
+	if tok == "" {
+		_ = os.Remove(path)
+		return
+	}
+	_ = os.WriteFile(path, []byte(tok), 0o600)
+}
+
 func (c *Client) Authorized() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -58,8 +91,9 @@ func (c *Client) UserToken() string {
 
 func (c *Client) ClearUserToken() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.userToken = ""
+	c.mu.Unlock()
+	c.persistToken()
 }
 
 func (c *Client) ExchangeCode(ctx context.Context, code string) error {
@@ -95,6 +129,7 @@ func (c *Client) ExchangeCode(ctx context.Context, code string) error {
 	c.mu.Lock()
 	c.userToken = result.Data.AccessToken
 	c.mu.Unlock()
+	c.persistToken()
 	return nil
 }
 
@@ -147,6 +182,58 @@ func (c *Client) ReadSheetRows(ctx context.Context, spreadsheetToken string, she
 		}
 	}
 	return valuesToRows(allValues), nil
+}
+
+// ReadSheetRaw 读取 sheet 原始二维值（保留行顺序），用于需要按行定位（如分界行）的非标准布局。
+func (c *Client) ReadSheetRaw(ctx context.Context, spreadsheetToken string, sheetID string, colCount int) ([][]any, error) {
+	token := c.UserToken()
+	if token == "" {
+		return nil, fmt.Errorf("未授权，请先登录飞书")
+	}
+	const batch = 500
+	const maxRows = 10000
+
+	var allValues [][]any
+	for startRow := 1; startRow <= maxRows; startRow += batch {
+		endRow := startRow + batch - 1
+		if endRow > maxRows {
+			endRow = maxRows
+		}
+		sheetRange := fmt.Sprintf("%s!A%d:%s%d", sheetID, startRow, colLetter(colCount), endRow)
+		endpoint := fmt.Sprintf(
+			"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/%s/values/%s?valueRenderOption=UnformattedValue",
+			spreadsheetToken,
+			url.PathEscape(sheetRange),
+		)
+		body, err := c.get(ctx, endpoint, token)
+		if err != nil {
+			return nil, err
+		}
+		var result struct {
+			Code int    `json:"code"`
+			Msg  string `json:"msg"`
+			Data struct {
+				ValueRange struct {
+					Values [][]any `json:"values"`
+				} `json:"valueRange"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, err
+		}
+		if result.Code != 0 {
+			return nil, fmt.Errorf("read sheet failed (%d): %s", result.Code, result.Msg)
+		}
+		values := result.Data.ValueRange.Values
+		if len(values) == 0 {
+			break
+		}
+		allValues = append(allValues, values...)
+		if len(values) < batch {
+			break
+		}
+	}
+	return allValues, nil
 }
 
 func (c *Client) ReadBitableRecords(ctx context.Context, appToken string, tableID string) ([]map[string]any, error) {
@@ -363,7 +450,7 @@ func (c *Client) GetSheetMetaData(ctx context.Context, spreadsheetToken string) 
 	if token == "" {
 		return nil, fmt.Errorf("未授权，请先登录飞书")
 	}
-	endpoint := fmt.Sprintf("https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/%s", spreadsheetToken)
+	endpoint := fmt.Sprintf("https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/%s/sheets/query", spreadsheetToken)
 	body, err := c.get(ctx, endpoint, token)
 	if err != nil {
 		return nil, err

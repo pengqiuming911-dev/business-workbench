@@ -1,7 +1,9 @@
 <template>
   <div class="rebate-analysis-page">
-    <h1 class="text-page-title">返费分析</h1>
-    <p class="text-body" style="margin-bottom: 20px;">在同一页面切换查看待返费和已返费数据。</p>
+    <div class="page-header">
+      <h1 class="text-page-title">返费分析</h1>
+      <p class="text-body">在同一页面切换查看待返费和已返费数据。</p>
+    </div>
 
     <div class="tab-bar">
       <button
@@ -58,44 +60,5 @@ watch(activeTab, (value) => {
 <style scoped>
 :deep(.workbench-main) {
   max-width: none;
-}
-
-.tab-bar {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 28px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  padding: 5px;
-  width: fit-content;
-  box-shadow: var(--shadow-sm);
-}
-
-.tab-btn {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 22px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--ink-soft);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition: background 200ms ease, color 200ms ease;
-}
-
-.tab-btn:hover {
-  background: var(--bg-hover);
-  color: var(--ink-strong);
-}
-
-.tab-btn.active {
-  background: var(--brand);
-  color: #fff;
 }
 </style>

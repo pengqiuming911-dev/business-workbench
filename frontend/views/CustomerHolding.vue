@@ -3,7 +3,7 @@
     <div class="filter-bar">
       <div class="filter-group">
         <label>客户</label>
-        <input v-model="filters.customerName" type="text" class="input input-sm" placeholder="输入客户关键词" />
+        <input v-model="filters.customerName" type="text" class="input input-sm input-narrow" placeholder="客户关键词" />
         <label class="checkbox-label">
           <input v-model="filters.matchName" type="checkbox" />
           姓名
@@ -12,6 +12,50 @@
           <input v-model="filters.matchBuyer" type="checkbox" />
           实际申购人
         </label>
+      </div>
+      <div class="filter-group">
+        <label>持有状态</label>
+        <select v-model="filters.holdingStatus" class="input input-sm">
+          <option value="">全部</option>
+          <option v-for="opt in filterOptions.holdingStatuses" :key="opt" :value="opt">
+            {{ normalizeHoldingStatus(opt) }}
+          </option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>返佣对象</label>
+        <select v-model="filters.rebateTarget" class="input input-sm">
+          <option value="">全部</option>
+          <option v-for="opt in filterOptions.rebateTargets" :key="opt" :value="opt">{{ opt }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>产品名称</label>
+        <input v-model="filters.productName" type="text" class="input input-sm input-narrow" placeholder="模糊搜索" />
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
+        <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+      </div>
+    </div>
+
+    <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
+      <span class="chevron" :class="{ open: showAdvanced }">▸</span>
+      高级筛选
+    </div>
+
+    <div v-show="showAdvanced" class="filter-bar advanced-bar">
+      <div class="filter-group">
+        <label>申购日期</label>
+        <input v-model="filters.flightDateStart" type="date" class="input input-sm" />
+        <span class="filter-sep">至</span>
+        <input v-model="filters.flightDateEnd" type="date" class="input input-sm" />
+      </div>
+      <div class="filter-group">
+        <label>完结日期</label>
+        <input v-model="filters.completeDateStart" type="date" class="input input-sm" />
+        <span class="filter-sep">至</span>
+        <input v-model="filters.completeDateEnd" type="date" class="input input-sm" />
       </div>
       <div class="filter-group">
         <label>观察日</label>
@@ -27,50 +71,6 @@
           敲出
         </label>
       </div>
-      <div class="filter-group">
-        <label>返佣对象</label>
-        <select v-model="filters.rebateTarget" class="input input-sm">
-          <option value="">全部</option>
-          <option v-for="opt in filterOptions.rebateTargets" :key="opt" :value="opt">{{ opt }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>持有状态</label>
-        <select v-model="filters.holdingStatus" class="input input-sm">
-          <option value="">全部</option>
-          <option v-for="opt in filterOptions.holdingStatuses" :key="opt" :value="opt">
-            {{ normalizeHoldingStatus(opt) }}
-          </option>
-        </select>
-      </div>
-      <div class="filter-actions">
-        <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
-        <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
-      </div>
-    </div>
-
-    <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
-      <span class="chevron" :class="{ open: showAdvanced }">▸</span>
-      高级筛选
-    </div>
-
-    <div v-show="showAdvanced" class="filter-bar advanced-bar">
-      <div class="filter-group">
-        <label>产品名称</label>
-        <input v-model="filters.productName" type="text" class="input input-sm" placeholder="模糊搜索" />
-      </div>
-      <div class="filter-group">
-        <label>申购日期</label>
-        <input v-model="filters.flightDateStart" type="date" class="input input-sm" />
-        <span class="filter-sep">至</span>
-        <input v-model="filters.flightDateEnd" type="date" class="input input-sm" />
-      </div>
-      <div class="filter-group">
-        <label>完结日期</label>
-        <input v-model="filters.completeDateStart" type="date" class="input input-sm" />
-        <span class="filter-sep">至</span>
-        <input v-model="filters.completeDateEnd" type="date" class="input input-sm" />
-      </div>
     </div>
 
     <div class="update-hint">今日点位每日 15:05 自动更新，也支持手动刷新。</div>
@@ -79,15 +79,19 @@
     <div v-else-if="items.length > 0">
       <div class="table-wrap">
         <table class="data-table tx-table">
+          <colgroup>
+            <col style="width: 180px" /><!-- 产品名称(sticky) -->
+            <col style="width: 90px" /><!-- 姓名(sticky) -->
+          </colgroup>
           <thead>
             <tr>
-              <th>产品名称</th>
-              <th>姓名</th>
+              <th class="sticky-col sticky-col-1">产品名称</th>
+              <th class="sticky-col sticky-col-2">姓名</th>
               <th>实际申购人</th>
-              <th>金额 / 万</th>
-              <th>申购费返还比例</th>
-              <th>管理费返还比例</th>
-              <th>业绩报酬返还比例</th>
+              <th class="num">金额 / 万</th>
+              <th class="num">申购费返还比例</th>
+              <th class="num">管理费返还比例</th>
+              <th class="num">业绩报酬返还比例</th>
               <th>返佣对象</th>
               <th>申购日期</th>
               <th>持有状态</th>
@@ -96,33 +100,33 @@
               <th>结构类型</th>
               <th>锁定期</th>
               <th>观察日</th>
-              <th>入场价</th>
-              <th>首月敲出</th>
-              <th>每月递减</th>
-              <th>敲出价</th>
+              <th class="num">入场价</th>
+              <th class="num">首月敲出</th>
+              <th class="num">每月递减</th>
+              <th class="num">敲出价</th>
               <th>今日点位</th>
               <th>敲出线以上 / 以下</th>
               <th>降落伞</th>
               <th>派息障碍（如有）</th>
-              <th>月票息（税费后）</th>
-              <th>第一段票息（税费后）</th>
-              <th>第二段票息（税费后）</th>
-              <th>第三段票息（税费后）</th>
+              <th class="num">月票息（税费后）</th>
+              <th class="num">第一段票息（税费后）</th>
+              <th class="num">第二段票息（税费后）</th>
+              <th class="num">第三段票息（税费后）</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(item, idx) in items" :key="idx">
-              <td>{{ item.product_name || '--' }}</td>
-              <td>{{ item.customer_name || '--' }}</td>
+              <td class="sticky-col sticky-col-1 name-cell" :title="item.product_name">{{ item.product_name || '--' }}</td>
+              <td class="sticky-col sticky-col-2">{{ item.customer_name || '--' }}</td>
               <td>{{ item.actual_buyer || '--' }}</td>
-              <td>{{ item.amount ?? '--' }}</td>
-              <td>{{ item.subscribe_fee_ratio ?? '--' }}</td>
-              <td>{{ item.management_fee_ratio ?? '--' }}</td>
-              <td>{{ item.performance_fee_ratio ?? '--' }}</td>
+              <td class="num">{{ item.amount ?? '--' }}</td>
+              <td class="num">{{ item.subscribe_fee_ratio ?? '--' }}</td>
+              <td class="num">{{ item.management_fee_ratio ?? '--' }}</td>
+              <td class="num">{{ item.performance_fee_ratio ?? '--' }}</td>
               <td>{{ item.rebate_target || '--' }}</td>
               <td>{{ item.flight_date || '--' }}</td>
               <td>
-                <span class="badge" :class="isActiveStatus(item.holding_status) ? 'badge-green' : 'badge-amber'">
+                <span class="status-dot" :class="isActiveStatus(item.holding_status) ? 'status-active' : 'status-inactive'">
                   {{ normalizeHoldingStatus(item.holding_status) }}
                 </span>
               </td>
@@ -134,10 +138,10 @@
                 <span>{{ displayObservationDay(item) }}</span>
                 <span v-if="displayObservationType(item)" class="obs-type">{{ displayObservationType(item) }}</span>
               </td>
-              <td>{{ item.entry_price ?? '--' }}</td>
-              <td>{{ item.first_knockout_ratio ?? '--' }}</td>
-              <td>{{ item.monthly_decrease ?? '--' }}</td>
-              <td>{{ item.knockout_price ?? '--' }}</td>
+              <td class="num">{{ item.entry_price ?? '--' }}</td>
+              <td class="num">{{ item.first_knockout_ratio != null ? Number(item.first_knockout_ratio).toFixed(2) : '--' }}</td>
+              <td class="num">{{ item.monthly_decrease ?? '--' }}</td>
+              <td class="num">{{ item.knockout_price ?? '--' }}</td>
               <td>
                 <span>{{ displayTodayPrice(item) }}</span>
                 <button
@@ -152,10 +156,10 @@
               </td>
               <td>{{ item.parachute ?? '--' }}</td>
               <td>{{ item.dividend_barrier ?? '--' }}</td>
-              <td>{{ item.monthly_coupon ?? '--' }}</td>
-              <td>{{ item.coupon_1st ?? '--' }}</td>
-              <td>{{ item.coupon_2nd ?? '--' }}</td>
-              <td>{{ item.coupon_3rd ?? '--' }}</td>
+              <td class="num">{{ item.monthly_coupon ?? '--' }}</td>
+              <td class="num">{{ item.coupon_1st ?? '--' }}</td>
+              <td class="num">{{ item.coupon_2nd ?? '--' }}</td>
+              <td class="num">{{ item.coupon_3rd ?? '--' }}</td>
             </tr>
           </tbody>
         </table>
@@ -182,7 +186,7 @@ const loaded = ref(false)
 const items = ref([])
 const total = ref(0)
 const currentPage = ref(1)
-const pageSize = 50
+const pageSize = 20
 const showAdvanced = ref(false)
 
 const filters = ref({
@@ -363,53 +367,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-end;
-  margin-bottom: 18px;
-  padding: 22px 26px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-group label {
-  color: var(--ink-soft);
-  font-size: 15px;
-  font-weight: 600;
-  white-space: nowrap;
-  letter-spacing: 0.01em;
-}
-
-.input-sm {
-  height: 36px;
-  min-height: 36px;
-  padding: 0 12px;
-  font-size: 15px;
-  width: auto;
-  min-width: 120px;
-}
-
-.filter-sep {
-  color: var(--ink-faint);
-  font-size: 15px;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
 .checkbox-label {
   display: inline-flex;
   align-items: center;
@@ -468,30 +425,38 @@ onMounted(async () => {
 
 .tx-table {
   min-width: 3400px;
-  font-size: 15px;
+}
+
+.tx-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 4;
 }
 
 .tx-table th {
-  padding: 11px 14px;
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: none;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-  background: rgba(241, 245, 249, 0.5);
-  border-bottom: 1px solid var(--border-soft);
+  background: #f1f5f9;
 }
 
-.tx-table td {
-  padding: 11px 14px;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--border-soft);
-  color: var(--ink-strong);
-  font-size: 15px;
+.name-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.tx-table tr:hover td {
-  background: rgba(241, 245, 249, 0.5);
+/* sticky 列定位（base .sticky-col 规则已在 main.css 中定义） */
+.sticky-col-1 { left: 0; }
+.sticky-col-2 { left: 180px; box-shadow: -4px 0 0 0 var(--bg-card); }
+
+.tx-table tr:hover .sticky-col-2 {
+  box-shadow: -4px 0 0 0 #eef2f7;
+}
+
+.tx-table th.sticky-col {
+  background: #f1f5f9;
+}
+
+.tx-table th.sticky-col-2 {
+  box-shadow: -4px 0 0 0 #f1f5f9;
 }
 
 .obs-cell {
@@ -525,26 +490,6 @@ onMounted(async () => {
 .refresh-btn:hover {
   background: var(--brand-soft);
   border-color: var(--brand);
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 18px;
-  padding: 0 4px;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.page-info {
-  font-size: 15px;
-  color: var(--ink-soft);
-  font-weight: 600;
 }
 
 .pos-above { color: var(--success); }

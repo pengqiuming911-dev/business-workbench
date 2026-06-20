@@ -9,11 +9,20 @@ import (
 	"business-workbench/backend-go/internal/trading"
 )
 
-func CalendarForMonth(products []model.Product, month string) []model.CalendarDay {
+// CalendarOpts 控制日历构建方式与「今日/当日」点位取值。
+//   - Status="ongoing"：SpotPrice 取 TodayPrice[code]（今日实时价，整月同一值）。
+//   - Status="completed"：SpotPrice 取 CloseByDate[productID][obsDate]（该观察日已存收盘价）。
+type CalendarOpts struct {
+	Status      string
+	TodayPrice  map[string]float64
+	CloseByDate map[string]map[string]float64
+}
+
+func CalendarForMonth(products []model.Product, month string, opts CalendarOpts) []model.CalendarDay {
 	dates := map[string][]model.CalendarProduct{}
 	for _, product := range products {
 		for _, obs := range DatesForMonth(product, month) {
-			dates[obs.Date] = append(dates[obs.Date], buildCalendarProduct(product, obs.MonthsSinceEntry))
+			dates[obs.Date] = append(dates[obs.Date], buildCalendarProduct(product, obs, opts))
 		}
 	}
 
@@ -63,6 +72,10 @@ func DatesForMonth(product model.Product, month string) []ObservationDate {
 			break
 		}
 		adjusted := AdjustForHoliday(rawDate, product.HolidayAdjust)
+		// 已完结产品：不生成完结日期之后的观察日
+		if product.CompleteDate != "" && adjusted > product.CompleteDate {
+			break
+		}
 		if adjusted >= monthStart && adjusted <= monthEnd {
 			result = append(result, ObservationDate{Date: adjusted, MonthsSinceEntry: months})
 		}
@@ -102,21 +115,40 @@ func NextObservationDate(product model.Product, today string) string {
 	return ""
 }
 
-func buildCalendarProduct(product model.Product, monthsSinceEntry int) model.CalendarProduct {
-	knockoutPrice := ComputeKnockoutPrice(product, monthsSinceEntry)
+func buildCalendarProduct(product model.Product, obs ObservationDate, opts CalendarOpts) model.CalendarProduct {
+	knockoutPrice := ComputeKnockoutPrice(product, obs.MonthsSinceEntry)
 	dividendLine := ComputeDividendLine(product)
 	return model.CalendarProduct{
 		ID:                     product.ID,
 		Name:                   product.Name,
 		Manager:                product.Manager,
 		Code:                   product.Code,
-		MonthsSinceEntry:       monthsSinceEntry,
+		MonthsSinceEntry:       obs.MonthsSinceEntry,
 		EntryPrice:             product.EntryPrice,
 		KnockoutPrice:          knockoutPrice,
 		DividendLine:           dividendLine,
+		SpotPrice:              spotPriceFor(product, obs, opts),
 		IsKnockoutObservable:   knockoutPrice != nil,
 		HasDividendObservation: parseRatio(product.MonthlyCoupon) > 0,
 	}
+}
+
+// spotPriceFor 按 opts.Status 决定「今日/当日」点位取值。
+func spotPriceFor(product model.Product, obs ObservationDate, opts CalendarOpts) *float64 {
+	if opts.Status == "completed" {
+		if byDate, ok := opts.CloseByDate[product.ID]; ok {
+			if v, ok2 := byDate[obs.Date]; ok2 {
+				return &v
+			}
+		}
+		return nil
+	}
+	if product.Code != "" {
+		if v, ok := opts.TodayPrice[product.Code]; ok {
+			return &v
+		}
+	}
+	return nil
 }
 
 func ComputeKnockoutPrice(product model.Product, monthsSinceEntry int) *float64 {

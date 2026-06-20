@@ -1,10 +1,19 @@
 package observations
 
 import (
+	"math"
 	"testing"
 
 	"business-workbench/backend-go/internal/model"
 )
+
+func floatPtr(value float64) *float64 {
+	return &value
+}
+
+func intPtr(value int) *int {
+	return &value
+}
 
 func TestAdjustForHoliday_Postpone(t *testing.T) {
 	result := AdjustForHoliday("2026-02-16", "")
@@ -43,5 +52,47 @@ func TestDatesUntil_UsesHolidayAdjust(t *testing.T) {
 		if d.Date == "" {
 			t.Error("observation date should not be empty")
 		}
+	}
+}
+
+func TestComputeKnockoutPrice_BeforeLockPeriodIsNotObserved(t *testing.T) {
+	product := model.Product{
+		EntryPrice:         floatPtr(8000),
+		FirstKnockoutRatio: floatPtr(1.03),
+		LockMonths:         intPtr(3),
+		MonthlyDecrease:    floatPtr(0.005),
+	}
+
+	if price := ComputeKnockoutPrice(product, 2); price != nil {
+		t.Fatalf("got knockout price %v before lock period, want nil", *price)
+	}
+}
+
+func TestComputeKnockoutPrice_FirstObservationUsesInitialRatio(t *testing.T) {
+	product := model.Product{
+		EntryPrice:         floatPtr(8000),
+		FirstKnockoutRatio: floatPtr(1.03),
+		LockMonths:         intPtr(3),
+		MonthlyDecrease:    floatPtr(0.005),
+	}
+
+	price := ComputeKnockoutPrice(product, 3)
+	if price == nil || math.Abs(*price-8240) > 0.000001 {
+		t.Fatalf("got knockout price %v, want 8240", price)
+	}
+}
+
+func TestComputeKnockoutPrice_DecreasesForEachLaterObservation(t *testing.T) {
+	product := model.Product{
+		EntryPrice:         floatPtr(8000),
+		FirstKnockoutRatio: floatPtr(1.03),
+		LockMonths:         intPtr(3),
+		MonthlyDecrease:    floatPtr(0.005),
+	}
+
+	price := ComputeKnockoutPrice(product, 5)
+	want := 8000 * (1.03 - float64(5-3)*0.005)
+	if price == nil || math.Abs(*price-want) > 0.000001 {
+		t.Fatalf("got knockout price %v, want %.2f", price, want)
 	}
 }
