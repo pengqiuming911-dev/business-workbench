@@ -386,7 +386,7 @@ const items = ref([])
 
 // --- 分页：items 仍持有全部筛选结果(供导出/批量使用)，表格只渲染当前页 ---
 const page = ref(1)
-const pageSize = ref(50)
+const pageSize = ref(20)
 const totalPages = computed(() => Math.max(1, Math.ceil(items.value.length / pageSize.value)))
 const pagedItems = computed(() => {
   const start = (page.value - 1) * pageSize.value

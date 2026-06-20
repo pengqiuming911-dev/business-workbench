@@ -305,7 +305,7 @@ select.input {
 .data-table td {
   padding: 7px 12px;
   color: var(--ink-strong);
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid #f5f6f8;
   white-space: nowrap;
 }
 

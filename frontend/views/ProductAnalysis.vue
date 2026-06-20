@@ -181,7 +181,7 @@ const loaded = ref(false)
 const items = ref([])
 const total = ref(0)
 const currentPage = ref(1)
-const pageSize = 50
+const pageSize = 20
 const showAdvanced = ref(false)
 
 const filters = ref({
