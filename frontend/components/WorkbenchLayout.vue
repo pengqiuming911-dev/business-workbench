@@ -78,7 +78,7 @@ onUnmounted(() => {
 
 .workbench-content {
   min-height: 100vh;
-  margin-left: 230px;
+  margin-left: 208px;
   transition: margin-left 220ms ease;
 }
 
@@ -90,11 +90,13 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 60;
-  min-height: 56px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 12px 32px 4px;
+  padding: 8px 32px 4px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-page);
 }
 
 .topbar-actions {
@@ -123,9 +125,11 @@ onUnmounted(() => {
 }
 
 .workbench-main {
-  max-width: 1100px;
+  width: 100%;
+  max-width: 1680px;
   padding: 24px 32px 72px;
-  margin: 0 auto 0 0;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* FAB */
