@@ -2744,6 +2744,7 @@ func (s *Server) rebatePending(c *gin.Context) {
 			DetailSub:       rebateDetailOutstanding(taxLookup, oid, "subscribe"),
 			DetailMgmt:      rebateDetailOutstanding(taxLookup, oid, "management"),
 			DetailPerf:      rebateDetailOutstanding(taxLookup, oid, "performance"),
+			RebateTarget:    cellString(row["rebate_target"]),
 		})
 		if decision.Exclude {
 			continue
