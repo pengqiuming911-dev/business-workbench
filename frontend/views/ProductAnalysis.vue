@@ -329,10 +329,10 @@ onMounted(async () => {
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-end;
   margin-bottom: 18px;
-  padding: 22px 26px;
+  padding: 16px 20px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
@@ -342,29 +342,29 @@ onMounted(async () => {
 .filter-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .filter-group label {
   color: var(--ink-soft);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   letter-spacing: 0.01em;
 }
 
 .input-sm {
-  height: 36px;
-  min-height: 36px;
-  padding: 0 12px;
-  font-size: 15px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
   width: auto;
   min-width: 120px;
 }
 
 .filter-sep {
   color: var(--ink-faint);
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .filter-actions {
@@ -469,16 +469,24 @@ onMounted(async () => {
   background: var(--bg-card);
 }
 .sticky-col-1 { left: 0; }
-.sticky-col-2 { left: 120px; }
-.sticky-col-3 { left: 230px; }
+.sticky-col-2 { left: 120px; box-shadow: -4px 0 0 0 var(--bg-card); }
+.sticky-col-3 { left: 230px; box-shadow: -4px 0 0 0 var(--bg-card); }
 
 .product-table tr:hover .sticky-col {
   background: #eef2f7;
+}
+.product-table tr:hover .sticky-col-2,
+.product-table tr:hover .sticky-col-3 {
+  box-shadow: -4px 0 0 0 #eef2f7;
 }
 
 .product-table th.sticky-col {
   z-index: 5;
   background: #f1f5f9;
+}
+.product-table th.sticky-col-2,
+.product-table th.sticky-col-3 {
+  box-shadow: -4px 0 0 0 #f1f5f9;
 }
 
 .input-narrow {

@@ -33,6 +33,18 @@
         <label>产品名称</label>
         <input v-model="filters.productName" type="text" class="input input-sm input-narrow" placeholder="模糊搜索" />
       </div>
+      <div class="filter-actions">
+        <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
+        <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+      </div>
+    </div>
+
+    <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
+      <span class="chevron" :class="{ open: showAdvanced }">▸</span>
+      高级筛选
+    </div>
+
+    <div v-show="showAdvanced" class="filter-bar advanced-bar">
       <div class="filter-group">
         <label>申购日期</label>
         <input v-model="filters.flightDateStart" type="date" class="input input-sm" />
@@ -58,10 +70,6 @@
           <input v-model="filters.obsKnockout" type="checkbox" />
           敲出
         </label>
-      </div>
-      <div class="filter-actions">
-        <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
-        <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
       </div>
     </div>
 
@@ -512,15 +520,21 @@ onMounted(async () => {
   background: var(--bg-card);
 }
 .sticky-col-1 { left: 0; }
-.sticky-col-2 { left: 180px; }
+.sticky-col-2 { left: 180px; box-shadow: -4px 0 0 0 var(--bg-card); }
 
 .tx-table tr:hover .sticky-col {
   background: #eef2f7;
+}
+.tx-table tr:hover .sticky-col-2 {
+  box-shadow: -4px 0 0 0 #eef2f7;
 }
 
 .tx-table th.sticky-col {
   z-index: 5;
   background: #f1f5f9;
+}
+.tx-table th.sticky-col-2 {
+  box-shadow: -4px 0 0 0 #f1f5f9;
 }
 
 .input-narrow {
