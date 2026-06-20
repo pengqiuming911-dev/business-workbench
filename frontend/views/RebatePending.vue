@@ -996,7 +996,7 @@ function downloadCSV() {
   padding: 10px 14px;
   font-size: 14px;
   font-weight: 600;
-  text-align: center;
+  text-align: left;
   white-space: nowrap;
   color: var(--ink-soft);
   border-bottom: 1px solid var(--border-soft);
@@ -1092,32 +1092,26 @@ function downloadCSV() {
 /* Data cell group colors */
 .col-receivable {
   background: #eef4ff !important;
-  text-align: center;
 }
 
 .col-ratio {
   background: #fef9ee !important;
-  text-align: center;
 }
 
 .col-tax {
   background: #fef2f2 !important;
-  text-align: center;
 }
 
 .col-should {
   background: #eafaf3 !important;
-  text-align: center;
 }
 
 .col-returned {
   background: #f1edfb !important;
-  text-align: center;
 }
 
 .col-unreturned {
   background: #fff7ed !important;
-  text-align: center;
 }
 
 .col-check {
@@ -1126,7 +1120,6 @@ function downloadCSV() {
 
 .col-plan {
   background: #ecfdf5 !important;
-  text-align: center;
 }
 
 .rebate-table td {
