@@ -169,17 +169,19 @@
               >
                 <div class="cal-card-name">{{ product.name || product.id }}</div>
                 <div class="cal-card-details">
-                  <div v-if="product.is_knockout_observable && product.knockout_price != null" class="cal-detail-row cal-detail-knockout">
-                    <span class="cal-detail-label">敲出</span>
-                    <strong>{{ fmtCalPrice(product.knockout_price) }}</strong>
+                  <div v-if="(product.is_knockout_observable && product.knockout_price != null) || product.spot_price != null" class="cal-detail-row cal-detail-knockout-spot">
+                    <template v-if="product.is_knockout_observable && product.knockout_price != null">
+                      <span class="cal-detail-label">敲出</span>
+                      <strong>{{ fmtCalPrice(product.knockout_price) }}</strong>
+                    </template>
+                    <template v-if="product.spot_price != null">
+                      <span class="cal-detail-label">{{ calendarStatus === 'completed' ? '当日' : '今日' }}</span>
+                      <strong>{{ fmtCalPrice(product.spot_price) }}</strong>
+                    </template>
                   </div>
                   <div v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-detail-row cal-detail-dividend">
                     <span class="cal-detail-label">派息</span>
                     <strong>{{ fmtCalPrice(product.dividend_line) }}</strong>
-                  </div>
-                  <div v-if="product.spot_price != null" class="cal-detail-row cal-detail-spot">
-                    <span class="cal-detail-label">{{ calendarStatus === 'completed' ? '当日' : '今日' }}</span>
-                    <strong>{{ fmtCalPrice(product.spot_price) }}</strong>
                   </div>
                 </div>
               </div>
@@ -908,13 +910,23 @@ function fmtCalPrice(val) {
   white-space: nowrap;
 }
 
-.cal-detail-knockout {
+.cal-detail-knockout-spot {
   color: #2563a8;
   background: #edf6ff;
+  flex-wrap: wrap;
 }
 
-.cal-detail-knockout strong {
+.cal-detail-knockout-spot strong {
   color: #1d4f8a;
+}
+
+.cal-detail-knockout-spot .cal-detail-label + strong + .cal-detail-label {
+  margin-left: 4px;
+  color: #6b5b95;
+}
+
+.cal-detail-knockout-spot .cal-detail-label + strong + .cal-detail-label + strong {
+  color: #4c3f73;
 }
 
 .cal-detail-dividend {
@@ -924,15 +936,6 @@ function fmtCalPrice(val) {
 
 .cal-detail-dividend strong {
   color: #116451;
-}
-
-.cal-detail-spot {
-  color: #6b5b95;
-  background: #f3f0fb;
-}
-
-.cal-detail-spot strong {
-  color: #4c3f73;
 }
 
 .poster-grid {
