@@ -17,35 +17,8 @@
         />
       </div>
       <div class="filter-group">
-        <label>航班编号</label>
-        <input
-          v-model="filters.flightId"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入航班编号"
-        />
-      </div>
-      <div class="filter-group">
-        <label>客户姓名</label>
-        <input
-          v-model="filters.customerName"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入客户姓名"
-        />
-      </div>
-      <div class="filter-group">
-        <label>返还人</label>
-        <input
-          v-model="filters.rebateTarget"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入返还人"
-        />
-      </div>
-      <div class="filter-group">
         <label>费用类别</label>
-        <select v-model="filters.expenseCategory" class="input input-sm">
+        <select v-model="filters.expenseCategory" class="input input-sm input-select-compact">
           <option value="">全部</option>
           <option value="申购费">申购费</option>
           <option value="管理费">管理费</option>
@@ -54,12 +27,39 @@
       </div>
       <div class="filter-group">
         <label>来源</label>
-        <select v-model="filters.source" class="input input-sm">
+        <select v-model="filters.source" class="input input-sm input-select-compact">
           <option value="">全部</option>
           <option value="manual">手工录入</option>
           <option value="upload">批量上传</option>
           <option value="auto_sync">自动同步</option>
         </select>
+      </div>
+      <div class="filter-group">
+        <label>航班编号</label>
+        <input
+          v-model="filters.flightId"
+          type="text"
+          class="input input-sm input-compact"
+          placeholder="请输入航班编号"
+        />
+      </div>
+      <div class="filter-group">
+        <label>客户姓名</label>
+        <input
+          v-model="filters.customerName"
+          type="text"
+          class="input input-sm input-compact"
+          placeholder="请输入客户姓名"
+        />
+      </div>
+      <div class="filter-group">
+        <label>返还人</label>
+        <input
+          v-model="filters.rebateTarget"
+          type="text"
+          class="input input-sm input-compact"
+          placeholder="请输入返还人"
+        />
       </div>
       <div class="filter-actions">
         <button class="btn btn-primary btn-sm" @click="fetchData">
@@ -1256,7 +1256,7 @@ function downloadCSV() {
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px 14px;
   align-items: flex-end;
   margin-bottom: 16px;
   padding: 20px 24px;
@@ -1288,10 +1288,19 @@ function downloadCSV() {
   min-width: 120px;
 }
 
+.input-compact {
+  min-width: 106px;
+}
+
+.input-select-compact {
+  min-width: 116px;
+}
+
 .filter-actions {
   display: flex;
   gap: 8px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .validation-banner {
@@ -1324,6 +1333,8 @@ function downloadCSV() {
 .completed-table {
   min-width: 2800px;
   font-size: 14px;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .completed-table thead {
@@ -1376,7 +1387,7 @@ function downloadCSV() {
 }
 
 .completed-table .num-col {
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1404,12 +1415,20 @@ function downloadCSV() {
 }
 
 .completed-table tr:hover .sticky-col {
-  background: rgba(41, 98, 255, 0.04);
+  background: color-mix(in srgb, var(--brand) 4%, var(--bg-card));
 }
 
 .header-group-row .sticky-col {
   z-index: 5;
   text-align: left;
+}
+
+@media (max-width: 1440px) {
+  .filter-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 
 .name-cell {

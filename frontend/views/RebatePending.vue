@@ -8,12 +8,21 @@
     <!-- Filters -->
     <div class="filter-bar">
       <div class="filter-group">
+        <label>订单号</label>
+        <input
+          v-model="filters.orderId"
+          type="text"
+          class="input input-sm"
+          placeholder="请输入订单号"
+        />
+      </div>
+      <div class="filter-group">
         <label>客户姓名</label>
         <input
           v-model="filters.customerName"
           type="text"
-          class="input input-sm"
-          placeholder="请输入客户姓名"
+          class="input input-sm input-compact"
+          placeholder="客户姓名"
         />
       </div>
       <div class="filter-group">
@@ -21,13 +30,35 @@
         <input
           v-model="filters.rebateTarget"
           type="text"
-          class="input input-sm"
-          placeholder="请输入返还人"
+          class="input input-sm input-compact"
+          placeholder="返还人"
         />
       </div>
       <div class="filter-group">
+        <label>本次拟返</label>
+        <div class="multi-select" ref="planDropdownRef">
+          <button
+            class="multi-select-trigger input input-sm input-select-compact"
+            @click="toggleDropdown('plan')"
+          >
+            {{ planLabel }}
+            <span class="caret">&#9662;</span>
+          </button>
+          <div v-show="openDropdown === 'plan'" class="multi-select-dropdown">
+            <label class="multi-option" @click.prevent="toggleAllMulti(filters.planCategories, feeCategories)">
+              <input type="checkbox" :checked="allChecked(filters.planCategories, feeCategories)" readonly />
+              全选
+            </label>
+            <label v-for="cat in feeCategories" :key="'pl-' + cat" class="multi-option">
+              <input type="checkbox" :value="cat" v-model="filters.planCategories" />
+              {{ cat }}
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="filter-group">
         <label>是否可返</label>
-        <select v-model="filters.isReturnable" class="input input-sm">
+        <select v-model="filters.isReturnable" class="input input-sm input-select-compact">
           <option value="">全部</option>
           <option value="是">是</option>
           <option value="否">否</option>
@@ -37,7 +68,7 @@
         <label>未返</label>
         <div class="multi-select" ref="unreturndDropdownRef">
           <button
-            class="multi-select-trigger input input-sm"
+            class="multi-select-trigger input input-sm input-select-compact"
             @click="toggleDropdown('unreturned')"
           >
             {{ unreturnedLabel }}
@@ -56,75 +87,18 @@
         </div>
       </div>
       <div class="filter-group">
-        <label>本次拟返</label>
-        <div class="multi-select" ref="planDropdownRef">
-          <button
-            class="multi-select-trigger input input-sm"
-            @click="toggleDropdown('plan')"
-          >
-            {{ planLabel }}
-            <span class="caret">&#9662;</span>
-          </button>
-          <div v-show="openDropdown === 'plan'" class="multi-select-dropdown">
-            <label class="multi-option" @click.prevent="toggleAllMulti(filters.planCategories, feeCategories)">
-              <input type="checkbox" :checked="allChecked(filters.planCategories, feeCategories)" readonly />
-              全选
-            </label>
-            <label v-for="cat in feeCategories" :key="'pl-' + cat" class="multi-option">
-              <input type="checkbox" :value="cat" v-model="filters.planCategories" />
-              {{ cat }}
-            </label>
-          </div>
-        </div>
-      </div>
-      <div class="filter-actions">
-        <button class="btn btn-primary btn-sm" @click="fetchData">
-          <Search :size="14" />
-          查询
-        </button>
-        <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
-      </div>
-    </div>
-
-    <!-- Advanced filters -->
-    <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
-      <span class="chevron" :class="{ open: showAdvanced }">&#8250;</span>
-      高级筛选
-    </div>
-
-    <div v-show="showAdvanced" class="filter-bar advanced-bar">
-      <div class="filter-group">
-        <label>订单号</label>
-        <input
-          v-model="filters.orderId"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入订单号"
-        />
-      </div>
-      <div class="filter-group">
         <label>航班编号</label>
-        <input
-          v-model="filters.flightId"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入航班编号"
-        />
+        <input v-model="filters.flightId" type="text" class="input input-sm input-compact" placeholder="航班编号" />
       </div>
       <div class="filter-group">
         <label>航班名称</label>
-        <input
-          v-model="filters.productName"
-          type="text"
-          class="input input-sm"
-          placeholder="请输入航班名称"
-        />
+        <input v-model="filters.productName" type="text" class="input input-sm input-compact" placeholder="航班名称" />
       </div>
       <div class="filter-group">
         <label>应返</label>
         <div class="multi-select" ref="shouldReturnDropdownRef">
           <button
-            class="multi-select-trigger input input-sm"
+            class="multi-select-trigger input input-sm input-select-compact"
             @click="toggleDropdown('shouldReturn')"
           >
             {{ shouldReturnLabel }}
@@ -141,6 +115,13 @@
             </label>
           </div>
         </div>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn-primary btn-sm" @click="fetchData">
+          <Search :size="14" />
+          查询
+        </button>
+        <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
       </div>
     </div>
 
@@ -191,6 +172,7 @@
           <col style="min-width: 90px" /><!-- 客户姓名 -->
           <col style="min-width: 90px" /><!-- 返还人 -->
           <col style="min-width: 100px" /><!-- 本金 -->
+          <col style="min-width: 80px" /><!-- 申购费率 -->
           <col span="3" style="min-width: 100px" /><!-- 应收 x3 -->
           <col span="3" style="min-width: 90px" /><!-- 返还比例 x3 -->
           <col span="3" style="min-width: 90px" /><!-- 扣税比例 x3 -->
@@ -209,6 +191,7 @@
             <th rowspan="2">客户姓名</th>
             <th rowspan="2">返还人</th>
             <th rowspan="2" class="num-col">本金</th>
+            <th rowspan="2" class="num-col">申购费率</th>
             <th colspan="3" class="group-header group-receivable">应收</th>
             <th colspan="3" class="group-header group-ratio">返还比例</th>
             <th colspan="3" class="group-header group-tax">扣税比例</th>
@@ -252,13 +235,14 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(item, idx) in items" :key="item.order_id" :class="{ 'row-alt': idx % 2 === 1 }">
+          <tr v-for="(item, idx) in pagedItems" :key="item.order_id" :class="{ 'row-alt': idx % 2 === 1 }">
             <td class="sticky-col">{{ item.order_id }}</td>
             <td>{{ item.flight_id || '--' }}</td>
             <td class="name-cell" :title="item.product_name">{{ truncate(item.product_name, 12) }}</td>
             <td>{{ item.customer_name || '--' }}</td>
             <td>{{ item.rebate_target || '--' }}</td>
             <td class="num-col">{{ fmtNum(item.principal) }}</td>
+            <td class="num-col">{{ fmtPct(item.subscribe_fee_rate) }}</td>
             <!-- 应收 -->
             <td class="num-col">{{ fmtNum(calcSubscribeFee(item)) }}</td>
             <td class="num-col">{{ fmtNum(calcManagementFeeReceived(item)) }}</td>
@@ -344,6 +328,15 @@
       </table>
     </div>
 
+    <!-- 分页 -->
+    <div v-if="items.length > 0" class="pager">
+      <span class="pager-info">共 {{ items.length }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
+      <div class="pager-btns">
+        <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
+        <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+      </div>
+    </div>
+
     <!-- Confirm dialog -->
     <Teleport to="body">
       <div v-if="confirmDialog.visible" class="dialog-overlay" @click.self="confirmDialog.visible = false">
@@ -375,6 +368,19 @@ const feeCategories = ['申购费', '管理费', '业绩报酬']
 const loading = ref(false)
 const loaded = ref(false)
 const items = ref([])
+
+// --- 分页：items 仍持有全部筛选结果(供导出/批量使用)，表格只渲染当前页 ---
+const page = ref(1)
+const pageSize = ref(50)
+const totalPages = computed(() => Math.max(1, Math.ceil(items.value.length / pageSize.value)))
+const pagedItems = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return items.value.slice(start, start + pageSize.value)
+})
+function gotoPage(p) {
+  const n = Math.min(Math.max(1, p), totalPages.value)
+  page.value = n
+}
 const showAdvanced = ref(false)
 const showBatchPanel = ref(false)
 const openDropdown = ref('')
@@ -464,6 +470,7 @@ function fmtNum(val) {
 }
 
 function fmtPct(val) {
+  if (val === '暂不可返') return '暂不可返'
   if (val == null || val === '') return '--'
   const n = Number(val)
   if (isNaN(n)) return '--'
@@ -477,33 +484,34 @@ function truncate(str, len) {
 
 // --- Calculations ---
 function calcSubscribeFee(item) {
-  return (item.principal || 0) * (item.subscribe_fee_ratio || 0)
+  return (item.principal || 0) * (item.subscribe_fee_rate || 0)
 }
 
 function calcManagementFeeReceived(item) {
-  return (item.principal || 0) * (item.management_fee_ratio || 0)
+  return item.management_fee_received || 0
 }
 
 function calcPerformanceFeeReceivable(item) {
-  return (item.principal || 0) * (item.performance_fee_ratio || 0)
+  return item.performance_fee_receivable || 0
+}
+
+function taxNum(v) {
+  const n = Number(v)
+  return isNaN(n) ? 0 : n
 }
 
 function calcShouldReturn(item, type) {
-  const principal = item.principal || 0
   if (type === 'subscribe') {
-    const fee = principal * (item.subscribe_fee_ratio || 0)
-    const tax = item.tax_subscribe_ratio || 0
-    return fee * (1 - tax)
+    // 应返申购费 = 本金 × 申购费率 × 申购费返还比例 × (1 − 申购费扣税)
+    return (item.principal || 0) * (item.subscribe_fee_rate || 0) * (item.subscribe_fee_ratio || 0) * (1 - taxNum(item.tax_subscribe_ratio))
   }
   if (type === 'management') {
-    const fee = principal * (item.management_fee_ratio || 0)
-    const tax = item.tax_management_ratio || 0
-    return fee * (1 - tax)
+    // 应返管理费 = 管理费实收 × 管理费返还比例 × (1 − 管理费扣税)
+    return (item.management_fee_received || 0) * (item.management_fee_ratio || 0) * (1 - taxNum(item.tax_management_ratio))
   }
   if (type === 'performance') {
-    const fee = principal * (item.performance_fee_ratio || 0)
-    const tax = item.tax_performance_ratio || 0
-    return fee * (1 - tax)
+    // 应返业绩报酬 = 业绩报酬应收 × 业绩报酬返还比例 × (1 − 业绩报酬扣税)
+    return (item.performance_fee_receivable || 0) * (item.performance_fee_ratio || 0) * (1 - taxNum(item.tax_performance_ratio))
   }
   return 0
 }
@@ -644,15 +652,16 @@ async function confirmMarkReturned() {
 // --- Data fetching ---
 async function fetchData() {
   loading.value = true
+  page.value = 1
   try {
     const params = new URLSearchParams()
     const f = filters.value
-    if (f.customerName) params.set('customer_name', encodeURIComponent(f.customerName))
-    if (f.rebateTarget) params.set('rebate_target', encodeURIComponent(f.rebateTarget))
-    if (f.isReturnable) params.set('is_returnable', encodeURIComponent(f.isReturnable))
-    if (f.orderId) params.set('order_id', encodeURIComponent(f.orderId))
-    if (f.flightId) params.set('flight_id', encodeURIComponent(f.flightId))
-    if (f.productName) params.set('product_name', encodeURIComponent(f.productName))
+    if (f.customerName) params.set('customer_name', f.customerName)
+    if (f.rebateTarget) params.set('rebate_target', f.rebateTarget)
+    if (f.isReturnable) params.set('is_returnable', f.isReturnable)
+    if (f.orderId) params.set('order_id', f.orderId)
+    if (f.flightId) params.set('flight_id', f.flightId)
+    if (f.productName) params.set('product_name', f.productName)
     if (f.unreturnedCategories.length > 0 && f.unreturnedCategories.length < feeCategories.length) {
       params.set('unreturned_categories', f.unreturnedCategories.join(','))
     }
@@ -705,7 +714,7 @@ function downloadCSV() {
   if (items.value.length === 0) return
 
   const headers = [
-    '订单号', '航班编号', '航班名称', '客户姓名', '返还人', '本金',
+    '订单号', '航班编号', '航班名称', '客户姓名', '返还人', '本金', '申购费率',
     '应收-申购费', '应收-管理费实收', '应收-业绩报酬应收',
     '返还比例-申购费', '返还比例-管理费', '返还比例-业绩报酬',
     '扣税比例-申购费', '扣税比例-管理费', '扣税比例-业绩报酬',
@@ -723,6 +732,7 @@ function downloadCSV() {
     item.customer_name,
     item.rebate_target,
     fmtNum(item.principal),
+    fmtPct(item.subscribe_fee_rate),
     fmtNum(calcSubscribeFee(item)),
     fmtNum(calcManagementFeeReceived(item)),
     fmtNum(calcPerformanceFeeReceivable(item)),
@@ -773,7 +783,7 @@ function downloadCSV() {
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px 14px;
   align-items: flex-end;
   margin-bottom: 16px;
   padding: 20px 24px;
@@ -805,10 +815,24 @@ function downloadCSV() {
   min-width: 120px;
 }
 
+.input-compact {
+  min-width: 102px;
+}
+
+.input-narrow {
+  min-width: 90px;
+  width: 110px;
+}
+
+.input-select-compact {
+  min-width: 112px;
+}
+
 .filter-actions {
   display: flex;
   gap: 8px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .advanced-toggle {
@@ -852,7 +876,7 @@ function downloadCSV() {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-width: 140px;
+  min-width: 120px;
   text-align: left;
   cursor: pointer;
   background: #fff;
@@ -939,6 +963,10 @@ function downloadCSV() {
 .rebate-table {
   min-width: 3600px;
   font-size: 14px;
+  /* border-collapse: separate 让 sticky 列背景能正确盖住横向滚动的内容，
+     避免 collapse 下 sticky 列透出相邻列文字 */
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .rebate-table thead {
@@ -968,7 +996,7 @@ function downloadCSV() {
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 700;
-  text-align: center;
+  text-align: left;
   white-space: nowrap;
   color: var(--ink-soft);
   border-bottom: 2px solid var(--border);
@@ -1001,7 +1029,7 @@ function downloadCSV() {
 }
 
 .rebate-table .num-col {
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1029,12 +1057,24 @@ function downloadCSV() {
 }
 
 .rebate-table tr:hover .sticky-col {
-  background: rgba(41, 98, 255, 0.04);
+  background: color-mix(in srgb, var(--brand) 4%, var(--bg-card));
+}
+
+.rebate-table tr.row-alt:hover .sticky-col {
+  background: color-mix(in srgb, var(--brand) 4%, var(--bg-page));
 }
 
 .header-group-row .sticky-col {
   z-index: 5;
-  text-align: left;
+  text-align: center;
+}
+
+@media (max-width: 1440px) {
+  .filter-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 
 .name-cell {
@@ -1042,6 +1082,23 @@ function downloadCSV() {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: default;
+}
+
+/* --- Pager --- */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 4px 0;
+}
+.pager-info {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.pager-btns {
+  display: flex;
+  gap: 8px;
 }
 
 /* --- Returnable button --- */

@@ -158,21 +158,18 @@
                 v-for="product in cell.products"
                 :key="product.id"
                 class="cal-card"
-                :class="calItemClass(product)"
                 :title="product.name"
               >
-                <div class="cal-card-head">
-                  <span class="cal-card-name">{{ truncateCalName(product.name || product.id) }}</span>
-                  <span
-                    class="cal-type-badge"
-                    :class="{ 'badge-both': product.is_knockout_observable && product.has_dividend_observation, 'badge-ko': product.is_knockout_observable && !product.has_dividend_observation, 'badge-dv': !product.is_knockout_observable && product.has_dividend_observation }"
-                  >
-                    {{ product.is_knockout_observable && product.has_dividend_observation ? '派息+敲出' : product.is_knockout_observable ? '敲出' : '派息' }}
-                  </span>
-                </div>
-                <div class="cal-card-prices">
-                  <span v-if="product.is_knockout_observable && product.knockout_price != null" class="cal-ko-price">敲出 <b>{{ fmtCalPrice(product.knockout_price) }}</b></span>
-                  <span v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-dv-price">派息 <b>{{ fmtCalPrice(product.dividend_line) }}</b></span>
+                <div class="cal-card-name">{{ product.name || product.id }}</div>
+                <div class="cal-card-details">
+                  <div v-if="product.is_knockout_observable && product.knockout_price != null" class="cal-detail-row cal-detail-knockout">
+                    <span class="cal-detail-label">敲出</span>
+                    <strong>{{ fmtCalPrice(product.knockout_price) }}</strong>
+                  </div>
+                  <div v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-detail-row cal-detail-dividend">
+                    <span class="cal-detail-label">派息</span>
+                    <strong>{{ fmtCalPrice(product.dividend_line) }}</strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -540,21 +537,14 @@ function dividendClass(status) {
   return ''
 }
 
-function truncateCalName(name) {
-  if (!name) return '--'
-  return name.length > 8 ? name.slice(0, 8) + '…' : name
-}
-
 function fmtCalPrice(val) {
   if (val == null) return '--'
-  return Number(val).toFixed(2)
-}
-
-function calItemClass(product) {
-  if (product.is_knockout_observable && product.has_dividend_observation) return 'item-both'
-  if (product.is_knockout_observable) return 'item-knockout'
-  if (product.has_dividend_observation) return 'item-dividend'
-  return ''
+  const value = Number(val)
+  const decimals = Math.abs(value) < 10 ? 3 : 2
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
 }
 </script>
 
@@ -636,8 +626,8 @@ function calItemClass(product) {
 }
 
 .col-left { text-align: left; }
-.col-right { text-align: right; }
-.col-center { text-align: center; }
+.col-right { text-align: left; }
+.col-center { text-align: left; }
 
 .sticky-col {
   position: sticky;
@@ -739,8 +729,9 @@ function calItemClass(product) {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 16px 20px;
+  padding: 14px 18px;
   margin-bottom: 16px;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.04);
 }
 
 .calendar-month-picker {
@@ -759,28 +750,27 @@ function calItemClass(product) {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-soft);
-  background: var(--surface-muted);
-  border-radius: 999px;
-  padding: 6px 14px;
+  padding: 6px 0;
 }
 
 .calendar-wrap {
   background: var(--bg-card);
-  border: 1px solid var(--border-soft);
+  border: 1px solid #dfe8f3;
   border-radius: var(--radius);
   overflow: hidden;
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.05);
 }
 
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, minmax(140px, 1fr));
-  background: #f8f9fb;
-  border-bottom: 1px solid var(--border-soft);
+  background: #f5f9ff;
+  border-bottom: 1px solid #dfe8f3;
 }
 
 .calendar-weekday {
   padding: 12px 8px;
-  color: var(--ink-soft);
+  color: #52657a;
   font-size: 12px;
   font-weight: 700;
   text-align: center;
@@ -794,12 +784,11 @@ function calItemClass(product) {
 }
 
 .calendar-cell {
-  min-height: 120px;
+  min-height: 132px;
   padding: 10px 10px 8px;
-  border-right: 1px solid #f0f1f4;
-  border-bottom: 1px solid #f0f1f4;
+  border-right: 1px solid #edf2f7;
+  border-bottom: 1px solid #edf2f7;
   background: #fff;
-  transition: background 0.1s;
 }
 
 .calendar-cell:nth-child(7n) {
@@ -807,11 +796,11 @@ function calItemClass(product) {
 }
 
 .calendar-cell.muted {
-  background: #fafbfc;
+  background: #fbfcfe;
 }
 
 .calendar-cell.today {
-  background: #f0f5ff;
+  background: #f1f7ff;
 }
 
 .calendar-day {
@@ -833,115 +822,93 @@ function calItemClass(product) {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--brand);
+  background: #60a5fa;
   flex-shrink: 0;
 }
 
 .calendar-products {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .cal-card {
-  padding: 7px 9px 6px;
+  padding: 9px 10px;
   border-radius: 8px;
-  border: 1px solid transparent;
+  border: 1px solid #dfe8f3;
   font-size: 11px;
   line-height: 1.45;
   background: #fff;
-  transition: box-shadow 0.12s;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .cal-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
-}
-
-.cal-card.item-knockout {
-  background: #fff5f5;
-  border-color: #fecaca;
-}
-
-.cal-card.item-dividend {
-  background: #f0fdf8;
-  border-color: #bbf7d0;
-}
-
-.cal-card.item-both {
-  background: #fffbf0;
-  border-color: #fde68a;
-}
-
-.cal-card-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  border-color: #bfd4ec;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
 }
 
 .cal-card-name {
   font-weight: 700;
   color: var(--ink-strong);
-  font-size: 11.5px;
+  font-size: 12px;
+  line-height: 1.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
+  padding-bottom: 6px;
 }
 
-.cal-type-badge {
-  flex-shrink: 0;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 9.5px;
-  font-weight: 700;
-  line-height: 16px;
-  white-space: nowrap;
-  letter-spacing: 0.01em;
-}
-
-.cal-type-badge.badge-ko {
-  color: #dc2626;
-  background: #fee2e2;
-}
-
-.cal-type-badge.badge-dv {
-  color: #059669;
-  background: #d1fae5;
-}
-
-.cal-type-badge.badge-both {
-  color: #d97706;
-  background: #fef3c7;
-}
-
-.cal-card-prices {
+.cal-card-details {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #edf2f7;
 }
 
-.cal-ko-price,
-.cal-dv-price {
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--ink-soft);
+.cal-card-details:empty {
+  display: none;
+}
+
+.cal-detail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.cal-detail-label {
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.cal-ko-price {
-  color: #dc2626;
-}
-
-.cal-dv-price {
-  color: #059669;
-}
-
-.cal-ko-price b,
-.cal-dv-price b {
   font-weight: 700;
+}
+
+.cal-detail-row strong {
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cal-detail-knockout {
+  color: #2563a8;
+  background: #edf6ff;
+}
+
+.cal-detail-knockout strong {
+  color: #1d4f8a;
+}
+
+.cal-detail-dividend {
+  color: #16806a;
+  background: #edfbf7;
+}
+
+.cal-detail-dividend strong {
+  color: #116451;
 }
 
 .poster-grid {
