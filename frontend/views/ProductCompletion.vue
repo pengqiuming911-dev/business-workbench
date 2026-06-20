@@ -169,14 +169,17 @@
               >
                 <div class="cal-card-name">{{ product.name || product.id }}</div>
                 <div class="cal-card-details">
-                  <div v-if="(product.is_knockout_observable && product.knockout_price != null) || product.spot_price != null" class="cal-detail-row cal-detail-knockout-spot">
+                  <div v-if="(product.is_knockout_observable && product.knockout_price != null) || product.spot_price != null"
+                       :class="['cal-detail-row', 'cal-detail-knockout-spot', { 'cal-spot-only': !(product.is_knockout_observable && product.knockout_price != null) }]">
                     <template v-if="product.is_knockout_observable && product.knockout_price != null">
                       <span class="cal-detail-label">敲出</span>
                       <strong>{{ fmtCalPrice(product.knockout_price) }}</strong>
                     </template>
                     <template v-if="product.spot_price != null">
-                      <span class="cal-detail-label">{{ calendarStatus === 'completed' ? '当日' : '今日' }}</span>
-                      <strong>{{ fmtCalPrice(product.spot_price) }}</strong>
+                      <span class="cal-spot">
+                        <span class="cal-detail-label">{{ calendarStatus === 'completed' ? '当日' : '今日' }}</span>
+                        <strong>{{ fmtCalPrice(product.spot_price) }}</strong>
+                      </span>
                     </template>
                   </div>
                   <div v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-detail-row cal-detail-dividend">
@@ -920,13 +923,20 @@ function fmtCalPrice(val) {
   color: #1d4f8a;
 }
 
-.cal-detail-knockout-spot .cal-detail-label + strong + .cal-detail-label {
+.cal-detail-knockout-spot .cal-spot {
   margin-left: 4px;
+}
+
+.cal-detail-knockout-spot .cal-spot .cal-detail-label {
   color: #6b5b95;
 }
 
-.cal-detail-knockout-spot .cal-detail-label + strong + .cal-detail-label + strong {
+.cal-detail-knockout-spot .cal-spot strong {
   color: #4c3f73;
+}
+
+.cal-detail-knockout-spot.cal-spot-only {
+  background: #f3f0fb;
 }
 
 .cal-detail-dividend {
