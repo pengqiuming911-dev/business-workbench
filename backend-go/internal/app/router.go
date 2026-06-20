@@ -43,7 +43,6 @@ type Server struct {
 	daifanAt    time.Time
 }
 
-const daifanNotReturnable = "暂不可返"
 const daifanCacheTTL = 10 * time.Minute
 
 // daifanTaxRatios 解析"待返"sheet 得到的扣税比例、管理费实收/业绩报酬应收与可返性。
@@ -53,7 +52,28 @@ const daifanCacheTTL = 10 * time.Minute
 type daifanTaxRatios struct {
 	subTax, mgmtTax, perfTax             map[string]float64
 	mgmtReceived, perfReceivable         map[string]float64
+	subOutstanding, mgmtOutstanding, perfOutstanding map[string]float64 // 最新返款明细里的未返（列位待确认，暂为空→校验显示"--"）
 	subOrders, mgmtOrders                map[string]bool
+}
+
+// rebateDetailOutstanding 取最新返款明细里该订单某费用的未返；未取到返回 nil。
+func rebateDetailOutstanding(d *daifanTaxRatios, oid, category string) *float64 {
+	if d == nil || oid == "" {
+		return nil
+	}
+	var m map[string]float64
+	switch category {
+	case "subscribe":
+		m = d.subOutstanding
+	case "management":
+		m = d.mgmtOutstanding
+	case "performance":
+		m = d.perfOutstanding
+	}
+	if v, ok := m[oid]; ok {
+		return &v
+	}
+	return nil
 }
 
 const (
@@ -65,6 +85,9 @@ const (
 	productLibraryToken = "W9OGfnjzQl8dOOdqPFwcL6gEnkf"
 	rebateFolderToken   = "HINVfSPnPl266ad6xVschyK4nnb"
 )
+
+// taxNotFound 标记扣税比例在「待返」sheet 未搜到，前端显示为「-」（空值）。
+const taxNotFound = "-"
 
 func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	location, _ := time.LoadLocation(cfg.CronTimezone)
@@ -880,34 +903,139 @@ func parseDaifanTaxRatios(raw [][]any) *daifanTaxRatios {
 	d := &daifanTaxRatios{
 		subTax: map[string]float64{}, mgmtTax: map[string]float64{}, perfTax: map[string]float64{},
 		mgmtReceived: map[string]float64{}, perfReceivable: map[string]float64{},
+		subOutstanding: map[string]float64{}, mgmtOutstanding: map[string]float64{}, perfOutstanding: map[string]float64{},
 		subOrders: map[string]bool{}, mgmtOrders: map[string]bool{},
 	}
 	if divIdx < 0 {
 		return d
 	}
+	mgmtHeader := findDaifanHeader(raw[:divIdx])
+	subHeader := findDaifanHeader(raw[divIdx+1:])
+	mgmtOrderIdx, mgmtReceivedIdx, perfReceivableIdx, mgmtTaxIdx, perfTaxIdx, mgmtOutstandingIdx, perfOutstandingIdx :=
+		daifanMgmtColumnIndexes(mgmtHeader)
+	subOrderIdx, subTaxIdx, subOutstandingIdx := daifanSubColumnIndexes(subHeader)
 	for i, r := range raw {
 		if len(r) == 0 {
 			continue
 		}
-		oid := strings.TrimSpace(fmt.Sprint(r[0]))
+		orderIdx := 0
+		if i < divIdx {
+			orderIdx = mgmtOrderIdx
+		} else if i > divIdx {
+			orderIdx = subOrderIdx
+		}
+		oid := daifanOrderID(r, orderIdx)
 		// 只接受 snowball 开头的真实订单号，跳过表头/说明/合计行
-		if !strings.HasPrefix(oid, "snowball") {
+		if oid == "" {
 			continue
 		}
 		if i < divIdx {
-			// 管理费/业绩报酬区：col6=管理费实收, col7=业绩报酬应收, col10=管理费扣税, col11=业绩报酬扣税
+			// 管理费/业绩报酬区：优先按表头识别，找不到再回退历史固定列。
 			d.mgmtOrders[oid] = true
-			d.mgmtReceived[oid] = cellFloat(r, 6)
-			d.perfReceivable[oid] = cellFloat(r, 7)
-			d.mgmtTax[oid] = cellFloat(r, 10)
-			d.perfTax[oid] = cellFloat(r, 11)
+			d.mgmtReceived[oid] = cellFloat(r, mgmtReceivedIdx)
+			d.perfReceivable[oid] = cellFloat(r, perfReceivableIdx)
+			d.mgmtTax[oid] = cellFloat(r, mgmtTaxIdx)
+			d.perfTax[oid] = cellFloat(r, perfTaxIdx)
+			if v, ok := cellFloatOK(r, mgmtOutstandingIdx); ok {
+				d.mgmtOutstanding[oid] = v
+			}
+			if v, ok := cellFloatOK(r, perfOutstandingIdx); ok {
+				d.perfOutstanding[oid] = v
+			}
 		} else if i > divIdx {
-			// 申购费区（自带表头"订单号"）：col8=申购费扣税
+			// 申购费区：优先按表头识别，找不到再回退历史固定列。
 			d.subOrders[oid] = true
-			d.subTax[oid] = cellFloat(r, 8)
+			d.subTax[oid] = cellFloat(r, subTaxIdx)
+			if v, ok := cellFloatOK(r, subOutstandingIdx); ok {
+				d.subOutstanding[oid] = v
+			}
 		}
 	}
 	return d
+}
+
+func findDaifanHeader(rows [][]any) []any {
+	for i := len(rows) - 1; i >= 0; i-- {
+		if headerLooksLikeDaifan(rows[i]) {
+			return rows[i]
+		}
+	}
+	return nil
+}
+
+func headerLooksLikeDaifan(row []any) bool {
+	for _, cell := range row {
+		if normalizeSheetFieldName(fmt.Sprint(cell)) == "订单号" {
+			return true
+		}
+	}
+	return false
+}
+
+func daifanMgmtColumnIndexes(header []any) (orderIdx, mgmtReceivedIdx, perfReceivableIdx, mgmtTaxIdx, perfTaxIdx, mgmtOutstandingIdx, perfOutstandingIdx int) {
+	orderIdx = findHeaderIndex(header, 0, "订单号")
+	mgmtReceivedIdx = findHeaderIndex(header, 6, "管理费", "实收")
+	perfReceivableIdx = findHeaderIndex(header, 7, "业绩", "应收")
+	mgmtTaxIdx = findHeaderIndex(header, 10, "管理费", "扣税")
+	perfTaxIdx = findHeaderIndex(header, 11, "业绩", "扣税")
+	// 当前待返 sheet 的管理费/业绩报酬区只在首行重复“管理费/业绩报酬”，
+	// 没有第二行“未返”字样，因此未返列优先按表头找，失败时回退到已确认的 16/17 列。
+	mgmtOutstandingIdx = findHeaderIndex(header, 16, "未返", "管理费")
+	perfOutstandingIdx = findHeaderIndex(header, 17, "未返", "业绩")
+	return
+}
+
+func daifanSubColumnIndexes(header []any) (orderIdx, subTaxIdx, subOutstandingIdx int) {
+	orderIdx = findHeaderIndex(header, 0, "订单号")
+	subTaxIdx = findHeaderIndex(header, 8, "申购", "扣税")
+	subOutstandingIdx = findHeaderIndex(header, 11, "未返", "申购")
+	return
+}
+
+func findHeaderIndex(header []any, fallback int, tokens ...string) int {
+	if len(header) == 0 {
+		return fallback
+	}
+	for idx, cell := range header {
+		text := normalizeSheetFieldName(fmt.Sprint(cell))
+		if text == "" {
+			continue
+		}
+		matched := true
+		for _, token := range tokens {
+			if !strings.Contains(text, normalizeSheetFieldName(token)) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return idx
+		}
+	}
+	return fallback
+}
+
+func daifanOrderID(row []any, orderIdx int) string {
+	if oid := orderIDAt(row, orderIdx); oid != "" {
+		return oid
+	}
+	for idx := range row {
+		if oid := orderIDAt(row, idx); oid != "" {
+			return oid
+		}
+	}
+	return ""
+}
+
+func orderIDAt(row []any, idx int) string {
+	if idx < 0 || idx >= len(row) {
+		return ""
+	}
+	oid := strings.TrimSpace(fmt.Sprint(row[idx]))
+	if strings.HasPrefix(oid, "snowball") {
+		return oid
+	}
+	return ""
 }
 
 func cellFloat(r []any, i int) float64 {
@@ -916,6 +1044,21 @@ func cellFloat(r []any, i int) float64 {
 	}
 	f, _ := strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(r[i])), 64)
 	return f
+}
+
+func cellFloatOK(r []any, i int) (float64, bool) {
+	if i < 0 || i >= len(r) || r[i] == nil {
+		return 0, false
+	}
+	text := strings.TrimSpace(fmt.Sprint(r[i]))
+	if text == "" {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0, false
+	}
+	return f, true
 }
 
 func (s *Server) dashboardIndices(c *gin.Context) {
@@ -1152,6 +1295,10 @@ func (s *Server) refreshPrices(c *gin.Context) {
 		}
 		for _, obs := range records {
 			if obs.MonthsSinceEntry == nil {
+				continue
+			}
+			// 已有历史收盘价的记录不覆盖，避免用今日实时价覆盖正确的历史数据
+			if obs.UnderlyingPrice != nil && *obs.UnderlyingPrice > 0 {
 				continue
 			}
 			price, ok := priceForObservation(s.store, product, obs.ObservationDate, priceResult.Prices)
@@ -2294,10 +2441,24 @@ func parseFirstKnockoutRatio(raw string, entryPrice float64) float64 {
 		return 0
 	}
 	price := numberFromCell(raw)
-	if !strings.Contains(raw, "%") && entryPrice != 0 && price > 2 {
+	if !strings.Contains(raw, "%") && looksLikeAbsoluteKnockoutPrice(price, entryPrice) {
 		return price / entryPrice
 	}
 	return parseRatioValue(raw)
+}
+
+// looksLikeAbsoluteKnockoutPrice 识别产品表里的「敲出」是否为绝对价格而非比例。
+// 经验规则：
+// 1. 大于 2 的值视为绝对价，例如 7000 点、103 元；
+// 2. 小于 1 且有有效入场价的值，常见于 ETF/LOF 这类 0.x 价格标的，视为绝对价。
+func looksLikeAbsoluteKnockoutPrice(value, entryPrice float64) bool {
+	if value <= 0 || entryPrice <= 0 {
+		return false
+	}
+	if value > 2 {
+		return true
+	}
+	return value < 1
 }
 
 func boolInt(value bool) int {
@@ -2472,7 +2633,7 @@ func (s *Server) rebatePending(c *gin.Context) {
 			if _, ok := taxLookup.subOrders[oid]; ok {
 				taxSubVal = taxLookup.subTax[oid]
 			} else {
-				taxSubVal = daifanNotReturnable
+				taxSubVal = taxNotFound
 				subReturnable = false
 			}
 			if _, ok := taxLookup.mgmtOrders[oid]; ok {
@@ -2481,8 +2642,8 @@ func (s *Server) rebatePending(c *gin.Context) {
 				managementReceivable = taxLookup.mgmtReceived[oid]
 				performanceReceivable = taxLookup.perfReceivable[oid]
 			} else {
-				taxMgmtVal = daifanNotReturnable
-				taxPerfVal = daifanNotReturnable
+				taxMgmtVal = taxNotFound
+				taxPerfVal = taxNotFound
 				mgmtReturnable = false
 				perfReturnable = false
 			}
@@ -2566,13 +2727,34 @@ func (s *Server) rebatePending(c *gin.Context) {
 				applyManualNumber(field)
 			}
 			if v, ok := row["manual_is_returnable"]; ok {
-				if v == nil {
-					row["is_returnable"] = ""
-				} else {
-					row["is_returnable"] = strings.TrimSpace(fmt.Sprint(v))
-				}
+				_ = v // 第10项：是否可返改为自动判定，忽略手工 is_returnable 覆盖
 			}
 		}
+		// 第7/8/10项：是否可返自动判定、剔除规则、校验 T/F（采用可能被手工覆盖后的最终值）
+		decision := computeRebateDecision(rebateDecisionInput{
+			OrderID:         oid,
+			SubRatio:        numberValue(row["subscribe_fee_ratio"]),
+			MgmtRatio:       numberValue(row["management_fee_ratio"]),
+			PerfRatio:       numberValue(row["performance_fee_ratio"]),
+			SubReturnable:   subReturnable,
+			MgmtReturnable:  mgmtReturnable,
+			OutstandingSub:  numberValue(row["outstanding_subscribe"]),
+			OutstandingMgmt: numberValue(row["outstanding_management"]),
+			OutstandingPerf: numberValue(row["outstanding_performance"]),
+			DetailSub:       rebateDetailOutstanding(taxLookup, oid, "subscribe"),
+			DetailMgmt:      rebateDetailOutstanding(taxLookup, oid, "management"),
+			DetailPerf:      rebateDetailOutstanding(taxLookup, oid, "performance"),
+		})
+		if decision.Exclude {
+			continue
+		}
+		if v, ok := filters["is_returnable"]; ok && v != "" && decision.IsReturnable != v {
+			continue
+		}
+		row["is_returnable"] = decision.IsReturnable
+		row["check_subscribe"] = decision.CheckSub
+		row["check_management"] = decision.CheckMgmt
+		row["check_performance"] = decision.CheckPerf
 		result = append(result, row)
 	}
 	if result == nil {
@@ -2809,9 +2991,7 @@ func (s *Server) rebateUpdateStatus(c *gin.Context) {
 		return
 	}
 	fields := map[string]any{}
-	if req.IsReturnable != "" {
-		fields["is_returnable"] = req.IsReturnable
-	}
+	_ = req.IsReturnable // 第10项：是否可返改为自动判定，接口保留字段但忽略手工写入。
 	if req.PlanSubscribe != nil {
 		fields["plan_subscribe"] = *req.PlanSubscribe
 	}

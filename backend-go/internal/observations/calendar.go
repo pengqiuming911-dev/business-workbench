@@ -72,6 +72,10 @@ func DatesForMonth(product model.Product, month string) []ObservationDate {
 			break
 		}
 		adjusted := AdjustForHoliday(rawDate, product.HolidayAdjust)
+		// 已完结产品：不生成完结日期之后的观察日
+		if product.CompleteDate != "" && adjusted > product.CompleteDate {
+			break
+		}
 		if adjusted >= monthStart && adjusted <= monthEnd {
 			result = append(result, ObservationDate{Date: adjusted, MonthsSinceEntry: months})
 		}
