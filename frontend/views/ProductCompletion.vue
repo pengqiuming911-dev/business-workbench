@@ -170,17 +170,15 @@
                 <div class="cal-card-name">{{ product.name || product.id }}</div>
                 <div class="cal-card-details">
                   <div v-if="(product.is_knockout_observable && product.knockout_price != null) || product.spot_price != null"
-                       :class="['cal-detail-row', 'cal-detail-knockout-spot', { 'cal-spot-only': !(product.is_knockout_observable && product.knockout_price != null) }]">
-                    <template v-if="product.is_knockout_observable && product.knockout_price != null">
+                       :class="['cal-detail-block', 'cal-detail-knockout-spot', { 'cal-spot-only': !(product.is_knockout_observable && product.knockout_price != null) }]">
+                    <div v-if="product.is_knockout_observable && product.knockout_price != null" class="cal-detail-row">
                       <span class="cal-detail-label">敲出</span>
                       <strong>{{ fmtCalPrice(product.knockout_price) }}</strong>
-                    </template>
-                    <template v-if="product.spot_price != null">
-                      <span class="cal-spot">
-                        <span class="cal-detail-label">{{ calendarStatus === 'completed' ? '当日' : '今日' }}</span>
-                        <strong>{{ fmtCalPrice(product.spot_price) }}</strong>
-                      </span>
-                    </template>
+                    </div>
+                    <div v-if="product.spot_price != null" class="cal-detail-row cal-spot-row">
+                      <span class="cal-detail-label">{{ calendarStatus === 'completed' ? '当日' : '今日' }}</span>
+                      <strong>{{ fmtCalPrice(product.spot_price) }}</strong>
+                    </div>
                   </div>
                   <div v-if="product.has_dividend_observation && product.dividend_line != null" class="cal-detail-row cal-detail-dividend">
                     <span class="cal-detail-label">派息</span>
@@ -895,16 +893,30 @@ function fmtCalPrice(val) {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  min-height: 22px;
-  padding: 3px 7px 3px 9px;
+  min-height: 20px;
+  padding: 2px 7px 2px 9px;
   border-left: 3px solid transparent;
   border-radius: 0 5px 5px 0;
   font-size: 11px;
 }
 
+.cal-detail-block {
+  border-left: 3px solid transparent;
+  border-radius: 0 5px 5px 0;
+  padding: 2px 0;
+}
+
+.cal-detail-block .cal-detail-row {
+  border-left: none;
+  border-radius: 0;
+  padding: 2px 7px 2px 6px;
+}
+
 .cal-detail-label {
   white-space: nowrap;
   font-weight: 600;
+  min-width: 2em;
+  display: inline-block;
 }
 
 .cal-detail-row strong {
@@ -918,22 +930,17 @@ function fmtCalPrice(val) {
   border-left-color: #2563a8;
   background: #eef4ff;
   color: #2563a8;
-  flex-wrap: wrap;
 }
 
-.cal-detail-knockout-spot strong {
+.cal-detail-knockout-spot .cal-detail-row strong {
   color: #1a4f8a;
 }
 
-.cal-detail-knockout-spot .cal-spot {
-  margin-left: 6px;
-}
-
-.cal-detail-knockout-spot .cal-spot .cal-detail-label {
+.cal-detail-knockout-spot .cal-spot-row .cal-detail-label {
   color: #6b5b95;
 }
 
-.cal-detail-knockout-spot .cal-spot strong {
+.cal-detail-knockout-spot .cal-spot-row strong {
   color: #4c3f73;
 }
 
