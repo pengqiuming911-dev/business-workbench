@@ -1253,7 +1253,8 @@ function downloadCSV() {
 }
 
 .input-compact {
-  min-width: 106px;
+  min-width: 80px !important;
+  width: 100px !important;
 }
 
 .input-select-compact {
@@ -1286,73 +1287,109 @@ function downloadCSV() {
   pointer-events: none;
 }
 
+/* --- Scrollable table container --- */
+.rebate-completed-page > .table-wrap {
+  overflow: auto;
+  max-height: calc(100vh - 240px);
+}
+
 /* --- Table --- */
 .completed-table {
   min-width: 2800px;
-  font-size: 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
   border-collapse: separate;
   border-spacing: 0;
+  background: var(--bg-card);
 }
 
 .completed-table thead {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 10;
 }
 
-.header-group-row th {
-  padding: 8px 10px;
-  font-size: 13px;
-  font-weight: 800;
-  text-align: center;
-  white-space: nowrap;
-  color: var(--ink-soft);
-  border-bottom: 1px solid var(--border);
-  background: #f1f5f9;
-  letter-spacing: 0.02em;
-}
-
-.header-group-row th[rowspan="2"] {
-  vertical-align: middle;
-  background: #f1f5f9;
-}
-
-.header-sub-row th {
-  padding: 6px 10px;
-  font-size: 12px;
+.completed-table .header-group-row th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 12px 14px;
+  font-size: 15px;
   font-weight: 700;
-  text-align: center;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--ink-strong);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-card);
+  letter-spacing: 0;
+}
+
+.completed-table .header-group-row th[rowspan="2"] {
+  vertical-align: middle;
+  background: var(--bg-card);
+}
+
+.completed-table .header-sub-row th {
+  position: sticky;
+  top: 44px;
+  z-index: 10;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
   white-space: nowrap;
   color: var(--ink-soft);
-  border-bottom: 2px solid var(--border);
-  letter-spacing: 0.01em;
+  border-bottom: 1px solid var(--border-soft);
+  letter-spacing: 0;
+  background: var(--bg-card);
 }
 
 /* Group header colors */
-.group-channel-ratio { background: #f0fdf4 !important; }
-.group-expense       { background: #eef2ff !important; }
+.completed-table .group-channel-ratio,
+.completed-table .group-expense { background: var(--bg-card) !important; }
 
-.sub-channel-ratio   { background: #f7fef9 !important; }
-.sub-expense         { background: #f5f7ff !important; }
+.completed-table .sub-channel-ratio,
+.completed-table .sub-expense { background: var(--bg-card) !important; }
 
 .completed-table td {
-  padding: 8px 10px;
+  padding: 12px 14px;
   white-space: nowrap;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+  background: var(--bg-card);
+}
+
+/* Sticky first column — body cells */
+.completed-table tbody .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: var(--bg-card);
 }
 
 .row-alt .sticky-col {
-  background: var(--bg-page);
+  background: #fcfcfd;
 }
 
-.completed-table tr:hover .sticky-col {
-  background: color-mix(in srgb, var(--brand) 4%, var(--bg-card));
+.row-alt td {
+  background: #fcfcfd;
 }
 
-.header-group-row .sticky-col {
-  z-index: 5;
+.completed-table tbody tr:hover .sticky-col {
+  background: #f7f8fa;
+}
+
+.completed-table tbody tr:hover td {
+  background: #f7f8fa;
+}
+
+/* Sticky first column — header cells need higher z-index */
+.completed-table thead .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 15;
   text-align: left;
 }
 
