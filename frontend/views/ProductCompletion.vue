@@ -896,15 +896,15 @@ function fmtCalPrice(val) {
   justify-content: space-between;
   gap: 8px;
   min-height: 22px;
-  padding: 3px 0 3px 9px;
+  padding: 3px 7px 3px 9px;
   border-left: 3px solid transparent;
+  border-radius: 0 5px 5px 0;
   font-size: 11px;
 }
 
 .cal-detail-label {
   white-space: nowrap;
   font-weight: 600;
-  color: var(--ink-soft);
 }
 
 .cal-detail-row strong {
@@ -912,16 +912,17 @@ function fmtCalPrice(val) {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: var(--ink-strong);
 }
 
 .cal-detail-knockout-spot {
   border-left-color: #2563a8;
+  background: #eef4ff;
+  color: #2563a8;
   flex-wrap: wrap;
 }
 
 .cal-detail-knockout-spot strong {
-  color: #1d4f8a;
+  color: #1a4f8a;
 }
 
 .cal-detail-knockout-spot .cal-spot {
@@ -929,7 +930,7 @@ function fmtCalPrice(val) {
 }
 
 .cal-detail-knockout-spot .cal-spot .cal-detail-label {
-  color: var(--ink-soft);
+  color: #6b5b95;
 }
 
 .cal-detail-knockout-spot .cal-spot strong {
@@ -937,15 +938,19 @@ function fmtCalPrice(val) {
 }
 
 .cal-detail-knockout-spot.cal-spot-only {
-  border-left-color: #6b5b95;
+  border-left-color: #7c6baa;
+  background: #f1edfb;
+  color: #6b5b95;
 }
 
 .cal-detail-dividend {
-  border-left-color: #16806a;
+  border-left-color: #0d9668;
+  background: #eafaf3;
+  color: #0d9668;
 }
 
 .cal-detail-dividend strong {
-  color: #116451;
+  color: #0a7a54;
 }
 
 .poster-grid {
