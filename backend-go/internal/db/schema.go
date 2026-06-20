@@ -101,7 +101,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   transaction_date TEXT,
   flight_id TEXT,
   counterparty TEXT,
+  channel_or_direct TEXT,
   subscribe_amount REAL,
+  subscribe_fee_rate REAL,
   product_name TEXT,
   customer_name TEXT,
   actual_buyer TEXT,
@@ -109,6 +111,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   subscribe_fee_ratio REAL,
   management_fee_ratio REAL,
   performance_fee_ratio REAL,
+  management_fee_received REAL,
+  performance_fee_receivable REAL,
   tax_subscribe_ratio REAL,
   tax_management_ratio REAL,
   tax_performance_ratio REAL,
@@ -136,6 +140,33 @@ CREATE TABLE IF NOT EXISTS rebate_status (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS rebate_pending_manual (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id TEXT NOT NULL UNIQUE,
+  principal REAL,
+  subscribe_receivable REAL,
+  management_fee_received REAL,
+  performance_fee_receivable REAL,
+  subscribe_fee_ratio REAL,
+  management_fee_ratio REAL,
+  performance_fee_ratio REAL,
+  tax_subscribe_ratio REAL,
+  tax_management_ratio REAL,
+  tax_performance_ratio REAL,
+  expected_subscribe REAL,
+  expected_management REAL,
+  expected_performance REAL,
+  returned_subscribe REAL,
+  returned_management REAL,
+  returned_performance REAL,
+  outstanding_subscribe REAL,
+  outstanding_management REAL,
+  outstanding_performance REAL,
+  is_returnable TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS rebate_completed (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id TEXT,
@@ -158,6 +189,7 @@ CREATE TABLE IF NOT EXISTS rebate_completed (
   payment_year TEXT,
   payment_month TEXT,
   payment_day TEXT,
+  ignored_conflicts TEXT,
   source TEXT DEFAULT 'manual',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
@@ -258,5 +290,21 @@ CREATE TABLE IF NOT EXISTS agent_messages (
   tool_call_id TEXT DEFAULT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (conversation_id) REFERENCES agent_conversations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS rebate_detail_data (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  raw_json TEXT NOT NULL DEFAULT '[]',
+  sheet_name TEXT NOT NULL DEFAULT '',
+  sheet_token TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS rebate_detail_sync_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  synced_at TEXT,
+  row_count INTEGER,
+  sheet_name TEXT,
+  sheet_token TEXT
 );
 `

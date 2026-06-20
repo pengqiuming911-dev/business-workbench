@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/joho/godotenv"
 )
@@ -27,13 +28,13 @@ type Config struct {
 }
 
 func Load() Config {
-	_ = godotenv.Load(".env")
+	_ = godotenv.Load(".env", filepath.Join("backend-go", ".env"))
 
 	smtpUser := os.Getenv("SMTP_USER")
 	return Config{
 		Port:              getEnv("PORT", "3001"),
 		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:5173"),
-		DatabasePath:      getEnv("DATABASE_PATH", "data.sqlite"),
+		DatabasePath:      resolveDatabasePath(),
 		FeishuAppID:       os.Getenv("FEISHU_APP_ID"),
 		FeishuAppSecret:   os.Getenv("FEISHU_APP_SECRET"),
 		FeishuRedirectURI: os.Getenv("FEISHU_REDIRECT_URI"),
@@ -49,6 +50,22 @@ func Load() Config {
 		SMTPPass:          os.Getenv("SMTP_PASS"),
 		SMTPFrom:          getEnv("SMTP_FROM", smtpUser),
 	}
+}
+
+func resolveDatabasePath() string {
+	if value := os.Getenv("DATABASE_PATH"); value != "" {
+		return value
+	}
+	candidates := []string{
+		"data.sqlite",
+		filepath.Join("backend-go", "data.sqlite"),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return "data.sqlite"
 }
 
 func getEnv(key string, fallback string) string {

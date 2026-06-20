@@ -41,7 +41,9 @@ type TransactionRow struct {
 	TransactionDate     string   `json:"transaction_date"`
 	FlightID            string   `json:"flight_id"`
 	Counterparty        string   `json:"counterparty"`
+	ChannelOrDirect     string   `json:"channel_or_direct"`
 	SubscribeAmount     *float64 `json:"subscribe_amount,omitempty"`
+	SubscribeFeeRate    *float64 `json:"subscribe_fee_rate,omitempty"`
 	ProductName         string   `json:"product_name"`
 	CustomerName        string   `json:"customer_name"`
 	ActualBuyer         string   `json:"actual_buyer"`
@@ -49,6 +51,8 @@ type TransactionRow struct {
 	SubscribeFeeRatio   *float64 `json:"subscribe_fee_ratio,omitempty"`
 	ManagementFeeRatio  *float64 `json:"management_fee_ratio,omitempty"`
 	PerformanceFeeRatio *float64 `json:"performance_fee_ratio,omitempty"`
+	ManagementFeeReceived *float64 `json:"management_fee_received,omitempty"`
+	PerformanceFeeReceivable *float64 `json:"performance_fee_receivable,omitempty"`
 	RebateTarget        string   `json:"rebate_target"`
 	FlightDate          string   `json:"flight_date"`
 	HoldingStatus       string   `json:"holding_status"`
@@ -165,6 +169,7 @@ type RebateCompleted struct {
 	PaymentYear             string   `json:"payment_year"`
 	PaymentMonth            string   `json:"payment_month"`
 	PaymentDay              string   `json:"payment_day"`
+	IgnoredConflicts        []string `json:"ignored_conflicts,omitempty"`
 	Source                  string   `json:"source"`
 	CreatedAt               string   `json:"created_at"`
 	UpdatedAt               string   `json:"updated_at"`

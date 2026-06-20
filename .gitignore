@@ -12,6 +12,9 @@ frontend/.env
 *.log
 *.sqlite
 *.sqlite3
+*.sqlite.backup*
+backend-go/server-dev.exe
+backend-go/server-dev.exe~
 
 .DS_Store
 Thumbs.db
