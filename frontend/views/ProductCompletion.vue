@@ -39,7 +39,11 @@
 
       <div v-if="filteredProducts.length">
         <PanelCard title="存续产品观察概览">
-          <div class="table-wrap">
+          <div class="table-section all-table-section">
+            <div class="table-toolbar">
+              <FullscreenToggle target=".product-completion-page .all-table-section" />
+            </div>
+            <div class="table-wrap">
             <table class="overview-table">
               <thead>
                 <tr>
@@ -125,8 +129,9 @@
                 </template>
               </tbody>
             </table>
-          </div>
+            </div>
           <p class="table-summary">共 {{ filteredProducts.length }} 个存续产品</p>
+          </div>
         </PanelCard>
       </div>
       <div v-else-if="loaded && !filteredProducts.length" class="empty-state">
@@ -199,7 +204,11 @@
       <div v-if="todayLoading" class="loading-state"><p>加载中...</p></div>
       <div v-else-if="todayProducts.length">
         <PanelCard title="今日观察（{{ todayDate }}）">
-          <div class="table-wrap">
+          <div class="table-section today-table-section">
+            <div class="table-toolbar">
+              <FullscreenToggle target=".product-completion-page .today-table-section" />
+            </div>
+            <div class="table-wrap">
             <table class="overview-table">
               <thead>
                 <tr>
@@ -236,8 +245,9 @@
                 </tr>
               </tbody>
             </table>
-          </div>
+            </div>
           <p class="table-summary">今日共 {{ todayProducts.length }} 个产品需观察</p>
+          </div>
         </PanelCard>
       </div>
       <div v-else-if="todayLoaded" class="empty-state">
@@ -294,6 +304,7 @@
 import { ref, computed, onMounted } from 'vue'
 import PanelCard from '../components/PanelCard.vue'
 import PosterTemplate from '../components/PosterTemplate.vue'
+import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 const activeTab = ref('all')
 const searchText = ref('')
@@ -587,8 +598,27 @@ function fmtCalPrice(val) {
 }
 
 .panel-card .table-wrap {
-  flex: none;
+  flex: 1;
+  min-height: 0;
   max-height: 65vh;
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.table-section.is-fullscreen .table-wrap {
+  max-height: none;
+}
+
+.table-section.is-fullscreen .table-summary {
+  margin: 0;
+  padding: 10px 16px;
+  text-align: left;
+  background: #fff;
+  border-top: 1px solid var(--border-soft);
 }
 
 .file-source { flex: 1; display: flex; align-items: center; gap: 10px; }

@@ -38,7 +38,7 @@
       <div class="filter-actions">
         <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
-        <FullscreenToggle target=".product-analysis-page .table-wrap" />
+        <FullscreenToggle target=".product-analysis-page .table-section" />
       </div>
     </div>
 
@@ -86,7 +86,7 @@
     </div>
 
     <div v-if="loading" class="loading-state">正在加载数据...</div>
-    <div v-else-if="items.length > 0">
+    <div v-else-if="items.length > 0" class="table-section">
       <div class="table-wrap">
         <table class="data-table product-table">
           <colgroup>
@@ -159,8 +159,9 @@
             </tr>
           </tbody>
         </table>
+      </div>
 
-        <div class="pagination">
+      <div class="pagination">
           <span class="text-label">共 {{ total }} 条</span>
           <div class="pagination-controls">
             <button class="btn btn-secondary btn-sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">上一页</button>
@@ -168,7 +169,6 @@
             <button class="btn btn-secondary btn-sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">下一页</button>
           </div>
         </div>
-      </div>
     </div>
     <div v-else-if="loaded" class="empty-state">暂无产品数据</div>
   </div>
@@ -351,12 +351,21 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.product-analysis-page > .pagination {
+.table-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-section > .pagination {
   flex-shrink: 0;
 }
 
 .table-wrap {
-  max-height: calc(100vh - 280px);
+  flex: 1;
+  min-height: 0;
+  max-height: none;
 }
 
 .filter-bar {
