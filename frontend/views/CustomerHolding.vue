@@ -467,7 +467,7 @@ onMounted(async () => {
 }
 
 .tx-table th {
-  background: #f1f5f9;
+  background: #fef9ee;
   color: var(--ink-strong);
 }
 
@@ -486,11 +486,11 @@ onMounted(async () => {
 }
 
 .tx-table th.sticky-col {
-  background: #f1f5f9;
+  background: #fef9ee;
 }
 
 .tx-table th.sticky-col-2 {
-  box-shadow: -4px 0 0 0 #f1f5f9;
+  box-shadow: -4px 0 0 0 #fef9ee;
 }
 
 .obs-cell {

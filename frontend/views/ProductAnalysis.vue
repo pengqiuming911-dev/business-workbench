@@ -474,7 +474,7 @@ onMounted(async () => {
   letter-spacing: 0.04em;
   white-space: nowrap;
   color: var(--ink-strong);
-  background: var(--bg-card);
+  background: #fef9ee;
   border-bottom: 2px solid var(--border);
   text-align: left;
 }
@@ -552,11 +552,11 @@ onMounted(async () => {
 
 .product-table th.sticky-col {
   z-index: 5;
-  background: var(--bg-card);
+  background: #fef9ee;
 }
 .product-table th.sticky-col-2,
 .product-table th.sticky-col-3 {
-  box-shadow: -4px 0 0 0 var(--bg-card);
+  box-shadow: -4px 0 0 0 #fef9ee;
 }
 
 .input-narrow {

@@ -556,7 +556,7 @@ function fmtCalPrice(val) {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: var(--bg-card);
+  background: #fef9ee;
 }
 
 .overview-table th.th-sub {
@@ -611,7 +611,7 @@ function fmtCalPrice(val) {
   background: var(--bg-zebra);
 }
 .data-row:hover .sticky-col { background: #eef2f7; }
-.overview-table th.sticky-col { z-index: 6; background: var(--bg-card); }
+.overview-table th.sticky-col { z-index: 6; background: #fef9ee; }
 
 .chevron {
   font-size: 14px;
