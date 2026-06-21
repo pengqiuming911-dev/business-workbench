@@ -32,8 +32,8 @@
             <table class="overview-table">
               <thead>
                 <tr>
-                  <th class="col-left sticky-col">航班编号</th>
-                  <th class="col-left">产品名称</th>
+                  <th class="col-left sticky-col sticky-col-1">航班编号</th>
+                  <th class="col-left sticky-col sticky-col-2">产品名称</th>
                   <th class="col-left">私募管理人</th>
                   <th class="col-left">持有状态</th>
                   <th class="col-left">代码</th>
@@ -58,11 +58,11 @@
               <tbody>
                 <template v-for="p in filteredProducts" :key="p.id">
                   <tr class="data-row" @click="toggleExpand(p.id)">
-                    <td class="col-left sticky-col">
+                    <td class="col-left sticky-col sticky-col-1">
                       <span class="chevron" :class="{ open: expandedId === p.id }">›</span>
                       {{ p.id }}
                     </td>
-                    <td class="col-left">{{ p.name }}</td>
+                    <td class="col-left sticky-col sticky-col-2">{{ p.name }}</td>
                     <td class="col-left">{{ p.manager }}</td>
                     <td class="col-left"><span class="status-dot status-active">{{ p.holding_status }}</span></td>
                     <td class="col-left code-cell">{{ p.code }}</td>
@@ -602,10 +602,11 @@ function fmtCalPrice(val) {
 
 .sticky-col {
   position: sticky;
-  left: 0;
   background: var(--bg-card);
   z-index: 3;
 }
+.sticky-col-1 { left: 0; }
+.sticky-col-2 { left: 120px; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.12); }
 .overview-table tbody tr:nth-child(even) .sticky-col {
   background: var(--bg-zebra);
 }
