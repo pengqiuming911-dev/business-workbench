@@ -9,14 +9,6 @@
     />
 
     <div class="workbench-content" :class="{ expanded: sidebarCollapsed }">
-      <header class="workbench-topbar">
-        <div class="topbar-actions">
-          <button class="topbar-btn" type="button" @click="searchOpen = true">
-            <Search :size="18" :stroke-width="2" />
-          </button>
-        </div>
-      </header>
-
       <main class="workbench-main">
         <slot />
       </main>
@@ -39,7 +31,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Search, MessageSquare } from '@lucide/vue'
+import { MessageSquare } from '@lucide/vue'
 import SidebarNav from './SidebarNav.vue'
 import AgentDrawer from './AgentDrawer.vue'
 import GlobalSearch from './GlobalSearch.vue'
@@ -91,45 +83,6 @@ onUnmounted(() => {
   margin-left: 64px;
 }
 
-.workbench-topbar {
-  flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  z-index: 60;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 8px 32px 4px;
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--bg-page);
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.topbar-btn {
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border-soft);
-  border-radius: 50%;
-  background: var(--bg-card);
-  color: var(--ink-soft);
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
-}
-
-.topbar-btn:hover {
-  background: var(--brand-soft);
-  color: var(--brand);
-}
-
 .workbench-main {
   flex: 1;
   min-height: 0;
@@ -138,7 +91,7 @@ onUnmounted(() => {
   overflow: hidden;
   width: 100%;
   max-width: 1680px;
-  padding: 16px 32px 16px;
+  padding: 8px 32px 16px;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -173,12 +126,8 @@ onUnmounted(() => {
     margin-left: 0;
   }
 
-  .workbench-topbar {
-    padding: 10px 14px;
-  }
-
   .workbench-main {
-    padding: 16px 14px 48px;
+    padding: 8px 14px 48px;
   }
 }
 </style>

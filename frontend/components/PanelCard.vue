@@ -1,6 +1,9 @@
 <template>
   <div class="panel-card">
-    <h3 v-if="title" class="panel-card-header">{{ title }}</h3>
+    <div v-if="title || $slots['header-actions']" class="panel-card-header-row">
+      <h3 v-if="title" class="panel-card-header">{{ title }}</h3>
+      <slot name="header-actions" />
+    </div>
     <slot />
   </div>
 </template>
@@ -12,5 +15,14 @@ defineProps({
 </script>
 
 <style scoped>
-/* Depends on .panel-card and .panel-card-header defined in global main.css */
+.panel-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.panel-card-header-row .panel-card-header {
+  margin-bottom: 0;
+}
 </style>

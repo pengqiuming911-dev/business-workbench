@@ -9,35 +9,25 @@
     <div v-if="activeTab === 'all'">
       <p class="text-body" style="margin-bottom: 24px;">展示存续产品（持有中）的派息与敲出观察情况。数据来源为航班服务交易总表 · 产品表。</p>
 
-      <PanelCard title="操作">
-        <div class="form-row">
-          <label>数据来源</label>
-          <div class="file-source">
-            <span class="text-card-title">📊 航班服务交易总表 · 产品表</span>
-            <span class="badge badge-blue">本地数据库</span>
-          </div>
-        </div>
-        <div class="form-row">
-          <label>搜索</label>
-          <input v-model="searchText" type="text" class="input" placeholder="按产品名称或航班编号搜索..." />
-        </div>
+      <div class="compact-toolbar">
+        <input v-model="searchText" type="text" class="input" placeholder="按产品名称或航班编号搜索..." style="max-width: 280px;" />
         <button class="btn btn-primary" :disabled="refreshing" @click="refreshPrices">
           {{ refreshing ? '刷新中...' : '刷新标的价格' }}
         </button>
         <button class="btn btn-secondary" :disabled="generating" @click="generateObservations">
           {{ generating ? '生成中...' : '生成观察记录' }}
         </button>
-        <span v-if="lastUpdated" class="text-label" style="margin-left: 16px;">最后更新: {{ lastUpdated }}</span>
-        <span v-if="errorMsg" class="error-msg" style="margin-left: 12px;">{{ errorMsg }}</span>
-        <span v-if="successMsg" class="success-msg" style="margin-left: 12px;">{{ successMsg }}</span>
-      </PanelCard>
+        <span v-if="lastUpdated" class="text-label" style="margin-left: 8px;">最后更新: {{ lastUpdated }}</span>
+        <span v-if="errorMsg" class="error-msg" style="margin-left: 8px;">{{ errorMsg }}</span>
+        <span v-if="successMsg" class="success-msg" style="margin-left: 8px;">{{ successMsg }}</span>
+      </div>
 
       <div v-if="filteredProducts.length">
         <PanelCard title="存续产品观察概览">
+          <template #header-actions>
+            <FullscreenToggle target=".product-completion-page .all-table-section" />
+          </template>
           <div class="table-section all-table-section">
-            <div class="table-toolbar">
-              <FullscreenToggle target=".product-completion-page .all-table-section" />
-            </div>
             <div class="table-wrap">
             <table class="overview-table">
               <thead>
@@ -483,6 +473,14 @@ function fmtCalPrice(val) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.compact-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .product-completion-page > .page-header {
