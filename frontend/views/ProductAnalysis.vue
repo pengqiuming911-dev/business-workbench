@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="product-analysis-page">
     <div class="filter-bar">
       <div class="filter-group">
         <label>申购日期</label>
@@ -326,6 +326,33 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+:deep(.workbench-main) {
+  max-width: none;
+}
+
+.product-analysis-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.product-analysis-page > .filter-bar {
+  flex-shrink: 0;
+}
+
+.product-analysis-page > .advanced-toggle {
+  flex-shrink: 0;
+}
+
+.product-analysis-page > .advanced-bar {
+  flex-shrink: 0;
+}
+
+.product-analysis-page > .pagination {
+  flex-shrink: 0;
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;

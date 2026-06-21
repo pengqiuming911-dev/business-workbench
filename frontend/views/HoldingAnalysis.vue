@@ -61,4 +61,19 @@ watch(activeTab, (value) => {
 :deep(.workbench-main) {
   max-width: none;
 }
+
+.holding-analysis-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.holding-analysis-page > .page-header {
+  flex-shrink: 0;
+}
+
+.holding-analysis-page > .tab-bar {
+  flex-shrink: 0;
+}
 </style>

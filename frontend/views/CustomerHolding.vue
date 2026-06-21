@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="customer-holding-page">
     <div class="filter-bar">
       <div class="filter-group">
         <label>客户</label>
@@ -367,6 +367,37 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+:deep(.workbench-main) {
+  max-width: none;
+}
+
+.customer-holding-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.customer-holding-page > .filter-bar {
+  flex-shrink: 0;
+}
+
+.customer-holding-page > .advanced-toggle {
+  flex-shrink: 0;
+}
+
+.customer-holding-page > .advanced-bar {
+  flex-shrink: 0;
+}
+
+.customer-holding-page > .update-hint {
+  flex-shrink: 0;
+}
+
+.customer-holding-page > .pagination {
+  flex-shrink: 0;
+}
+
 .checkbox-label {
   display: inline-flex;
   align-items: center;
