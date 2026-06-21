@@ -37,18 +37,17 @@
                   <th class="col-left">私募管理人</th>
                   <th class="col-left">持有状态</th>
                   <th class="col-left">代码</th>
-                  <th class="num">入场价</th>
                   <th class="col-left">入场日</th>
                   <th class="num">存续月</th>
                   <th class="num">锁定期(月)</th>
-                  <th class="col-left">最近观察日</th>
                   <th class="col-left">下个观察日</th>
+                  <th class="num">入场价</th>
                   <th class="num">标的价格</th>
                   <th class="num">降敲</th>
                   <th class="num">敲出价</th>
                   <th class="num">派息线</th>
-                  <th class="col-center">是否敲出</th>
-                  <th class="col-center">是否派息</th>
+                  <th class="col-center th-sub">是否敲出<span>当前点位预测</span></th>
+                  <th class="col-center th-sub">是否派息<span>当前点位预测</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -62,12 +61,11 @@
                     <td class="col-left">{{ p.manager }}</td>
                     <td class="col-left"><span class="status-dot status-active">{{ p.holding_status }}</span></td>
                     <td class="col-left code-cell">{{ p.code }}</td>
-                    <td class="num">{{ formatPrice(p.entry_price, p) }}</td>
                     <td class="col-left">{{ p.issue_date || '--' }}</td>
                     <td class="num">{{ computeMonthsSince(p) }}</td>
                     <td class="num">{{ p.lock_months || '--' }}</td>
-                    <td class="col-left">{{ latestObs(p)?.date || '--' }}</td>
                     <td class="col-left next-date">{{ p.next_observation_date || '--' }}</td>
+                    <td class="num">{{ formatPrice(p.entry_price, p) }}</td>
                     <td class="num">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
                     <td class="num">{{ p.monthly_decrease ?? '--' }}</td>
                     <td class="num">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
@@ -80,7 +78,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && p.observations.length" class="detail-row">
-                    <td colspan="17" class="detail-cell">
+                    <td colspan="16" class="detail-cell">
                       <div class="detail-label">历史观察日明细</div>
                       <table class="detail-table">
                         <thead>
@@ -94,9 +92,9 @@
                           </tr>
                         </thead>
                         <tbody>
-                          <tr v-for="obs in p.observations" :key="obs.date">
+                          <tr v-for="(obs, obsIdx) in p.observations" :key="obs.date">
                             <td>{{ obs.date }}</td>
-                            <td class="num">{{ formatPrice(obs.underlying_price, p) }}</td>
+                            <td class="num">{{ obsIdx === p.observations.length - 1 ? '-' : formatPrice(obs.underlying_price, p) }}</td>
                             <td class="num">{{ formatPrice(obs.knockout_price, p) }}</td>
                             <td class="num">{{ formatPrice(obs.dividend_line, p) }}</td>
                             <td :class="knockoutClass(obs.is_knocked_out)">{{ obs.is_knocked_out }}</td>
@@ -107,7 +105,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && !p.observations.length" class="detail-row">
-                    <td colspan="17" class="detail-cell">
+                    <td colspan="16" class="detail-cell">
                       <div class="detail-empty">暂无观察日记录</div>
                     </td>
                   </tr>
@@ -529,7 +527,7 @@ function fmtCalPrice(val) {
 .overview-table {
   width: 100%;
   font-size: 13px;
-  min-width: 1400px;
+  min-width: 1300px;
 }
 
 .overview-table th {
@@ -542,8 +540,23 @@ function fmtCalPrice(val) {
   white-space: nowrap;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 5;
   background: var(--bg-card);
+}
+
+.overview-table th.th-sub {
+  white-space: normal;
+  line-height: 1.2;
+  vertical-align: bottom;
+}
+
+.overview-table th.th-sub span {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  letter-spacing: 0;
+  margin-top: 2px;
 }
 
 .data-row {
@@ -574,13 +587,13 @@ function fmtCalPrice(val) {
   position: sticky;
   left: 0;
   background: var(--bg-card);
-  z-index: 2;
+  z-index: 3;
 }
 .overview-table tbody tr:nth-child(even) .sticky-col {
   background: var(--bg-zebra);
 }
 .data-row:hover .sticky-col { background: #eef2f7; }
-.overview-table th.sticky-col { z-index: 3; background: var(--bg-card); }
+.overview-table th.sticky-col { z-index: 6; background: var(--bg-card); }
 
 .chevron {
   font-size: 14px;
@@ -631,28 +644,28 @@ function fmtCalPrice(val) {
   font-weight: 600;
   color: var(--ink-soft);
   letter-spacing: 0.04em;
-  padding: 12px 16px 8px;
+  padding: 8px 12px 4px;
 }
 
 .detail-empty {
   font-size: 12px;
   color: var(--ink-soft);
-  padding: 12px 16px;
+  padding: 8px 12px;
 }
 
 .detail-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 11px;
-  margin: 0 16px 12px;
+  margin: 0 12px 8px;
 }
 
 .detail-table th {
-  padding: 5px 12px;
+  padding: 3px 10px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-soft);
   font-weight: 800;
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   background: transparent;
   text-align: left;
@@ -663,7 +676,7 @@ function fmtCalPrice(val) {
 }
 
 .detail-table td {
-  padding: 5px 12px;
+  padding: 2px 10px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink);
 }
