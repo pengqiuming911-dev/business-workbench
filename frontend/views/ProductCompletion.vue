@@ -570,6 +570,27 @@ function fmtCalPrice(val) {
   max-width: none;
 }
 
+.product-completion-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.product-completion-page > .page-header {
+  flex-shrink: 0;
+}
+
+.product-completion-page > .tab-bar {
+  flex-shrink: 0;
+}
+
+.panel-card .table-wrap {
+  flex: none;
+  max-height: 65vh;
+}
+
 .file-source { flex: 1; display: flex; align-items: center; gap: 10px; }
 
 .month-input { width: 180px; flex: none; }
