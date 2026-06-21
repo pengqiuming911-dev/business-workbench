@@ -76,4 +76,12 @@ watch(activeTab, (value) => {
 .rebate-analysis-page > .tab-bar {
   flex-shrink: 0;
 }
+
+:deep(.rebate-pending-page),
+:deep(.rebate-completed-page) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 </style>

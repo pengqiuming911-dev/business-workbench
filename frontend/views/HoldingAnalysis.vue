@@ -76,4 +76,12 @@ watch(activeTab, (value) => {
 .holding-analysis-page > .tab-bar {
   flex-shrink: 0;
 }
+
+:deep(.product-analysis-page),
+:deep(.customer-holding-page) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 </style>
