@@ -61,4 +61,19 @@ watch(activeTab, (value) => {
 :deep(.workbench-main) {
   max-width: none;
 }
+
+.rebate-analysis-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.rebate-analysis-page > .page-header {
+  flex-shrink: 0;
+}
+
+.rebate-analysis-page > .tab-bar {
+  flex-shrink: 0;
+}
 </style>

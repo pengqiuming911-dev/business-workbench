@@ -811,6 +811,33 @@ function downloadCSV() {
   max-width: none;
 }
 
+.rebate-pending-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.rebate-pending-page > .page-header {
+  flex-shrink: 0;
+}
+
+.rebate-pending-page > .filter-bar {
+  flex-shrink: 0;
+}
+
+.rebate-pending-page > .action-bar {
+  flex-shrink: 0;
+}
+
+.rebate-pending-page > .batch-panel {
+  flex-shrink: 0;
+}
+
+.rebate-pending-page > .pagination {
+  flex-shrink: 0;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
