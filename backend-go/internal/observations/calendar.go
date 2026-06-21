@@ -175,7 +175,10 @@ func ComputeDividendLine(product model.Product) *float64 {
 func EvaluateObservation(product model.Product, obsDate string, underlyingPrice float64, monthsSinceEntry int) Evaluation {
 	dividendLine := ComputeDividendLine(product)
 	isDividend := "否"
-	if dividendLine != nil && underlyingPrice >= *dividendLine {
+	if product.MonthlyCoupon == nil {
+		isDividend = "不观察"
+		dividendLine = nil
+	} else if dividendLine != nil && underlyingPrice >= *dividendLine {
 		isDividend = "是"
 	}
 

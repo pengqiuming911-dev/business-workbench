@@ -369,11 +369,14 @@ function toggleExpand(id) {
 }
 
 const filteredProducts = computed(() => {
-  if (!searchText.value) return products.value
-  const q = searchText.value.toLowerCase()
-  return products.value.filter(p =>
-    (p.name && p.name.toLowerCase().includes(q)) || p.id.toLowerCase().includes(q)
-  )
+  let list = products.value.filter(p => !p.name || !p.name.includes('【专】'))
+  if (searchText.value) {
+    const q = searchText.value.toLowerCase()
+    list = list.filter(p =>
+      (p.name && p.name.toLowerCase().includes(q)) || p.id.toLowerCase().includes(q)
+    )
+  }
+  return list
 })
 
 const calendarMap = computed(() => {
@@ -456,6 +459,7 @@ function knockoutClass(status) {
 function dividendClass(status) {
   if (status === '是') return 'result-yes-dividend'
   if (status === '否') return 'result-no'
+  if (status === '不观察') return 'result-na'
   return ''
 }
 
