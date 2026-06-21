@@ -73,11 +73,16 @@ onUnmounted(() => {
 
 <style scoped>
 .workbench-shell {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
 }
 
 .workbench-content {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   margin-left: 208px;
   transition: margin-left 220ms ease;
 }
@@ -87,6 +92,7 @@ onUnmounted(() => {
 }
 
 .workbench-topbar {
+  flex-shrink: 0;
   position: sticky;
   top: 0;
   z-index: 60;
@@ -125,6 +131,11 @@ onUnmounted(() => {
 }
 
 .workbench-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   width: 100%;
   max-width: 1680px;
   padding: 24px 32px 72px;

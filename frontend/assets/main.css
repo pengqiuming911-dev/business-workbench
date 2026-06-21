@@ -273,6 +273,9 @@ select.input {
 
 .table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: #fff;
