@@ -140,6 +140,7 @@
           查询
         </button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+        <FullscreenToggle target=".rebate-pending-page .table-section" />
       </div>
     </div>
 
@@ -366,7 +367,6 @@
       <div class="pagination">
         <span class="text-label">共 {{ filteredItems.length }} 条（筛选后） / {{ items.length }} 条（全部） · 第 {{ page }} / {{ totalPages }} 页</span>
         <div class="pagination-controls">
-          <FullscreenToggle target=".rebate-pending-page .table-section" />
           <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
           <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
         </div>

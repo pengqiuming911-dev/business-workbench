@@ -67,6 +67,7 @@
           查询
         </button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+        <FullscreenToggle target=".rebate-completed-page .table-section" />
       </div>
     </div>
 
@@ -215,9 +216,6 @@
           </tr>
         </tbody>
       </table>
-      </div>
-      <div class="table-bottom-actions">
-        <FullscreenToggle target=".rebate-completed-page .table-section" />
       </div>
     </div>
 
