@@ -342,11 +342,29 @@ onMounted(() => {
 </script>
 
 <style scoped>
+:deep(.workbench-shell) {
+  height: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+:deep(.workbench-content) {
+  flex: 1;
+  min-height: 0;
+}
+
+:deep(.workbench-main) {
+  flex: 1;
+  min-height: 0;
+}
+
 .agent-shell {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 20px;
-  min-height: calc(100vh - 88px);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .conversation-sidebar {

@@ -434,6 +434,12 @@ function formatTime(iso) {
 </script>
 
 <style scoped>
+.data-preparation-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .auth-row { display: flex; align-items: center; gap: 12px; }
 .source-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
 .source-icon { font-size: 28px; flex-shrink: 0; }

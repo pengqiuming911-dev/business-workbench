@@ -67,6 +67,7 @@
           查询
         </button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+        <FullscreenToggle target=".rebate-completed-page .table-section" />
       </div>
     </div>
 
@@ -106,7 +107,8 @@
     </div>
 
     <!-- Data table -->
-    <div v-else-if="items.length > 0" class="table-wrap">
+    <div v-else-if="items.length > 0" class="table-section">
+      <div class="table-wrap">
       <div v-if="validationSummary.count > 0" class="validation-banner">
         检测到 {{ validationSummary.count }} 条已返记录存在校验冲突，共 {{ validationSummary.issueCount }} 项，请优先处理。
       </div>
@@ -214,6 +216,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
     <!-- Add record modal -->
@@ -411,6 +414,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { Search, Plus, Upload, Download, Trash2, X } from '@lucide/vue'
+import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 defineProps({
   embedded: { type: Boolean, default: false },
@@ -1252,6 +1256,25 @@ function downloadCSV() {
   max-width: none;
 }
 
+.rebate-completed-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.rebate-completed-page > .page-header {
+  flex-shrink: 0;
+}
+
+.rebate-completed-page > .filter-bar {
+  flex-shrink: 0;
+}
+
+.rebate-completed-page > .action-bar {
+  flex-shrink: 0;
+}
+
 .input-compact {
   min-width: 80px !important;
   width: 100px !important;
@@ -1288,8 +1311,16 @@ function downloadCSV() {
 }
 
 /* --- Scrollable table container --- */
-.rebate-completed-page > .table-wrap {
+.rebate-completed-page > .table-section {
+  flex: 1;
+  min-height: 0;
+}
+
+.rebate-completed-page > .table-section > .table-wrap {
   overflow-x: auto;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
 }
 
 /* --- Table --- */
@@ -1303,9 +1334,7 @@ function downloadCSV() {
 }
 
 .completed-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  /* sticky 行为由各 th 自行管理，避免 thead 产生层叠上下文困住 z-index */
 }
 
 .completed-table .header-group-row th {
@@ -1319,13 +1348,13 @@ function downloadCSV() {
   white-space: nowrap;
   color: var(--ink-strong);
   border-bottom: 1px solid var(--border-soft);
-  background: var(--bg-card);
+  background: #fffaf4;
   letter-spacing: 0;
 }
 
 .completed-table .header-group-row th[rowspan="2"] {
   vertical-align: middle;
-  background: var(--bg-card);
+  background: #fffaf4;
 }
 
 .completed-table .header-sub-row th {
@@ -1340,15 +1369,30 @@ function downloadCSV() {
   color: var(--ink-soft);
   border-bottom: 1px solid var(--border-soft);
   letter-spacing: 0;
-  background: var(--bg-card);
+  background: #fffaf4;
 }
 
-/* Group header colors */
-.completed-table .group-channel-ratio,
-.completed-table .group-expense { background: var(--bg-card) !important; }
+/* Group header colors — 渠道返还比例: purple */
+.completed-table .group-channel-ratio {
+  background: #f1edfb !important;
+  color: #6b5b95 !important;
+  text-align: center !important;
+}
+.completed-table .sub-channel-ratio {
+  background: #f1edfb !important;
+  color: #6b5b95 !important;
+}
 
-.completed-table .sub-channel-ratio,
-.completed-table .sub-expense { background: var(--bg-card) !important; }
+/* Group header colors — 支出流水明细: light blue */
+.completed-table .group-expense {
+  background: #eef4ff !important;
+  color: #2563a8 !important;
+  text-align: center !important;
+}
+.completed-table .sub-expense {
+  background: #eef4ff !important;
+  color: #2563a8 !important;
+}
 
 .completed-table td {
   padding: 12px 14px;
@@ -1358,6 +1402,7 @@ function downloadCSV() {
   font-size: 15px;
   line-height: 1.6;
   background: var(--bg-card);
+  text-align: left !important;
 }
 
 /* Sticky first column — body cells */
@@ -1388,8 +1433,9 @@ function downloadCSV() {
 .completed-table thead .sticky-col {
   position: sticky;
   left: 0;
-  z-index: 15;
+  z-index: 20 !important;
   text-align: left;
+  background: #fffaf4;
 }
 
 @media (max-width: 1440px) {

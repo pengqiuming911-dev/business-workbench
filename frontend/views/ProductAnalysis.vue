@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="product-analysis-page">
     <div class="filter-bar">
       <div class="filter-group">
         <label>申购日期</label>
@@ -38,6 +38,7 @@
       <div class="filter-actions">
         <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+        <FullscreenToggle target=".product-analysis-page .table-section" />
       </div>
     </div>
 
@@ -85,7 +86,7 @@
     </div>
 
     <div v-if="loading" class="loading-state">正在加载数据...</div>
-    <div v-else-if="items.length > 0">
+    <div v-else-if="items.length > 0" class="table-section">
       <div class="table-wrap">
         <table class="data-table product-table">
           <colgroup>
@@ -161,13 +162,13 @@
       </div>
 
       <div class="pagination">
-        <span class="text-label">共 {{ total }} 条</span>
-        <div class="pagination-controls">
-          <button class="btn btn-secondary btn-sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">上一页</button>
-          <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
-          <button class="btn btn-secondary btn-sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">下一页</button>
+          <span class="text-label">共 {{ total }} 条</span>
+          <div class="pagination-controls">
+            <button class="btn btn-secondary btn-sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">上一页</button>
+            <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
+            <button class="btn btn-secondary btn-sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">下一页</button>
+          </div>
         </div>
-      </div>
     </div>
     <div v-else-if="loaded" class="empty-state">暂无产品数据</div>
   </div>
@@ -175,6 +176,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 const loading = ref(false)
 const loaded = ref(false)
@@ -326,6 +328,46 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+:deep(.workbench-main) {
+  max-width: none;
+}
+
+.product-analysis-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.product-analysis-page > .filter-bar {
+  flex-shrink: 0;
+}
+
+.product-analysis-page > .advanced-toggle {
+  flex-shrink: 0;
+}
+
+.product-analysis-page > .advanced-bar {
+  flex-shrink: 0;
+}
+
+.table-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-section > .pagination {
+  flex-shrink: 0;
+}
+
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;

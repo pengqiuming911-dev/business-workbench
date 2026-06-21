@@ -140,6 +140,7 @@
           查询
         </button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+        <FullscreenToggle target=".rebate-pending-page .table-section" />
       </div>
     </div>
 
@@ -181,7 +182,8 @@
     </div>
 
     <!-- Data table -->
-    <div v-else-if="items.length > 0" class="table-wrap">
+    <div v-else-if="items.length > 0" class="table-section">
+      <div class="table-wrap">
       <table class="data-table rebate-table">
         <colgroup>
           <col style="min-width: 120px" /><!-- 订单号 -->
@@ -268,29 +270,29 @@
             <td>{{ fmtNum(item.principal) }}</td>
             <td>{{ fmtPct(item.subscribe_fee_rate) }}</td>
             <!-- 应收 -->
-            <td class="col-receivable">{{ fmtNum(calcSubscribeFee(item)) }}</td>
-            <td class="col-receivable">{{ fmtNum(calcManagementFeeReceived(item)) }}</td>
-            <td class="col-receivable">{{ fmtNum(calcPerformanceFeeReceivable(item)) }}</td>
+            <td>{{ fmtNum(calcSubscribeFee(item)) }}</td>
+            <td>{{ fmtNum(calcManagementFeeReceived(item)) }}</td>
+            <td>{{ fmtNum(calcPerformanceFeeReceivable(item)) }}</td>
             <!-- 返还比例 -->
-            <td class="col-ratio">{{ fmtPct(item.subscribe_fee_ratio) }}</td>
-            <td class="col-ratio">{{ fmtPct(item.management_fee_ratio) }}</td>
-            <td class="col-ratio">{{ fmtPct(item.performance_fee_ratio) }}</td>
+            <td>{{ fmtPct(item.subscribe_fee_ratio) }}</td>
+            <td>{{ fmtPct(item.management_fee_ratio) }}</td>
+            <td>{{ fmtPct(item.performance_fee_ratio) }}</td>
             <!-- 扣税比例 -->
-            <td class="col-tax">{{ fmtPct(item.tax_subscribe_ratio) }}</td>
-            <td class="col-tax">{{ fmtPct(item.tax_management_ratio) }}</td>
-            <td class="col-tax">{{ fmtPct(item.tax_performance_ratio) }}</td>
+            <td>{{ fmtPct(item.tax_subscribe_ratio) }}</td>
+            <td>{{ fmtPct(item.tax_management_ratio) }}</td>
+            <td>{{ fmtPct(item.tax_performance_ratio) }}</td>
             <!-- 应返 -->
-            <td class="col-should">{{ fmtNum(item.expected_subscribe ?? calcShouldReturn(item, 'subscribe')) }}</td>
-            <td class="col-should">{{ fmtNum(item.expected_management ?? calcShouldReturn(item, 'management')) }}</td>
-            <td class="col-should">{{ fmtNum(item.expected_performance ?? calcShouldReturn(item, 'performance')) }}</td>
+            <td>{{ fmtNum(item.expected_subscribe ?? calcShouldReturn(item, 'subscribe')) }}</td>
+            <td>{{ fmtNum(item.expected_management ?? calcShouldReturn(item, 'management')) }}</td>
+            <td>{{ fmtNum(item.expected_performance ?? calcShouldReturn(item, 'performance')) }}</td>
             <!-- 已返 -->
-            <td class="col-returned">{{ fmtNum(item.returned_subscribe) }}</td>
-            <td class="col-returned">{{ fmtNum(item.returned_management) }}</td>
-            <td class="col-returned">{{ fmtNum(item.returned_performance) }}</td>
+            <td>{{ fmtNum(item.returned_subscribe) }}</td>
+            <td>{{ fmtNum(item.returned_management) }}</td>
+            <td>{{ fmtNum(item.returned_performance) }}</td>
             <!-- 未返 -->
-            <td class="col-unreturned">{{ fmtNum(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) }}</td>
-            <td class="col-unreturned">{{ fmtNum(item.outstanding_management ?? calcUnreturned(item, 'management')) }}</td>
-            <td class="col-unreturned">{{ fmtNum(item.outstanding_performance ?? calcUnreturned(item, 'performance')) }}</td>
+            <td>{{ fmtNum(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) }}</td>
+            <td>{{ fmtNum(item.outstanding_management ?? calcUnreturned(item, 'management')) }}</td>
+            <td>{{ fmtNum(item.outstanding_performance ?? calcUnreturned(item, 'performance')) }}</td>
             <!-- 是否可返 -->
             <td class="returnable-cell">
               <span
@@ -301,17 +303,17 @@
               </span>
             </td>
             <!-- 校验 -->
-            <td class="col-check check-cell">
+            <td class="check-cell">
               <span class="check-pill" :class="checkClass(item.check_subscribe)">{{ item.check_subscribe || '--' }}</span>
             </td>
-            <td class="col-check check-cell">
+            <td class="check-cell">
               <span class="check-pill" :class="checkClass(item.check_management)">{{ item.check_management || '--' }}</span>
             </td>
-            <td class="col-check check-cell">
+            <td class="check-cell">
               <span class="check-pill" :class="checkClass(item.check_performance)">{{ item.check_performance || '--' }}</span>
             </td>
             <!-- 本次拟返 checkboxes -->
-            <td class="col-plan plan-cell">
+            <td class="plan-cell">
               <label class="plan-check">
                 <input
                   type="checkbox"
@@ -320,7 +322,7 @@
                 />
               </label>
             </td>
-            <td class="col-plan plan-cell">
+            <td class="plan-cell">
               <label class="plan-check">
                 <input
                   type="checkbox"
@@ -329,7 +331,7 @@
                 />
               </label>
             </td>
-            <td class="col-plan plan-cell">
+            <td class="plan-cell">
               <label class="plan-check">
                 <input
                   type="checkbox"
@@ -338,7 +340,7 @@
                 />
               </label>
             </td>
-            <td class="col-plan plan-total">{{ fmtNum(calcPlanTotal(item)) }}</td>
+            <td class="plan-total">{{ fmtNum(calcPlanTotal(item)) }}</td>
             <td class="action-cell">
               <button
                 v-if="(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) > 0"
@@ -359,14 +361,15 @@
           </tr>
         </tbody>
       </table>
-    </div>
+      </div>
 
-    <!-- 分页 -->
-    <div v-if="items.length > 0" class="pagination">
-      <span class="text-label">共 {{ filteredItems.length }} 条（筛选后） / {{ items.length }} 条（全部） · 第 {{ page }} / {{ totalPages }} 页</span>
-      <div class="pagination-controls">
-        <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
-        <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+      <!-- 分页 -->
+      <div class="pagination">
+        <span class="text-label">共 {{ filteredItems.length }} 条（筛选后） / {{ items.length }} 条（全部） · 第 {{ page }} / {{ totalPages }} 页</span>
+        <div class="pagination-controls">
+          <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
+          <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+        </div>
       </div>
     </div>
 
@@ -389,6 +392,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Search, Download, CheckSquare } from '@lucide/vue'
+import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 defineProps({
   embedded: { type: Boolean, default: false },
@@ -811,8 +815,35 @@ function downloadCSV() {
   max-width: none;
 }
 
+.rebate-pending-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.rebate-pending-page > .page-header {
+  flex-shrink: 0;
+}
+
+.rebate-pending-page > .filter-bar {
+  flex-shrink: 0;
+}
+
+.rebate-pending-page > .action-bar {
+  flex-shrink: 0;
+}
+
+.rebate-pending-page > .batch-panel {
+  flex-shrink: 0;
+}
+
 .table-wrap {
   overflow-x: auto;
+}
+
+.table-section > .pagination {
+  flex-shrink: 0;
 }
 
 .input-compact {
@@ -965,9 +996,7 @@ function downloadCSV() {
 }
 
 .rebate-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  /* sticky 行为由各 th 自行管理，避免 thead 产生层叠上下文困住 z-index */
 }
 
 .header-group-row th {
@@ -978,7 +1007,7 @@ function downloadCSV() {
   white-space: nowrap;
   color: var(--ink-strong);
   border-bottom: 1px solid var(--border-soft);
-  background: var(--bg-card);
+  background: #fef9ee;
   letter-spacing: 0;
   position: sticky;
   top: 0;
@@ -987,7 +1016,7 @@ function downloadCSV() {
 
 .header-group-row th[rowspan="2"] {
   vertical-align: middle;
-  background: var(--bg-card);
+  background: #fef9ee;
   text-align: left;
 }
 
@@ -1000,7 +1029,7 @@ function downloadCSV() {
   color: var(--ink-soft);
   border-bottom: 1px solid var(--border-soft);
   letter-spacing: 0;
-  background: var(--bg-card);
+  background: #fef9ee;
   position: sticky;
   top: 44px;
   z-index: 10;
@@ -1088,37 +1117,17 @@ function downloadCSV() {
   color: #047857 !important;
 }
 
-/* Data cell group colors */
-.col-receivable {
-  background: #eef4ff !important;
+/* ── 数据行单元格：禁止任何列颜色，仅保持白底 ── */
+.rebate-table tbody td {
+  background: var(--bg-card) !important;
 }
 
-.col-ratio {
-  background: #fef9ee !important;
+.rebate-table tbody tr.row-alt td {
+  background: #fcfcfd !important;
 }
 
-.col-tax {
-  background: #fef2f2 !important;
-}
-
-.col-should {
-  background: #eafaf3 !important;
-}
-
-.col-returned {
-  background: #f1edfb !important;
-}
-
-.col-unreturned {
-  background: #fff7ed !important;
-}
-
-.col-check {
-  background: #f0f4f8 !important;
-}
-
-.col-plan {
-  background: #ecfdf5 !important;
+.rebate-table tbody tr:hover td {
+  background: #f7f8fa !important;
 }
 
 .rebate-table td {
@@ -1131,40 +1140,42 @@ function downloadCSV() {
   background: var(--bg-card);
 }
 
-.row-alt .sticky-col {
-  background: #fcfcfd;
-}
+/* 斑马行 & hover — 已由 tbody td 规则管理 */
 
-.row-alt td:not(.col-receivable):not(.col-ratio):not(.col-tax):not(.col-should):not(.col-returned):not(.col-unreturned):not(.col-check):not(.col-plan) {
-  background: #fcfcfd;
-}
-
-.rebate-table tr:hover .sticky-col {
-  background: #f7f8fa;
-}
-
-.rebate-table tr.row-alt:hover .sticky-col {
-  background: #f7f8fa;
-}
-
-.rebate-table tr:hover td:not(.col-receivable):not(.col-ratio):not(.col-tax):not(.col-should):not(.col-returned):not(.col-unreturned):not(.col-check):not(.col-plan) {
-  background: #f7f8fa;
-}
-
+/* ── 订单号列固定（水平 + 垂直滚动） ── */
 .header-group-row .sticky-col {
-  z-index: 15;
+  position: sticky !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: 20 !important;
   text-align: left;
+  background: #fef9ee;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
 }
 
 .header-sub-row .sticky-col {
-  z-index: 15;
+  position: sticky !important;
+  left: 0 !important;
+  top: 44px !important;
+  z-index: 20 !important;
+  background: #fef9ee;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
 }
 
 .rebate-table tbody .sticky-col {
-  position: sticky;
-  left: 0;
-  z-index: 5;
-  background: var(--bg-card);
+  position: sticky !important;
+  left: 0 !important;
+  z-index: 5 !important;
+  background: var(--bg-card) !important;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
+}
+
+.rebate-table tr.row-alt .sticky-col {
+  background: #fcfcfd !important;
+}
+
+.rebate-table tr:hover .sticky-col {
+  background: #f7f8fa !important;
 }
 
 @media (max-width: 1440px) {

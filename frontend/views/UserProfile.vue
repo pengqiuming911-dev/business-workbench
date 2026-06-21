@@ -172,6 +172,12 @@ function fmtAmt(v) {
 </script>
 
 <style scoped>
+.user-profile-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .search-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
 .result-count { font-size: 13px; color: var(--ink-soft); }
 .positive { color: var(--success); }

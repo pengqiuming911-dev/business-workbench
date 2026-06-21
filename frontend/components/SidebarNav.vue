@@ -100,6 +100,7 @@ const navItems = [
   flex-direction: column;
   height: 100%;
   padding: 16px 12px;
+  overflow-y: auto;
 }
 
 .sidebar-brand {

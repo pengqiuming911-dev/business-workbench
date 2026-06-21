@@ -152,6 +152,12 @@ onMounted(loadConfig)
 </script>
 
 <style scoped>
+.push-settings-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .toggle-label {
   display: inline-flex;
   align-items: center;
