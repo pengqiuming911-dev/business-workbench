@@ -153,6 +153,12 @@ onMounted(async () => {
   max-width: none;
 }
 
+.product-report-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .month-search {
   display: flex;
   align-items: center;

@@ -251,6 +251,9 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding-top: 8px;
 }
 

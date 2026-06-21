@@ -60,6 +60,12 @@ onMounted(load)
 </script>
 
 <style scoped>
+.activity-log-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .page-header {
   display: flex;
   flex-direction: row;
