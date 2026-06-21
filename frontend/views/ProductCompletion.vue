@@ -83,8 +83,8 @@
                     <td class="col-center" :class="knockoutClass(latestObs(p)?.is_knocked_out)">
                       {{ latestObs(p)?.is_knocked_out || '--' }}
                     </td>
-                    <td class="col-center" :class="dividendClass(latestObs(p)?.is_dividend)">
-                      {{ latestObs(p)?.is_dividend || '--' }}
+                    <td class="col-center" :class="dividendClass(!p.monthly_coupon ? '不观察' : latestObs(p)?.is_dividend)">
+                      {{ !p.monthly_coupon ? '不观察' : (latestObs(p)?.is_dividend || '--') }}
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && p.observations.length" class="detail-row">
