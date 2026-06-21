@@ -17,7 +17,7 @@
       title="退出全屏"
       @click="toggle"
     >
-      <Minimize2 :size="16" :stroke-width="2" />
+      <Minimize2 :size="12" :stroke-width="2" />
       <span>退出全屏</span>
     </button>
   </Teleport>
@@ -82,11 +82,12 @@ onUnmounted(() => {
   top: 12px;
   right: 16px;
   z-index: 1101;
-  min-height: 36px;
+  min-height: 28px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 12px;
+  gap: 4px;
+  padding: 0 8px;
+  font-size: 11px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.96);

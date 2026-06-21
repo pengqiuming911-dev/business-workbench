@@ -67,7 +67,6 @@
           查询
         </button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
-        <FullscreenToggle target=".rebate-completed-page .table-section" />
       </div>
     </div>
 
@@ -216,6 +215,9 @@
           </tr>
         </tbody>
       </table>
+      </div>
+      <div class="table-bottom-actions">
+        <FullscreenToggle target=".rebate-completed-page .table-section" />
       </div>
     </div>
 
@@ -1270,6 +1272,7 @@ function downloadCSV() {
 
 .rebate-completed-page > .filter-bar {
   flex-shrink: 0;
+  margin-bottom: 8px;
 }
 
 .rebate-completed-page > .action-bar {
@@ -1300,7 +1303,13 @@ function downloadCSV() {
 .action-bar {
   display: flex;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
+}
+
+.table-bottom-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0;
 }
 
 .file-input-hidden {
@@ -1342,8 +1351,8 @@ function downloadCSV() {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 12px 14px;
-  font-size: 15px;
+  padding: 8px 12px;
+  font-size: 12px;
   font-weight: 700;
   text-align: left;
   white-space: nowrap;
@@ -1360,10 +1369,10 @@ function downloadCSV() {
 
 .completed-table .header-sub-row th {
   position: sticky;
-  top: 44px;
+  top: 36px;
   z-index: 10;
-  padding: 10px 14px;
-  font-size: 14px;
+  padding: 6px 12px;
+  font-size: 11px;
   font-weight: 600;
   text-align: left;
   white-space: nowrap;

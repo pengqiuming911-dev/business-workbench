@@ -140,7 +140,6 @@
           查询
         </button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
-        <FullscreenToggle target=".rebate-pending-page .table-section" />
       </div>
     </div>
 
@@ -367,6 +366,7 @@
       <div class="pagination">
         <span class="text-label">共 {{ filteredItems.length }} 条（筛选后） / {{ items.length }} 条（全部） · 第 {{ page }} / {{ totalPages }} 页</span>
         <div class="pagination-controls">
+          <FullscreenToggle target=".rebate-pending-page .table-section" />
           <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
           <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
         </div>
@@ -829,10 +829,12 @@ function downloadCSV() {
 
 .rebate-pending-page > .filter-bar {
   flex-shrink: 0;
+  margin-bottom: 6px;
 }
 
 .rebate-pending-page > .action-bar {
   flex-shrink: 0;
+  margin-bottom: 6px;
 }
 
 .rebate-pending-page > .batch-panel {
@@ -962,7 +964,7 @@ function downloadCSV() {
 .action-bar {
   display: flex;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
 }
 
 /* --- Batch panel --- */
@@ -1001,8 +1003,8 @@ function downloadCSV() {
 }
 
 .header-group-row th {
-  padding: 12px 14px;
-  font-size: 15px;
+  padding: 8px 12px;
+  font-size: 12px;
   font-weight: 700;
   text-align: center;
   white-space: nowrap;
@@ -1022,8 +1024,8 @@ function downloadCSV() {
 }
 
 .header-sub-row th {
-  padding: 10px 14px;
-  font-size: 14px;
+  padding: 6px 12px;
+  font-size: 11px;
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
@@ -1032,7 +1034,7 @@ function downloadCSV() {
   letter-spacing: 0;
   background: #fef9ee;
   position: sticky;
-  top: 44px;
+  top: 36px;
   z-index: 10;
 }
 
