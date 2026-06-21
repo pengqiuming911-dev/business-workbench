@@ -1974,6 +1974,10 @@ func productObservationPayload(product model.Product, merged []gin.H) gin.H {
 		"lock_days":             product.LockDays,
 		"duration_months":       product.DurationMonths,
 		"next_observation_date": observations.NextObservationDate(product, time.Now().Format("2006-01-02")),
+		"monthly_coupon":        product.MonthlyCoupon,
+		"coupon_1st":            product.Coupon1st,
+		"coupon_2nd":            product.Coupon2nd,
+		"coupon_3rd":            product.Coupon3rd,
 		"observations":          merged,
 	}
 }

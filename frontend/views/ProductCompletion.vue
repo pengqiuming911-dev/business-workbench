@@ -47,6 +47,10 @@
                   <th class="col-left">降敲</th>
                   <th class="col-left">敲出价</th>
                   <th class="col-left">派息线</th>
+                  <th class="col-left">月票息（税费后）</th>
+                  <th class="col-left">第一段票息（税费后）</th>
+                  <th class="col-left">第二段票息（税费后）</th>
+                  <th class="col-left">第三段票息（税费后）</th>
                   <th class="col-center th-sub">是否敲出<span>当前点位预测</span></th>
                   <th class="col-center th-sub">是否派息<span>当前点位预测</span></th>
                 </tr>
@@ -72,6 +76,10 @@
                     <td class="col-left">{{ p.monthly_decrease ?? '--' }}</td>
                     <td class="col-left">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
                     <td class="col-left">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
+                    <td class="col-left">{{ p.monthly_coupon ?? '--' }}</td>
+                    <td class="col-left">{{ p.coupon_1st ?? '--' }}</td>
+                    <td class="col-left">{{ p.coupon_2nd ?? '--' }}</td>
+                    <td class="col-left">{{ p.coupon_3rd ?? '--' }}</td>
                     <td class="col-center" :class="knockoutClass(latestObs(p)?.is_knocked_out)">
                       {{ latestObs(p)?.is_knocked_out || '--' }}
                     </td>
@@ -80,7 +88,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && p.observations.length" class="detail-row">
-                    <td colspan="17" class="detail-cell">
+                    <td colspan="21" class="detail-cell">
                       <div class="detail-label">历史观察日明细</div>
                       <table class="detail-table">
                         <thead>
@@ -107,7 +115,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && !p.observations.length" class="detail-row">
-                    <td colspan="17" class="detail-cell">
+                    <td colspan="21" class="detail-cell">
                       <div class="detail-empty">暂无观察日记录</div>
                     </td>
                   </tr>
