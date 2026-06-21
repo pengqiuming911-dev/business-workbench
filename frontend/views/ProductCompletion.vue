@@ -1,14 +1,9 @@
 <template>
   <div class="product-completion-page">
-    <div class="page-header">
-      <h1 class="text-page-title">派息/敲出观察</h1>
-    </div>
-
     <div class="tab-bar">
       <button class="btn tab-btn" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">全量</button>
       <button class="btn tab-btn" :class="{ active: activeTab === 'calendar' }" @click="activeTab = 'calendar'; loadCalendarData()">观察日历</button>
       <button class="btn tab-btn" :class="{ active: activeTab === 'today' }" @click="activeTab = 'today'; loadTodayData()">今日观察</button>
-      <button class="btn tab-btn" :class="{ active: activeTab === 'posters' }" @click="activeTab = 'posters'; loadPosters()">🎉 喜报</button>
     </div>
 
     <div v-if="activeTab === 'all'">
@@ -254,56 +249,12 @@
         <p>今日无产品需要观察派息/敲出。</p>
       </div>
     </div>
-
-    <div v-if="activeTab === 'posters'">
-      <p class="text-body" style="margin-bottom: 24px;">自动生成敲出/派息喜报海报。可选择日期查询或生成对应日期的喜报。</p>
-
-      <PanelCard title="喜报操作">
-        <div class="form-row">
-          <label>筛选日期</label>
-          <input v-model="filterDate" type="date" class="input" style="width: 160px; flex: none;" @change="loadPosters" />
-        </div>
-        <div class="form-row">
-          <button class="btn btn-primary" :disabled="posterGenerating" @click="generatePosters">
-            {{ posterGenerating ? '生成中...' : '生成喜报' }}
-          </button>
-          <button class="btn btn-secondary" @click="resetFilterDate">重置为今日</button>
-          <span v-if="posterMsg" class="success-msg" style="margin-left: 12px;">{{ posterMsg }}</span>
-          <span v-if="posterError" class="error-msg" style="margin-left: 12px;">{{ posterError }}</span>
-        </div>
-      </PanelCard>
-
-      <div v-if="posterLoading" class="loading-state"><p>加载中...</p></div>
-      <div v-else-if="posterList.length === 0 && posterLoaded" class="empty-state">
-        <p>{{ filterDate }} 暂无喜报。可点击"生成喜报"为该日期生成。</p>
-      </div>
-      <div v-else-if="posterList.length > 0">
-        <PanelCard title="喜报（{{ filterDate }}）· 共 {{ posterList.length }} 张">
-          <div class="poster-grid">
-            <div v-for="p in posterList" :key="p.id" class="poster-card">
-              <div class="poster-card-header">
-                <span class="poster-type-badge" :class="p.poster_type">
-                  {{ p.poster_type === 'knockout' ? '敲出喜报' : '派息喜报' }}
-                </span>
-                <span class="poster-product">{{ p.product_name }}</span>
-              </div>
-              <PosterTemplate
-                :poster-type="p.poster_type"
-                :data="p"
-                @generated="onPosterGenerated"
-              />
-            </div>
-          </div>
-        </PanelCard>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PanelCard from '../components/PanelCard.vue'
-import PosterTemplate from '../components/PosterTemplate.vue'
 import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 const activeTab = ref('all')
@@ -329,14 +280,6 @@ const calendarLoading = ref(false)
 const calendarLoaded = ref(false)
 const calendarError = ref('')
 const weekDays = ['一', '二', '三', '四', '五', '六', '日']
-
-const posterList = ref([])
-const posterLoading = ref(false)
-const posterLoaded = ref(false)
-const posterGenerating = ref(false)
-const posterMsg = ref('')
-const posterError = ref('')
-const filterDate = ref(new Date().toISOString().slice(0, 10))
 
 onMounted(() => loadData())
 
@@ -425,53 +368,6 @@ async function generateObservations() {
 
 function toggleExpand(id) {
   expandedId.value = expandedId.value === id ? null : id
-}
-
-async function loadPosters() {
-  posterLoading.value = true
-  posterError.value = ''
-  try {
-    const res = await fetch(`/api/posters/today?date=${filterDate.value}`)
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || '加载失败')
-    posterList.value = data.posters || []
-    todayDate.value = data.today || todayDate.value
-  } catch (err) {
-    posterError.value = err.message
-  } finally {
-    posterLoading.value = false
-    posterLoaded.value = true
-  }
-}
-
-async function generatePosters() {
-  posterGenerating.value = true
-  posterMsg.value = ''
-  posterError.value = ''
-  try {
-    const res = await fetch('/api/posters/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: filterDate.value }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || '生成失败')
-    posterMsg.value = `生成完成：敲出 ${data.knockout} 张，派息 ${data.dividend} 张`
-    await loadPosters()
-  } catch (err) {
-    posterError.value = err.message
-  } finally {
-    posterGenerating.value = false
-  }
-}
-
-function resetFilterDate() {
-  filterDate.value = new Date().toISOString().slice(0, 10)
-  loadPosters()
-}
-
-function onPosterGenerated(canvas) {
-  console.log('喜报图片已生成')
 }
 
 const filteredProducts = computed(() => {
@@ -1010,53 +906,5 @@ function fmtCalPrice(val) {
 
 .cal-detail-dividend strong {
   color: #0a7a54;
-}
-
-.poster-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  justify-content: center;
-}
-
-.poster-card {
-  background: var(--bg-card);
-  border-radius: var(--radius);
-  padding: 20px;
-  border: 1px solid var(--border-soft);
-  box-shadow: none;
-  transition: box-shadow 0.2s;
-}
-
-.poster-card:hover { box-shadow: var(--shadow-soft); }
-
-.poster-card-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.poster-type-badge {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.poster-type-badge.knockout {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
-.poster-type-badge.dividend {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.poster-product {
-  font-size: 13px;
-  color: var(--ink-soft);
-  font-weight: 700;
 }
 </style>

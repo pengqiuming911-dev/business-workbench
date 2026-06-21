@@ -72,7 +72,7 @@ const navItems = [
   { path: '/holding-analysis', title: '产品&持仓', icon: Activity },
   { path: '/rebate-analysis', title: '返费', icon: Receipt },
   { path: '/product-report', title: '销售物料', icon: FileText },
-  { path: '/product-completion', title: '观察日历', icon: CalendarDays },
+  { path: '/product-completion', title: '派息/敲出', icon: CalendarDays },
   { path: '/push-settings', title: '推送设置', icon: Send },
 ]
 </script>
