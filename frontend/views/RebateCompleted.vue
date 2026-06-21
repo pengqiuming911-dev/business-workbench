@@ -1342,13 +1342,12 @@ function downloadCSV() {
 }
 
 .completed-table thead {
-  /* sticky 行为由各 th 自行管理，避免 thead 产生层叠上下文困住 z-index */
-}
-
-.completed-table .header-group-row th {
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+.completed-table .header-group-row th {
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 700;
@@ -1367,9 +1366,6 @@ function downloadCSV() {
 }
 
 .completed-table .header-sub-row th {
-  position: sticky;
-  top: 34px;
-  z-index: 10;
   padding: 6px 12px;
   font-size: 11px;
   font-weight: 600;

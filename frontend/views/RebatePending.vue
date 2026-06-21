@@ -999,7 +999,9 @@ function downloadCSV() {
 }
 
 .rebate-table thead {
-  /* sticky 行为由各 th 自行管理，避免 thead 产生层叠上下文困住 z-index */
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .header-group-row th {
@@ -1012,9 +1014,6 @@ function downloadCSV() {
   border-bottom: 1px solid var(--border-soft);
   background: #fef9ee;
   letter-spacing: 0;
-  position: sticky;
-  top: 0;
-  z-index: 10;
   line-height: 1.4;
 }
 
@@ -1034,9 +1033,6 @@ function downloadCSV() {
   border-bottom: 1px solid var(--border-soft);
   letter-spacing: 0;
   background: #fef9ee;
-  position: sticky;
-  top: 34px;
-  z-index: 10;
 }
 
 /* Group header colors */
@@ -1150,7 +1146,6 @@ function downloadCSV() {
 .header-group-row .sticky-col {
   position: sticky !important;
   left: 0 !important;
-  top: 0 !important;
   z-index: 20 !important;
   text-align: left;
   background: #fef9ee;
@@ -1160,7 +1155,6 @@ function downloadCSV() {
 .header-sub-row .sticky-col {
   position: sticky !important;
   left: 0 !important;
-  top: 44px !important;
   z-index: 20 !important;
   background: #fef9ee;
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
