@@ -1962,6 +1962,7 @@ func productObservationPayload(product model.Product, merged []gin.H) gin.H {
 		"manager":               product.Manager,
 		"holding_status":        product.HoldingStatus,
 		"code":                  product.Code,
+		"structure_type":        product.StructureType,
 		"entry_price":           product.EntryPrice,
 		"first_knockout_ratio":  product.FirstKnockoutRatio,
 		"lock_months":           product.LockMonths,

@@ -37,15 +37,16 @@
                   <th class="col-left">私募管理人</th>
                   <th class="col-left">持有状态</th>
                   <th class="col-left">代码</th>
+                  <th class="col-left">结构类型</th>
                   <th class="col-left">入场日</th>
-                  <th class="num">存续月</th>
-                  <th class="num">锁定期(月)</th>
+                  <th class="col-left">存续月</th>
+                  <th class="col-left">锁定期(月)</th>
                   <th class="col-left">下个观察日</th>
-                  <th class="num">入场价</th>
-                  <th class="num">标的价格</th>
-                  <th class="num">降敲</th>
-                  <th class="num">敲出价</th>
-                  <th class="num">派息线</th>
+                  <th class="col-left">入场价</th>
+                  <th class="col-left">当前点位</th>
+                  <th class="col-left">降敲</th>
+                  <th class="col-left">敲出价</th>
+                  <th class="col-left">派息线</th>
                   <th class="col-center th-sub">是否敲出<span>当前点位预测</span></th>
                   <th class="col-center th-sub">是否派息<span>当前点位预测</span></th>
                 </tr>
@@ -61,15 +62,16 @@
                     <td class="col-left">{{ p.manager }}</td>
                     <td class="col-left"><span class="status-dot status-active">{{ p.holding_status }}</span></td>
                     <td class="col-left code-cell">{{ p.code }}</td>
+                    <td class="col-left">{{ p.structure_type || '--' }}</td>
                     <td class="col-left">{{ p.issue_date || '--' }}</td>
-                    <td class="num">{{ computeMonthsSince(p) }}</td>
-                    <td class="num">{{ p.lock_months || '--' }}</td>
+                    <td class="col-left">{{ computeMonthsSince(p) }}</td>
+                    <td class="col-left">{{ p.lock_months || '--' }}</td>
                     <td class="col-left next-date">{{ p.next_observation_date || '--' }}</td>
-                    <td class="num">{{ formatPrice(p.entry_price, p) }}</td>
-                    <td class="num">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
-                    <td class="num">{{ p.monthly_decrease ?? '--' }}</td>
-                    <td class="num">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
-                    <td class="num">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
+                    <td class="col-left">{{ formatPrice(p.entry_price, p) }}</td>
+                    <td class="col-left">{{ formatPrice(latestObs(p)?.underlying_price, p) }}</td>
+                    <td class="col-left">{{ p.monthly_decrease ?? '--' }}</td>
+                    <td class="col-left">{{ formatPrice(latestObs(p)?.knockout_price, p) }}</td>
+                    <td class="col-left">{{ formatPrice(latestObs(p)?.dividend_line, p) }}</td>
                     <td class="col-center" :class="knockoutClass(latestObs(p)?.is_knocked_out)">
                       {{ latestObs(p)?.is_knocked_out || '--' }}
                     </td>
@@ -78,7 +80,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && p.observations.length" class="detail-row">
-                    <td colspan="16" class="detail-cell">
+                    <td colspan="17" class="detail-cell">
                       <div class="detail-label">历史观察日明细</div>
                       <table class="detail-table">
                         <thead>
@@ -105,7 +107,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedId === p.id && !p.observations.length" class="detail-row">
-                    <td colspan="16" class="detail-cell">
+                    <td colspan="17" class="detail-cell">
                       <div class="detail-empty">暂无观察日记录</div>
                     </td>
                   </tr>
