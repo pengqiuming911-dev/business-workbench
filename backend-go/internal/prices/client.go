@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
-const eastmoneyAPI = "https://push2.eastmoney.com/api/qt/stock/get"
+const tencentQuoteAPI = "https://qt.gtimg.cn/q="
 const tencentKlineAPI = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 
 type Result struct {
@@ -27,66 +30,99 @@ type parsedCode struct {
 
 func FetchAll(ctx context.Context, codes []string) Result {
 	result := Result{Prices: map[string]float64{}, Failed: []string{}}
-	client := &http.Client{Timeout: 5 * time.Second}
+
+	// Build batch query symbols
+	symbols := make([]string, 0, len(codes))
+	symToCode := make(map[string]string, len(codes))
 	for _, code := range codes {
-		price, err := fetchLatest(ctx, client, code)
-		if err != nil {
+		parsed, ok := parseCode(code)
+		if !ok {
+			result.Failed = append(result.Failed, code)
+			continue
+		}
+		sym := strings.ToLower(parsed.Exchange) + parsed.Num
+		symbols = append(symbols, sym)
+		symToCode[sym] = code
+	}
+	if len(symbols) == 0 {
+		return result
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	endpoint := tencentQuoteAPI + strings.Join(symbols, ",")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		for _, code := range codes {
+			result.Failed = append(result.Failed, code)
+		}
+		return result
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		for _, code := range codes {
+			result.Failed = append(result.Failed, code)
+		}
+		return result
+	}
+	defer resp.Body.Close()
+
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		for _, code := range codes {
+			result.Failed = append(result.Failed, code)
+		}
+		return result
+	}
+	body, err := simplifiedchinese.GBK.NewDecoder().Bytes(rawBody)
+	if err != nil {
+		for _, code := range codes {
+			result.Failed = append(result.Failed, code)
+		}
+		return result
+	}
+
+	found := make(map[string]bool)
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.Contains(line, "=") {
+			continue
+		}
+		eqIdx := strings.Index(line, "=")
+		sym := strings.TrimPrefix(line[:eqIdx], "v_")
+		code, ok := symToCode[sym]
+		if !ok {
+			continue
+		}
+		q1 := strings.Index(line, "\"")
+		q2 := strings.LastIndex(line, "\"")
+		if q1 < 0 || q2 <= q1 {
+			continue
+		}
+		fields := strings.Split(line[q1+1:q2], "~")
+		if len(fields) < 4 {
+			continue
+		}
+		price, err := strconv.ParseFloat(fields[3], 64)
+		if err != nil || price <= 0 {
 			result.Failed = append(result.Failed, code)
 			continue
 		}
 		result.Prices[code] = price
+		found[code] = true
 	}
+
+	// Mark codes that weren't in the response as failed
+	for _, code := range codes {
+		if !found[code] {
+			if _, alreadyFailed := result.Prices[code]; !alreadyFailed {
+				result.Failed = append(result.Failed, code)
+			}
+		}
+	}
+
 	return result
-}
-
-func fetchLatest(ctx context.Context, client *http.Client, code string) (float64, error) {
-	secid, parsed, err := resolveSecID(code)
-	if err != nil {
-		return 0, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, eastmoneyAPI+"?secid="+secid+"&fields=f43,f44,f45,f46,f47,f170", nil)
-	if err != nil {
-		return 0, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	req.Header.Set("Referer", "https://quote.eastmoney.com/")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return 0, fmt.Errorf("price API status %d", resp.StatusCode)
-	}
-
-	var payload struct {
-		Data struct {
-			F43 float64 `json:"f43"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return 0, err
-	}
-	if payload.Data.F43 == 0 {
-		return 0, fmt.Errorf("no price data for %s", code)
-	}
-	if strings.HasPrefix(parsed.Num, "513") {
-		return payload.Data.F43 / 1000, nil
-	}
-	return payload.Data.F43 / 100, nil
-}
-
-func resolveSecID(code string) (string, parsedCode, error) {
-	parsed, ok := parseCode(code)
-	if !ok {
-		return "", parsedCode{}, fmt.Errorf("invalid code: %s", code)
-	}
-	market := "0"
-	if parsed.Exchange == "SH" && (strings.HasPrefix(parsed.Num, "0") || strings.HasPrefix(parsed.Num, "5")) {
-		market = "1"
-	}
-	return market + "." + parsed.Num, parsed, nil
 }
 
 type IndexResult struct {
@@ -98,57 +134,83 @@ type IndexResult struct {
 
 func FetchIndices(ctx context.Context, codes []string) []IndexResult {
 	results := make([]IndexResult, len(codes))
+	codeIndex := make(map[string]int, len(codes))
+
+	// Build batch query symbols: sh000001,sz399006,...
+	symbols := make([]string, len(codes))
 	for i, code := range codes {
 		results[i].Code = code
 		parsed, ok := parseCode(code)
 		if !ok {
 			continue
 		}
-		market := "1"
-		if parsed.Exchange == "SZ" {
-			market = "0"
-		}
-		secid := market + "." + parsed.Num
-		client := &http.Client{Timeout: 5 * time.Second}
-		endpoint := eastmoneyAPI + "?secid=" + secid + "&fields=f43,f58,f169,f170"
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			continue
-		}
-		req.Header.Set("User-Agent", "Mozilla/5.0")
-		req.Header.Set("Referer", "https://quote.eastmoney.com/")
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-		var payload struct {
-			Data struct {
-				F43  *float64 `json:"f43"`
-				F58  string   `json:"f58"`
-				F169 *float64 `json:"f169"`
-				F170 *float64 `json:"f170"`
-			} `json:"data"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-			resp.Body.Close()
-			continue
-		}
-		resp.Body.Close()
+		sym := strings.ToLower(parsed.Exchange) + parsed.Num
+		symbols[i] = sym
+		codeIndex[sym] = i
+	}
 
-		results[i].Name = payload.Data.F58
-		if payload.Data.F43 != nil {
-			divisor := 100.0
-			if strings.HasPrefix(parsed.Num, "51") {
-				divisor = 1000.0
-			}
-			v := *payload.Data.F43 / divisor
-			results[i].Value = &v
+	// Single batch request instead of serial individual requests
+	client := &http.Client{Timeout: 8 * time.Second}
+	endpoint := tencentQuoteAPI + strings.Join(symbols, ",")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return results
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return results
+	}
+	defer resp.Body.Close()
+
+	// Response is GBK-encoded; decode to UTF-8
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return results
+	}
+	body, err := simplifiedchinese.GBK.NewDecoder().Bytes(rawBody)
+	if err != nil {
+		return results
+	}
+
+	// Parse each line: v_sh000001="1~上证指数~000001~4090.48~..."
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.Contains(line, "=") {
+			continue
 		}
-		if payload.Data.F170 != nil {
-			pct := *payload.Data.F170 / 100
-			results[i].ChangePct = &pct
+		// Extract symbol from v_sh000001="..."
+		eqIdx := strings.Index(line, "=")
+		varPart := line[:eqIdx]        // v_sh000001
+		sym := strings.TrimPrefix(varPart, "v_") // sh000001
+		idx, ok := codeIndex[sym]
+		if !ok {
+			continue
+		}
+
+		// Extract fields between quotes
+		q1 := strings.Index(line, "\"")
+		q2 := strings.LastIndex(line, "\"")
+		if q1 < 0 || q2 <= q1 {
+			continue
+		}
+		fields := strings.Split(line[q1+1:q2], "~")
+		if len(fields) < 33 {
+			continue
+		}
+
+		// fields[1]=name, fields[3]=current price, fields[32]=change_pct
+		results[idx].Name = fields[1]
+
+		if price, err := strconv.ParseFloat(fields[3], 64); err == nil && price > 0 {
+			results[idx].Value = &price
+		}
+		if pct, err := strconv.ParseFloat(fields[32], 64); err == nil {
+			results[idx].ChangePct = &pct
 		}
 	}
+
 	return results
 }
 
