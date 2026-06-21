@@ -79,8 +79,8 @@ onUnmounted(() => {
 
 .table-fullscreen-exit {
   position: fixed;
-  bottom: 80px;
-  right: 32px;
+  bottom: 28px;
+  right: 100px;
   z-index: 1101;
   min-height: 28px;
   display: inline-flex;
