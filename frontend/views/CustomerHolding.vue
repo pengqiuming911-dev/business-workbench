@@ -468,6 +468,7 @@ onMounted(async () => {
 
 .tx-table th {
   background: #f1f5f9;
+  color: var(--ink-strong);
 }
 
 .name-cell {

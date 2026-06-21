@@ -548,7 +548,7 @@ function fmtCalPrice(val) {
 .overview-table th {
   padding: 10px 12px;
   border-bottom: 2px solid var(--border);
-  color: var(--ink-soft);
+  color: var(--ink-strong);
   font-weight: 800;
   font-size: 11px;
   letter-spacing: 0.04em;

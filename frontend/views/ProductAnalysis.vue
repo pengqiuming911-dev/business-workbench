@@ -473,7 +473,7 @@ onMounted(async () => {
   text-transform: none;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  color: var(--ink-soft);
+  color: var(--ink-strong);
   background: var(--bg-card);
   border-bottom: 2px solid var(--border);
   text-align: left;
