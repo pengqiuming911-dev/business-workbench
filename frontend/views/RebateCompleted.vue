@@ -1405,12 +1405,12 @@ function downloadCSV() {
 }
 
 .completed-table td {
-  padding: 12px 14px;
+  padding: 5px 10px;
   white-space: nowrap;
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.4;
   background: var(--bg-card);
   text-align: left !important;
 }
