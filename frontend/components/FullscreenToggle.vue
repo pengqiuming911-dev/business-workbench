@@ -1,6 +1,7 @@
 <template>
+  <!-- Enter fullscreen button (shown in filter bar) -->
   <button
-    v-if="!isFullscreen"
+    v-if="!exitOnly && !isFullscreen"
     class="btn btn-secondary btn-sm fullscreen-btn"
     title="全屏显示表格"
     @click="toggle"
@@ -9,37 +10,49 @@
     <span class="fullscreen-label">全屏</span>
   </button>
 
-  <Teleport to="body">
-    <button
-      v-if="isFullscreen"
-      class="table-fullscreen-exit"
-      type="button"
-      title="退出全屏"
-      @click="toggle"
-    >
-      <Minimize2 :size="12" :stroke-width="2" />
-      <span>退出全屏</span>
-    </button>
-  </Teleport>
+  <!-- Exit fullscreen button (inline, for pagination area) -->
+  <button
+    v-if="isFullscreen"
+    :class="exitOnly ? 'btn btn-secondary btn-sm fullscreen-exit-inline' : 'table-fullscreen-exit'"
+    type="button"
+    title="退出全屏"
+    @click="toggle"
+  >
+    <Minimize2 :size="12" :stroke-width="2" />
+    <span>退出全屏</span>
+  </button>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch, computed } from 'vue'
+import { reactive } from 'vue'
 import { Maximize2, Minimize2 } from '@lucide/vue'
+
+// Shared fullscreen state across all instances with the same target
+const sharedStates = reactive(new Map())
+
+function getState(target) {
+  if (!sharedStates.has(target)) {
+    sharedStates.set(target, { active: false })
+  }
+  return sharedStates.get(target)
+}
 
 const props = defineProps({
   target: { type: String, required: true },
+  exitOnly: { type: Boolean, default: false },
 })
 
-const isFullscreen = ref(false)
+const state = getState(props.target)
+const isFullscreen = computed(() => state.active)
 
 function toggle() {
-  isFullscreen.value = !isFullscreen.value
+  state.active = !state.active
 }
 
 function onKeydown(e) {
-  if (e.key === 'Escape' && isFullscreen.value) {
-    isFullscreen.value = false
+  if (e.key === 'Escape' && state.active) {
+    state.active = false
   }
 }
 
@@ -77,10 +90,15 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
+.fullscreen-exit-inline {
+  gap: 4px;
+  white-space: nowrap;
+}
+
 .table-fullscreen-exit {
   position: fixed;
-  bottom: 28px;
-  right: 100px;
+  top: 12px;
+  right: 16px;
   z-index: 1101;
   min-height: 28px;
   display: inline-flex;
