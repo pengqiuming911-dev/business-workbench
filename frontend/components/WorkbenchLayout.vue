@@ -91,7 +91,7 @@ onUnmounted(() => {
   overflow: hidden;
   width: 100%;
   max-width: 1680px;
-  padding: 8px 32px 16px;
+  padding: 4px 32px 16px;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -127,7 +127,7 @@ onUnmounted(() => {
   }
 
   .workbench-main {
-    padding: 8px 14px 48px;
+    padding: 4px 14px 48px;
   }
 }
 </style>
