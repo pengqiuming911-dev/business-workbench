@@ -550,6 +550,8 @@ function fmtCalPrice(val) {
   white-space: normal;
   line-height: 1.2;
   vertical-align: bottom;
+  min-width: 80px;
+  text-align: center;
 }
 
 .overview-table th.th-sub span {
