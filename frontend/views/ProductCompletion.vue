@@ -302,7 +302,7 @@ async function loadTodayData() {
     const res = await fetch('/api/observations/today')
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '加载失败')
-    todayProducts.value = data.products || []
+    todayProducts.value = (data.products || []).filter(p => !p.name || !p.name.includes('【专】'))
     todayDate.value = data.today || todayDate.value
   } catch (err) {
     errorMsg.value = err.message
@@ -382,13 +382,14 @@ const filteredProducts = computed(() => {
 const calendarMap = computed(() => {
   const map = new Map()
   for (const item of calendarItems.value) {
-    map.set(item.date, item.products || [])
+    const filtered = (item.products || []).filter(p => !p.name || !p.name.includes('【专】'))
+    map.set(item.date, filtered)
   }
   return map
 })
 
 const calendarProductCount = computed(() => (
-  calendarItems.value.reduce((sum, item) => sum + (item.products?.length || 0), 0)
+  Array.from(calendarMap.value.values()).reduce((sum, products) => sum + products.length, 0)
 ))
 
 const calendarCells = computed(() => {
