@@ -1309,6 +1309,7 @@ function downloadCSV() {
 /* --- Scrollable table container --- */
 .rebate-completed-page > .table-wrap {
   overflow-x: auto;
+  max-height: calc(100vh - 300px);
 }
 
 /* --- Table --- */

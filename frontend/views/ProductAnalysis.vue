@@ -353,6 +353,10 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
+.table-wrap {
+  max-height: calc(100vh - 280px);
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;

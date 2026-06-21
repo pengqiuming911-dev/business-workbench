@@ -398,6 +398,10 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
+.table-wrap {
+  max-height: calc(100vh - 300px);
+}
+
 .checkbox-label {
   display: inline-flex;
   align-items: center;

@@ -840,6 +840,7 @@ function downloadCSV() {
 
 .table-wrap {
   overflow-x: auto;
+  max-height: calc(100vh - 340px);
 }
 
 .input-compact {
