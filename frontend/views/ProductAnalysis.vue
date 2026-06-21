@@ -489,6 +489,7 @@ onMounted(async () => {
   border-bottom: 1px solid #f0f2f5;
   color: var(--ink-strong);
   font-size: 13px;
+  text-align: left;
 }
 
 .product-table td.num {

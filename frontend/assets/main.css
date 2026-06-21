@@ -390,6 +390,7 @@ select.input {
   color: var(--ink-strong);
   border-bottom: 1px solid #f5f6f8;
   white-space: nowrap;
+  text-align: left;
 }
 
 .data-table td.num {
