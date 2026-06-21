@@ -281,6 +281,27 @@ select.input {
   background: #fff;
 }
 
+.table-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  overflow: auto;
+}
+
+.table-wrap:fullscreen .data-table {
+  font-size: 14px;
+}
+
+.table-wrap:fullscreen .data-table th {
+  padding: 12px 14px;
+}
+
+.table-wrap:fullscreen .data-table td {
+  padding: 9px 14px;
+}
+
 .data-table {
   width: 100%;
   border-collapse: separate;

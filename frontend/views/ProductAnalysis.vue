@@ -38,6 +38,7 @@
       <div class="filter-actions">
         <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+        <FullscreenToggle target=".product-analysis-page .table-wrap" />
       </div>
     </div>
 
@@ -175,6 +176,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 const loading = ref(false)
 const loaded = ref(false)

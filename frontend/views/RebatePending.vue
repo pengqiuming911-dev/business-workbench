@@ -140,6 +140,7 @@
           查询
         </button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+        <FullscreenToggle target=".rebate-pending-page .table-wrap" />
       </div>
     </div>
 
@@ -389,6 +390,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Search, Download, CheckSquare } from '@lucide/vue'
+import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 defineProps({
   embedded: { type: Boolean, default: false },
