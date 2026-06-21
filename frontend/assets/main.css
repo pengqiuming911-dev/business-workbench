@@ -281,24 +281,29 @@ select.input {
   background: #fff;
 }
 
-.table-wrap:fullscreen {
-  width: 100vw;
-  height: 100vh;
+.table-wrap.is-fullscreen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--sidebar-width, 208px);
+  z-index: 1000;
   max-height: none;
   border: none;
   border-radius: 0;
   overflow: auto;
+  margin-left: 0;
 }
 
-.table-wrap:fullscreen .data-table {
+.table-wrap.is-fullscreen .data-table {
   font-size: 14px;
 }
 
-.table-wrap:fullscreen .data-table th {
+.table-wrap.is-fullscreen .data-table th {
   padding: 12px 14px;
 }
 
-.table-wrap:fullscreen .data-table td {
+.table-wrap.is-fullscreen .data-table td {
   padding: 9px 14px;
 }
 

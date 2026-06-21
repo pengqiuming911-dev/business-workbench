@@ -10,7 +10,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { Maximize2, Minimize2 } from '@lucide/vue'
 
 const props = defineProps({
@@ -20,27 +20,36 @@ const props = defineProps({
 const isFullscreen = ref(false)
 const icon = computed(() => isFullscreen.value ? Minimize2 : Maximize2)
 
-function onFullscreenChange() {
-  isFullscreen.value = document.fullscreenElement !== null
+function toggle() {
+  isFullscreen.value = !isFullscreen.value
 }
 
-function toggle() {
-  const el = document.querySelector(props.target)
-  if (!el) return
-
-  if (!document.fullscreenElement) {
-    el.requestFullscreen().catch(() => {})
-  } else {
-    document.exitFullscreen().catch(() => {})
+function onKeydown(e) {
+  if (e.key === 'Escape' && isFullscreen.value) {
+    isFullscreen.value = false
   }
 }
 
+watch(isFullscreen, (val) => {
+  const el = document.querySelector(props.target)
+  if (!el) return
+  el.classList.toggle('is-fullscreen', val)
+  document.body.classList.toggle('table-fullscreen-active', val)
+
+  if (val) {
+    const sidebar = document.querySelector('.sidebar')
+    const sidebarWidth = sidebar ? sidebar.getBoundingClientRect().width : 208
+    el.style.setProperty('--sidebar-width', sidebarWidth + 'px')
+  }
+})
+
 onMounted(() => {
-  document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('keydown', onKeydown)
+  document.body.classList.remove('table-fullscreen-active')
 })
 </script>
 
