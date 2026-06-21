@@ -1358,6 +1358,7 @@ function downloadCSV() {
   border-bottom: 1px solid var(--border-soft);
   background: #fffaf4;
   letter-spacing: 0;
+  line-height: 1.4;
 }
 
 .completed-table .header-group-row th[rowspan="2"] {
@@ -1367,7 +1368,7 @@ function downloadCSV() {
 
 .completed-table .header-sub-row th {
   position: sticky;
-  top: 36px;
+  top: 34px;
   z-index: 10;
   padding: 6px 12px;
   font-size: 11px;

@@ -1015,6 +1015,7 @@ function downloadCSV() {
   position: sticky;
   top: 0;
   z-index: 10;
+  line-height: 1.4;
 }
 
 .header-group-row th[rowspan="2"] {
@@ -1034,7 +1035,7 @@ function downloadCSV() {
   letter-spacing: 0;
   background: #fef9ee;
   position: sticky;
-  top: 36px;
+  top: 34px;
   z-index: 10;
 }
 
