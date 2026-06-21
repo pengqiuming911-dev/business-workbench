@@ -1252,6 +1252,25 @@ function downloadCSV() {
   max-width: none;
 }
 
+.rebate-completed-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.rebate-completed-page > .page-header {
+  flex-shrink: 0;
+}
+
+.rebate-completed-page > .filter-bar {
+  flex-shrink: 0;
+}
+
+.rebate-completed-page > .action-bar {
+  flex-shrink: 0;
+}
+
 .input-compact {
   min-width: 80px !important;
   width: 100px !important;
