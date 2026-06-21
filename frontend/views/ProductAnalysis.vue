@@ -159,14 +159,14 @@
             </tr>
           </tbody>
         </table>
-      </div>
 
-      <div class="pagination">
-        <span class="text-label">共 {{ total }} 条</span>
-        <div class="pagination-controls">
-          <button class="btn btn-secondary btn-sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">上一页</button>
-          <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
-          <button class="btn btn-secondary btn-sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">下一页</button>
+        <div class="pagination">
+          <span class="text-label">共 {{ total }} 条</span>
+          <div class="pagination-controls">
+            <button class="btn btn-secondary btn-sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">上一页</button>
+            <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
+            <button class="btn btn-secondary btn-sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">下一页</button>
+          </div>
         </div>
       </div>
     </div>

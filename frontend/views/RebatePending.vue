@@ -360,14 +360,14 @@
           </tr>
         </tbody>
       </table>
-    </div>
 
-    <!-- 分页 -->
-    <div v-if="items.length > 0" class="pagination">
-      <span class="text-label">共 {{ filteredItems.length }} 条（筛选后） / {{ items.length }} 条（全部） · 第 {{ page }} / {{ totalPages }} 页</span>
-      <div class="pagination-controls">
-        <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
-        <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+      <!-- 分页 -->
+      <div class="pagination">
+        <span class="text-label">共 {{ filteredItems.length }} 条（筛选后） / {{ items.length }} 条（全部） · 第 {{ page }} / {{ totalPages }} 页</span>
+        <div class="pagination-controls">
+          <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
+          <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+        </div>
       </div>
     </div>
 
