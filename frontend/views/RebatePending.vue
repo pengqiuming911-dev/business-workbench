@@ -6,7 +6,7 @@
     </div>
 
     <!-- Filters -->
-    <div class="filter-bar">
+    <div class="filter-bar primary-filter-bar" :class="{ 'show-all': showAdvanced }">
       <div class="filter-group">
         <label>订单号</label>
         <input
@@ -135,7 +135,7 @@
         </div>
       </div>
       <div class="filter-actions">
-        <button class="btn btn-primary btn-sm" @click="fetchData">
+        <button class="btn btn-primary btn-sm" @click="applyFilters">
           <Search :size="14" />
           查询
         </button>
@@ -144,8 +144,33 @@
       </div>
     </div>
 
+    <button class="advanced-toggle" type="button" @click="showAdvanced = !showAdvanced">
+      <span class="chevron" :class="{ open: showAdvanced }">▸</span>
+      高级筛选
+      <span class="advanced-note">{{ showAdvanced ? '收起' : '展开更多条件' }}</span>
+    </button>
+
+    <div v-if="activeFilterChips.length > 0" class="filter-chip-bar">
+      <span class="chip-bar-label">当前筛选</span>
+      <button
+        v-for="chip in activeFilterChips"
+        :key="chip.key"
+        type="button"
+        class="filter-chip"
+        @click="clearFilter(chip.key)"
+      >
+        <span>{{ chip.label }}</span>
+        <span class="chip-remove">×</span>
+      </button>
+      <button type="button" class="clear-all" @click="resetFilters">清空全部</button>
+    </div>
+
     <!-- Action bar -->
     <div class="action-bar">
+      <div class="action-bar-meta">
+        <span class="text-label">筛选后 {{ filteredItems.length }} 条 / 全部 {{ items.length }} 条</span>
+      </div>
+      <div class="action-bar-actions">
       <button class="btn btn-secondary btn-sm" @click="downloadCSV">
         <Download :size="14" />
         下载
@@ -154,6 +179,7 @@
         <CheckSquare :size="14" />
         批量勾选
       </button>
+      </div>
     </div>
 
     <!-- Batch panel -->
@@ -470,6 +496,44 @@ const shouldReturnDropdownRef = ref(null)
 const unreturnedLabel = computed(() => multiLabel(filters.value.unreturnedCategories, '未返'))
 const planLabel = computed(() => multiLabel(filters.value.planCategories, '本次拟返'))
 const shouldReturnLabel = computed(() => multiLabel(filters.value.shouldReturnCategories, '应返'))
+const activeFilterChips = computed(() => {
+  const f = filters.value
+  const chips = []
+  if (f.orderId) chips.push({ key: 'orderId', label: `订单号 ${f.orderId}` })
+  if (f.customerName) chips.push({ key: 'customerName', label: `客户 ${f.customerName}` })
+  if (f.rebateTarget) chips.push({ key: 'rebateTarget', label: `返费对象 ${f.rebateTarget}` })
+  if (f.isReturnable) chips.push({ key: 'isReturnable', label: `是否可返 ${f.isReturnable}` })
+  if (f.planCategories.length > 0 && f.planCategories.length < feeCategories.length) {
+    chips.push({ key: 'planCategories', label: `本次拟返 ${f.planCategories.join(', ')}` })
+  }
+  if (f.unreturnedCategories.length > 0 && f.unreturnedCategories.length < feeCategories.length) {
+    chips.push({ key: 'unreturnedCategories', label: `未返 ${f.unreturnedCategories.join(', ')}` })
+  }
+  if (f.flightId) chips.push({ key: 'flightId', label: `航班编号 ${f.flightId}` })
+  if (f.productName) chips.push({ key: 'productName', label: `航班名称 ${f.productName}` })
+  if (f.checkCategory) chips.push({ key: 'checkCategory', label: `校验类别 ${f.checkCategory}` })
+  if (f.checkResult) chips.push({ key: 'checkResult', label: `校验结果 ${f.checkResult}` })
+  if (f.shouldReturnCategories.length > 0 && f.shouldReturnCategories.length < feeCategories.length) {
+    chips.push({ key: 'shouldReturnCategories', label: `应返 ${f.shouldReturnCategories.join(', ')}` })
+  }
+  return chips
+})
+
+function defaultFilters() {
+  return {
+    customerName: '',
+    rebateTarget: '',
+    isReturnable: '',
+    unreturnedCategories: [],
+    planCategories: [],
+    orderId: '',
+    flightId: '',
+    productName: '',
+    shouldReturnCategories: [],
+    checkCategory: '',
+    checkResult: '',
+  }
+}
 
 function multiLabel(selected, fallback) {
   if (!selected || selected.length === 0) return `全部`
@@ -724,21 +788,23 @@ async function fetchData() {
   }
 }
 
-function resetFilters() {
-  filters.value = {
-    customerName: '',
-    rebateTarget: '',
-    isReturnable: '',
-    unreturnedCategories: [],
-    planCategories: [],
-    orderId: '',
-    flightId: '',
-    productName: '',
-    shouldReturnCategories: [],
-    checkCategory: '',
-    checkResult: '',
-  }
+function applyFilters() {
+  page.value = 1
   fetchData()
+}
+
+function clearFilter(key) {
+  if (Array.isArray(filters.value[key])) {
+    filters.value[key] = []
+  } else {
+    filters.value[key] = ''
+  }
+  applyFilters()
+}
+
+function resetFilters() {
+  filters.value = defaultFilters()
+  applyFilters()
 }
 
 // --- CSV download ---
@@ -832,6 +898,10 @@ function downloadCSV() {
   margin-bottom: 6px;
 }
 
+.primary-filter-bar:not(.show-all) .filter-group:nth-child(n + 6):nth-child(-n + 10) {
+  display: none;
+}
+
 .rebate-pending-page > .action-bar {
   flex-shrink: 0;
   margin-bottom: 6px;
@@ -866,6 +936,9 @@ function downloadCSV() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: fit-content;
+  border: none;
+  background: transparent;
   color: var(--brand);
   font-size: 13px;
   font-weight: 700;
@@ -877,6 +950,11 @@ function downloadCSV() {
 
 .advanced-toggle:hover {
   color: var(--brand-strong);
+}
+
+.advanced-note {
+  color: var(--ink-faint);
+  font-weight: 600;
 }
 
 .advanced-bar {
@@ -891,6 +969,52 @@ function downloadCSV() {
 
 .chevron.open {
   transform: rotate(90deg);
+}
+
+.filter-chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.chip-bar-label {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(31, 58, 138, 0.12);
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chip-remove {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.clear-all {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 /* --- Multi-select dropdown --- */
@@ -963,8 +1087,15 @@ function downloadCSV() {
 /* --- Action bar --- */
 .action-bar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 6px;
+}
+
+.action-bar-actions {
+  display: flex;
+  gap: 10px;
 }
 
 /* --- Batch panel --- */
@@ -974,9 +1105,9 @@ function downloadCSV() {
   gap: 10px;
   margin-bottom: 16px;
   padding: 14px 20px;
-  background: var(--brand-soft);
-  border: 1px solid rgba(41, 98, 255, 0.15);
-  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
 }
 
 .batch-label {
@@ -1012,14 +1143,14 @@ function downloadCSV() {
   white-space: nowrap;
   color: var(--ink-strong);
   border-bottom: 1px solid var(--border-soft);
-  background: #fef9ee;
+  background: #f8fafc;
   letter-spacing: 0;
   line-height: 1.4;
 }
 
 .header-group-row th[rowspan="2"] {
   vertical-align: middle;
-  background: #fef9ee;
+  background: #f8fafc;
   text-align: left;
 }
 
@@ -1032,79 +1163,79 @@ function downloadCSV() {
   color: var(--ink-soft);
   border-bottom: 1px solid var(--border-soft);
   letter-spacing: 0;
-  background: #fef9ee;
+  background: #f8fafc;
 }
 
 /* Group header colors */
 .group-receivable {
-  background: #eef4ff !important;
-  color: #2563a8 !important;
+  background: #f8fbff !important;
+  color: #36527c !important;
 }
 
 .group-ratio {
-  background: #fef9ee !important;
-  color: #8a6d00 !important;
+  background: #f8fafc !important;
+  color: #556274 !important;
 }
 
 .group-tax {
-  background: #fef2f2 !important;
-  color: #b43227 !important;
+  background: #fff7f7 !important;
+  color: #a14a4a !important;
 }
 
 .group-should {
-  background: #eafaf3 !important;
-  color: #0d9668 !important;
+  background: #f4fbf7 !important;
+  color: #2f6b58 !important;
 }
 
 .group-returned {
-  background: #f1edfb !important;
-  color: #6b5b95 !important;
+  background: #f7f8fc !important;
+  color: #5a6685 !important;
 }
 
 .group-unreturned {
-  background: #fff7ed !important;
-  color: #c2410c !important;
+  background: #fffaf4 !important;
+  color: #9a6340 !important;
 }
 
 .group-check {
-  background: #f0f4f8 !important;
+  background: #f8fafc !important;
   color: #475569 !important;
 }
 
 .group-plan {
-  background: #ecfdf5 !important;
-  color: #047857 !important;
+  background: #f3f7ff !important;
+  color: #315599 !important;
 }
 
 /* Sub-header colors matching groups */
 .sub-receivable {
-  background: #eef4ff !important;
-  color: #2563a8 !important;
+  background: #f8fbff !important;
+  color: #36527c !important;
 }
 
 .sub-ratio {
-  background: #fef9ee !important;
-  color: #8a6d00 !important;
+  background: #f8fafc !important;
+  color: #556274 !important;
 }
 
 .sub-tax {
-  background: #fef2f2 !important;
-  color: #b43227 !important;
+  background: #fff7f7 !important;
+  color: #a14a4a !important;
 }
 
 .sub-should {
-  background: #eafaf3 !important;
-  color: #0d9668 !important;
+  background: #f4fbf7 !important;
+  color: #2f6b58 !important;
 }
 
 .sub-returned {
-  background: #f1edfb !important;
-  color: #6b5b95 !important;
+  background: #f7f8fc !important;
+  color: #5a6685 !important;
 }
 
 .sub-unreturned {
-  background: #fff7ed !important;
-  color: #c2410c !important;
+  background: #fffaf4 !important;
+  color: #9a6340 !important;
 }
 
 .sub-check {
@@ -1113,8 +1244,8 @@ function downloadCSV() {
 }
 
 .sub-plan {
-  background: #ecfdf5 !important;
-  color: #047857 !important;
+  background: #f3f7ff !important;
+  color: #315599 !important;
 }
 
 /* ── 数据行单元格：禁止任何列颜色，仅保持白底 ── */
@@ -1148,7 +1279,7 @@ function downloadCSV() {
   left: 0 !important;
   z-index: 20 !important;
   text-align: left;
-  background: #fef9ee;
+  background: #f8fafc;
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
 }
 
@@ -1156,7 +1287,7 @@ function downloadCSV() {
   position: sticky !important;
   left: 0 !important;
   z-index: 20 !important;
-  background: #fef9ee;
+  background: #f8fafc;
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
 }
 
@@ -1181,6 +1312,11 @@ function downloadCSV() {
     width: 100%;
     margin-left: 0;
     justify-content: flex-end;
+  }
+
+  .action-bar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

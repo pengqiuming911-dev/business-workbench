@@ -26,13 +26,23 @@
       </nav>
 
       <div class="sidebar-bottom">
-        <RouterLink to="/activity-log" class="nav-item" :class="{ active: currentPath === '/activity-log' }" @click="emit('navigate')">
+        <RouterLink
+          to="/activity-log"
+          class="nav-item"
+          :class="{ active: currentPath === '/activity-log' }"
+          @click="emit('navigate')"
+        >
           <Clock :size="20" :stroke-width="2" />
           <span v-if="!collapsed">日志</span>
         </RouterLink>
-        <RouterLink to="/user-profile" class="nav-item" :class="{ active: currentPath === '/user-profile' }" @click="emit('navigate')">
+        <RouterLink
+          to="/user-profile"
+          class="nav-item"
+          :class="{ active: currentPath === '/user-profile' }"
+          @click="emit('navigate')"
+        >
           <User :size="20" :stroke-width="2" />
-          <span v-if="!collapsed">账户</span>
+          <span v-if="!collapsed">客户画像</span>
         </RouterLink>
       </div>
     </div>
@@ -85,10 +95,11 @@ const navItems = [
   bottom: 0;
   width: 208px;
   z-index: 100;
-  background: var(--bg-card);
+  background: var(--bg-sidebar);
   border-right: 1px solid var(--border-soft);
   transition: width 220ms ease;
   overflow: hidden;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.72);
 }
 
 .sidebar.collapsed {
@@ -99,7 +110,7 @@ const navItems = [
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 16px 12px;
+  padding: 18px 12px 14px;
   overflow-y: auto;
 }
 
@@ -107,7 +118,9 @@ const navItems = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 4px 8px;
+  padding: 4px 6px 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .brand-link {
@@ -120,8 +133,9 @@ const navItems = [
 .brand-logo {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 10px;
   object-fit: cover;
+  box-shadow: var(--shadow-sm);
 }
 
 .brand-text {
@@ -138,7 +152,7 @@ const navItems = [
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--ink-faint);
   cursor: pointer;
@@ -146,14 +160,14 @@ const navItems = [
 }
 
 .collapse-btn:hover {
-  background: var(--border-soft);
+  background: rgba(255, 255, 255, 0.8);
   color: var(--ink);
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
 }
 
@@ -161,34 +175,35 @@ const navItems = [
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 40px;
+  height: 42px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
   color: var(--ink-soft);
   text-decoration: none;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
   white-space: nowrap;
-  border-left: 3px solid transparent;
+  border: 1px solid transparent;
 }
 
 .nav-item:hover {
-  background: var(--bg-hover, #f3f4f6);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--ink-strong);
 }
 
 .nav-item.active {
-  background: var(--brand-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), var(--brand-soft));
   color: var(--brand);
-  border-left-color: var(--brand);
+  border-color: rgba(31, 58, 138, 0.12);
   font-weight: 700;
+  box-shadow: var(--shadow-sm);
 }
 
 .sidebar-bottom {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   border-top: 1px solid var(--border-soft);
   padding-top: 12px;
   margin-top: 8px;

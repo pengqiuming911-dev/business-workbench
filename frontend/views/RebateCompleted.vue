@@ -6,7 +6,7 @@
     </div>
 
     <!-- Filters -->
-    <div class="filter-bar">
+    <div class="filter-bar primary-filter-bar" :class="{ 'show-all': showAdvanced }">
       <div class="filter-group">
         <label>订单号</label>
         <input
@@ -62,7 +62,7 @@
         />
       </div>
       <div class="filter-actions">
-        <button class="btn btn-primary btn-sm" @click="fetchData">
+        <button class="btn btn-primary btn-sm" @click="applyFilters">
           <Search :size="14" />
           查询
         </button>
@@ -71,8 +71,33 @@
       </div>
     </div>
 
+    <button class="advanced-toggle" type="button" @click="showAdvanced = !showAdvanced">
+      <span class="chevron" :class="{ open: showAdvanced }">▸</span>
+      高级筛选
+      <span class="advanced-note">{{ showAdvanced ? '收起' : '展开更多条件' }}</span>
+    </button>
+
+    <div v-if="activeFilterChips.length > 0" class="filter-chip-bar">
+      <span class="chip-bar-label">当前筛选</span>
+      <button
+        v-for="chip in activeFilterChips"
+        :key="chip.key"
+        type="button"
+        class="filter-chip"
+        @click="clearFilter(chip.key)"
+      >
+        <span>{{ chip.label }}</span>
+        <span class="chip-remove">×</span>
+      </button>
+      <button type="button" class="clear-all" @click="resetFilters">清空全部</button>
+    </div>
+
     <!-- Action bar -->
     <div class="action-bar">
+      <div class="action-bar-meta">
+        <span class="text-label">当前记录 {{ items.length }} 条</span>
+      </div>
+      <div class="action-bar-actions">
       <button class="btn btn-primary btn-sm" @click="openAddModal">
         <Plus :size="14" />
         新增记录
@@ -89,6 +114,7 @@
         <Download :size="14" />
         下载模板
       </button>
+      </div>
       <input
         ref="fileInputRef"
         type="file"
@@ -412,7 +438,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { Search, Plus, Upload, Download, Trash2, X } from '@lucide/vue'
 import FullscreenToggle from '../components/FullscreenToggle.vue'
 
@@ -425,6 +451,7 @@ const loading = ref(false)
 const loaded = ref(false)
 const items = ref([])
 const fileInputRef = ref(null)
+const showAdvanced = ref(false)
 
 const filters = reactive({
   orderId: '',
@@ -434,6 +461,27 @@ const filters = reactive({
   expenseCategory: '',
   source: '',
 })
+const activeFilterChips = computed(() => {
+  const chips = []
+  if (filters.orderId) chips.push({ key: 'orderId', label: `订单号 ${filters.orderId}` })
+  if (filters.expenseCategory) chips.push({ key: 'expenseCategory', label: `费用类别 ${filters.expenseCategory}` })
+  if (filters.source) chips.push({ key: 'source', label: `来源 ${sourceLabel(filters.source)}` })
+  if (filters.flightId) chips.push({ key: 'flightId', label: `航班编号 ${filters.flightId}` })
+  if (filters.customerName) chips.push({ key: 'customerName', label: `客户 ${filters.customerName}` })
+  if (filters.rebateTarget) chips.push({ key: 'rebateTarget', label: `返费对象 ${filters.rebateTarget}` })
+  return chips
+})
+
+function defaultFilters() {
+  return {
+    orderId: '',
+    flightId: '',
+    customerName: '',
+    rebateTarget: '',
+    expenseCategory: '',
+    source: '',
+  }
+}
 
 // --- Add modal ---
 const addModal = reactive({
@@ -563,13 +611,17 @@ async function fetchData() {
 }
 
 function resetFilters() {
-  filters.orderId = ''
-  filters.flightId = ''
-  filters.customerName = ''
-  filters.rebateTarget = ''
-  filters.expenseCategory = ''
-  filters.source = ''
+  Object.assign(filters, defaultFilters())
+  applyFilters()
+}
+
+function applyFilters() {
   fetchData()
+}
+
+function clearFilter(key) {
+  filters[key] = ''
+  applyFilters()
 }
 
 // --- Add record ---
@@ -1273,6 +1325,83 @@ function downloadCSV() {
   margin-bottom: 8px;
 }
 
+.primary-filter-bar:not(.show-all) .filter-group:nth-child(n + 5):nth-child(-n + 6) {
+  display: none;
+}
+
+.advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-bottom: 14px;
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.advanced-note {
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.chevron {
+  font-size: 16px;
+  transition: transform 0.2s ease;
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.filter-chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.chip-bar-label {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(31, 58, 138, 0.12);
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chip-remove {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.clear-all {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .rebate-completed-page > .action-bar {
   flex-shrink: 0;
 }
@@ -1300,8 +1429,17 @@ function downloadCSV() {
 /* --- Action bar --- */
 .action-bar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
+}
+
+.action-bar-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .table-bottom-actions {
@@ -1355,14 +1493,14 @@ function downloadCSV() {
   white-space: nowrap;
   color: var(--ink-strong);
   border-bottom: 1px solid var(--border-soft);
-  background: #fffaf4;
+  background: #f8fafc;
   letter-spacing: 0;
   line-height: 1.4;
 }
 
 .completed-table .header-group-row th[rowspan="2"] {
   vertical-align: middle;
-  background: #fffaf4;
+  background: #f8fafc;
 }
 
 .completed-table .header-sub-row th {
@@ -1374,29 +1512,29 @@ function downloadCSV() {
   color: var(--ink-soft);
   border-bottom: 1px solid var(--border-soft);
   letter-spacing: 0;
-  background: #fffaf4;
+  background: #f8fafc;
 }
 
 /* Group header colors — 渠道返还比例: purple */
 .completed-table .group-channel-ratio {
-  background: #f1edfb !important;
-  color: #6b5b95 !important;
+  background: #f7f8fc !important;
+  color: #5a6685 !important;
   text-align: center !important;
 }
 .completed-table .sub-channel-ratio {
-  background: #f1edfb !important;
-  color: #6b5b95 !important;
+  background: #f7f8fc !important;
+  color: #5a6685 !important;
 }
 
 /* Group header colors — 支出流水明细: light blue */
 .completed-table .group-expense {
-  background: #eef4ff !important;
-  color: #2563a8 !important;
+  background: #f8fbff !important;
+  color: #36527c !important;
   text-align: center !important;
 }
 .completed-table .sub-expense {
-  background: #eef4ff !important;
-  color: #2563a8 !important;
+  background: #f8fbff !important;
+  color: #36527c !important;
 }
 
 .completed-table td {
@@ -1427,11 +1565,11 @@ function downloadCSV() {
 }
 
 .completed-table tbody tr:hover .sticky-col {
-  background: #f7f8fa;
+  background: #eef4fb;
 }
 
 .completed-table tbody tr:hover td {
-  background: #f7f8fa;
+  background: #eef4fb;
 }
 
 /* Sticky first column — header cells need higher z-index */
@@ -1440,7 +1578,7 @@ function downloadCSV() {
   left: 0;
   z-index: 20 !important;
   text-align: left;
-  background: #fffaf4;
+  background: #f8fafc;
 }
 
 @media (max-width: 1440px) {
@@ -1448,6 +1586,11 @@ function downloadCSV() {
     width: 100%;
     margin-left: 0;
     justify-content: flex-end;
+  }
+
+  .action-bar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

@@ -2,67 +2,105 @@
   <div class="push-settings-page">
     <div class="page-header">
       <h1 class="text-page-title">飞书推送设置</h1>
-      <p class="text-body">配置今日观察的飞书群机器人推送。设置推送时间后，系统将每天定时把今日观察内容推送到飞书群。</p>
+      <p class="text-body">
+        配置观察提醒的发送方式、发送时间和回执状态。页面收窄为配置版心，避免长字段横向拉满。
+      </p>
     </div>
 
-    <PanelCard title="推送配置">
-      <div class="form-row">
-        <label>启用推送</label>
-        <label class="toggle-label">
-          <input type="checkbox" v-model="form.enabled" />
-          <span>{{ form.enabled ? '已启用' : '已关闭' }}</span>
-        </label>
-      </div>
+    <div class="push-layout">
+      <PanelCard title="推送配置">
+        <div class="settings-form">
+          <div class="settings-row settings-row-compact">
+            <label>启用推送</label>
+            <label class="toggle-card">
+              <input type="checkbox" v-model="form.enabled" />
+              <span class="toggle-indicator" :class="{ on: form.enabled }"></span>
+              <span class="toggle-copy">{{ form.enabled ? '已启用，按计划发送' : '已关闭，不会自动推送' }}</span>
+            </label>
+          </div>
 
-      <div class="form-row">
-        <label>Webhook URL</label>
-        <input
-          v-model="form.webhook_url"
-          type="text"
-          class="input"
-          placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
-        />
-        <span class="text-label" style="margin-top:4px;display:block">
-          在飞书群 → 设置 → 群机器人 → 添加自定义机器人，复制 Webhook 地址
-        </span>
-      </div>
+          <div class="settings-row settings-row-stack">
+            <label>Webhook URL</label>
+            <div class="webhook-field">
+              <input
+                v-model="form.webhook_url"
+                type="text"
+                class="input webhook-input"
+                placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
+              />
+              <button class="btn btn-secondary btn-sm" type="button" :disabled="!form.webhook_url" @click="copyWebhook">
+                复制
+              </button>
+            </div>
+            <span class="text-label helper-text">
+              在飞书群设置中添加自定义机器人，并复制 Webhook 地址到这里。
+            </span>
+          </div>
 
-      <div class="form-row">
-        <label>推送时间</label>
-        <div class="time-picker">
-          <select v-model.number="form.cron_hour" class="input time-select">
-            <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ String(h - 1).padStart(2, '0') }} 时</option>
-          </select>
-          <select v-model.number="form.cron_minute" class="input time-select">
-            <option v-for="m in minuteOptions" :key="m" :value="m">{{ String(m).padStart(2, '0') }} 分</option>
-          </select>
+          <div class="settings-row settings-row-stack">
+            <label>推送时间</label>
+            <div class="time-picker">
+              <select v-model.number="form.cron_hour" class="input time-select">
+                <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ String(h - 1).padStart(2, '0') }} 时</option>
+              </select>
+              <select v-model.number="form.cron_minute" class="input time-select">
+                <option v-for="m in minuteOptions" :key="m" :value="m">{{ String(m).padStart(2, '0') }} 分</option>
+              </select>
+            </div>
+            <span class="text-label helper-text">建议设置在开盘前后或盘后复核时段。</span>
+          </div>
+
+          <div class="settings-actions">
+            <button class="btn btn-primary" :disabled="saving" @click="saveConfig">
+              {{ saving ? '保存中...' : '保存设置' }}
+            </button>
+            <button class="btn btn-secondary" :disabled="testing" @click="testPush">
+              {{ testing ? '发送中...' : '发送测试消息' }}
+            </button>
+          </div>
+
+          <p v-if="message" class="feedback-line" :class="{ 'error-msg': isError, 'success-msg': !isError }">
+            {{ message }}
+          </p>
         </div>
-      </div>
+      </PanelCard>
 
-      <div class="form-row" style="display:flex;gap:12px;flex-wrap:wrap">
-        <button class="btn btn-primary" :disabled="saving" @click="saveConfig">
-          {{ saving ? '保存中...' : '保存设置' }}
-        </button>
-        <button class="btn btn-secondary" :disabled="testing" @click="testPush">
-          {{ testing ? '发送中...' : '发送测试消息' }}
-        </button>
-      </div>
+      <div class="status-column">
+        <PanelCard title="状态回执">
+          <div class="status-stack">
+            <div class="status-item">
+              <span class="status-label">当前状态</span>
+              <strong class="status-value">{{ form.enabled ? '自动推送开启' : '自动推送关闭' }}</strong>
+            </div>
+            <div class="status-item">
+              <span class="status-label">上次推送时间</span>
+              <strong class="status-value">{{ lastPushTime || '从未推送' }}</strong>
+            </div>
+            <div class="status-item">
+              <span class="status-label">上次推送结果</span>
+              <strong class="status-value">{{ lastPushResult || '--' }}</strong>
+            </div>
+          </div>
+        </PanelCard>
 
-      <p v-if="message" class="text-label" :class="{ 'error-msg': isError, 'success-msg': !isError }" style="margin-top:12px">
-        {{ message }}
-      </p>
-    </PanelCard>
-
-    <PanelCard title="推送状态" style="margin-top:20px">
-      <div class="form-row">
-        <label>上次推送时间</label>
-        <span class="text-body">{{ lastPushTime || '从未推送' }}</span>
+        <PanelCard title="使用建议">
+          <div class="tips-list">
+            <div class="tip-item">
+              <strong>先保存，再测试</strong>
+              <span>避免测试仍命中旧的 Webhook 或旧时间配置。</span>
+            </div>
+            <div class="tip-item">
+              <strong>优先固定时间段</strong>
+              <span>建议每日固定推送时刻，减少运营习惯漂移。</span>
+            </div>
+            <div class="tip-item">
+              <strong>长地址保持可复制</strong>
+              <span>Webhook 只做单行展示，避免整屏横向延展。</span>
+            </div>
+          </div>
+        </PanelCard>
       </div>
-      <div class="form-row">
-        <label>上次推送结果</label>
-        <span class="text-body">{{ lastPushResult || '--' }}</span>
-      </div>
-    </PanelCard>
+    </div>
   </div>
 </template>
 
@@ -148,6 +186,17 @@ async function testPush() {
   }
 }
 
+async function copyWebhook() {
+  try {
+    await navigator.clipboard.writeText(form.value.webhook_url)
+    message.value = 'Webhook 已复制'
+    isError.value = false
+  } catch {
+    message.value = '复制失败，请手动复制'
+    isError.value = true
+  }
+}
+
 onMounted(loadConfig)
 </script>
 
@@ -158,20 +207,198 @@ onMounted(loadConfig)
   overflow-y: auto;
 }
 
-.toggle-label {
+.push-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 760px) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-row {
+  display: flex;
+  gap: 12px;
+}
+
+.settings-row > label:first-child {
+  width: 96px;
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 700;
+  padding-top: 10px;
+}
+
+.settings-row-compact {
+  align-items: center;
+}
+
+.settings-row-compact > label:first-child {
+  padding-top: 0;
+}
+
+.settings-row-stack {
+  align-items: flex-start;
+}
+
+.toggle-card {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
   cursor: pointer;
+}
+
+.toggle-card input {
+  display: none;
+}
+
+.toggle-indicator {
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  position: relative;
+  transition: background 150ms ease;
+}
+
+.toggle-indicator::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+  transition: transform 150ms ease;
+}
+
+.toggle-indicator.on {
+  background: var(--brand);
+}
+
+.toggle-indicator.on::after {
+  transform: translateX(14px);
+}
+
+.toggle-copy {
+  color: var(--ink);
   font-size: 14px;
+  font-weight: 600;
+}
+
+.webhook-field {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  max-width: 560px;
+}
+
+.webhook-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.helper-text {
+  display: block;
+  margin-top: 6px;
 }
 
 .time-picker {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .time-select {
   width: 120px;
 }
-</style>
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.feedback-line {
+  margin-top: -4px;
+}
+
+.status-column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.status-stack,
+.tips-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.status-item,
+.tip-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.status-item:last-child,
+.tip-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.status-label {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-value,
+.tip-item strong {
+  color: var(--ink-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.tip-item span {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1120px) {
+  .push-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-row {
+    flex-direction: column;
+  }
+
+  .settings-row > label:first-child {
+    width: auto;
+    padding-top: 0;
+  }
+
+  .webhook-field {
+    max-width: none;
+  }
+}
+</style>

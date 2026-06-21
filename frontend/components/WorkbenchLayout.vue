@@ -8,19 +8,25 @@
       @collapse="sidebarCollapsed = !sidebarCollapsed"
     />
 
-    <div class="workbench-content" :class="{ expanded: sidebarCollapsed }">
+    <div
+      class="workbench-content"
+      :class="{
+        expanded: sidebarCollapsed,
+        'drawer-docked': drawerOpen && !isMobileDrawer,
+      }"
+    >
       <main class="workbench-main">
         <slot />
       </main>
     </div>
 
-    <AgentDrawer :open="drawerOpen" @close="drawerOpen = false" />
+    <AgentDrawer :open="drawerOpen" :docked="!isMobileDrawer" @close="closeDrawer" />
 
     <button
       v-show="!drawerOpen"
       class="agent-fab"
       type="button"
-      @click="drawerOpen = true"
+      @click="openDrawer"
     >
       <MessageSquare :size="24" :stroke-width="2" color="#fff" />
     </button>
@@ -36,10 +42,23 @@ import SidebarNav from './SidebarNav.vue'
 import AgentDrawer from './AgentDrawer.vue'
 import GlobalSearch from './GlobalSearch.vue'
 
+const AGENT_DRAWER_STATE_KEY = 'business-workbench.agent-drawer-open'
 const sidebarCollapsed = ref(false)
 const sidebarOverlay = ref(false)
 const searchOpen = ref(false)
-const drawerOpen = ref(true)
+const drawerOpen = ref(false)
+const isMobileDrawer = ref(false)
+
+function syncDrawerMode() {
+  isMobileDrawer.value = window.innerWidth <= 1100
+}
+
+function persistDrawerState() {
+  window.localStorage.setItem(
+    AGENT_DRAWER_STATE_KEY,
+    drawerOpen.value ? 'true' : 'false',
+  )
+}
 
 function handleKeydown(e) {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -50,16 +69,32 @@ function handleKeydown(e) {
 
 function handleToggleDrawer() {
   drawerOpen.value = !drawerOpen.value
+  persistDrawerState()
+}
+
+function openDrawer() {
+  drawerOpen.value = true
+  persistDrawerState()
+}
+
+function closeDrawer() {
+  drawerOpen.value = false
+  persistDrawerState()
 }
 
 onMounted(() => {
+  syncDrawerMode()
+  drawerOpen.value =
+    window.localStorage.getItem(AGENT_DRAWER_STATE_KEY) === 'true'
   document.addEventListener('keydown', handleKeydown)
   window.addEventListener('toggle-agent-drawer', handleToggleDrawer)
+  window.addEventListener('resize', syncDrawerMode)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('toggle-agent-drawer', handleToggleDrawer)
+  window.removeEventListener('resize', syncDrawerMode)
 })
 </script>
 
@@ -67,6 +102,7 @@ onUnmounted(() => {
 .workbench-shell {
   height: 100vh;
   display: flex;
+  --agent-drawer-width: 392px;
 }
 
 .workbench-content {
@@ -76,11 +112,16 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   margin-left: 208px;
-  transition: margin-left 220ms ease;
+  margin-right: 0;
+  transition: margin-left 220ms ease, margin-right 220ms ease;
 }
 
 .workbench-content.expanded {
   margin-left: 64px;
+}
+
+.workbench-content.drawer-docked {
+  margin-right: var(--agent-drawer-width);
 }
 
 .workbench-main {
@@ -91,7 +132,7 @@ onUnmounted(() => {
   overflow: hidden;
   width: 100%;
   max-width: 1680px;
-  padding: 4px 32px 16px;
+  padding: 24px 32px 16px;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -127,7 +168,13 @@ onUnmounted(() => {
   }
 
   .workbench-main {
-    padding: 4px 14px 48px;
+    padding: 20px 14px 48px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .workbench-content.drawer-docked {
+    margin-right: 0;
   }
 }
 </style>

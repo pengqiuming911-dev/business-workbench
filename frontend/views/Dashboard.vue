@@ -1,102 +1,126 @@
 <template>
   <div class="dashboard-page">
-    <!-- Hero -->
     <section class="hero-section">
       <div class="hero-content">
-        <h2 class="hero-title">业务工作台</h2>
-        <p class="hero-desc">集中处理数据同步、产品观察、报告输出和客户分析。</p>
+        <div class="hero-kicker">金融衍生品运营工作台</div>
+        <h2 class="hero-title">衍选运营平台</h2>
+        <p class="hero-desc">
+          面向结构化产品运营的日常工作台。优先呈现今日需要处理的同步状态、观察任务和核心规模指标。
+        </p>
         <div class="hero-actions">
           <RouterLink class="btn btn-primary" to="/data-preparation">同步数据</RouterLink>
           <RouterLink class="btn btn-outline" to="/product-completion">今日观察</RouterLink>
-          <button class="btn btn-outline" @click="openDrawer">智能助手</button>
+          <button class="btn btn-outline" @click="openDrawer">打开智能体</button>
         </div>
       </div>
+
       <div class="hero-indices">
-        <article
-          v-for="idx in indexItems"
-          :key="idx.code"
-          class="index-card"
-        >
+        <article v-for="idx in indexItems" :key="idx.code" class="index-card">
           <div class="index-header">
-            <span class="index-name">{{ idx.name }}</span>
-            <span class="index-code">{{ idx.code }}</span>
+            <div>
+              <span class="index-name">{{ idx.name }}</span>
+              <span class="index-code">{{ idx.code }}</span>
+            </div>
+            <span class="index-badge">市场</span>
           </div>
-          <strong class="index-value">{{ idx.value ?? '--' }}</strong>
-          <span
-            class="index-change"
-            :class="{
-              up: idx.changePct > 0,
-              down: idx.changePct < 0,
-            }"
-          >
-            {{ idx.changePct !== null ? (idx.changePct > 0 ? '+' : '') + idx.changePct + '%' : '--' }}
-          </span>
+          <div class="index-main">
+            <strong class="index-value">{{ idx.value ?? '--' }}</strong>
+            <span
+              class="index-change"
+              :class="{
+                up: idx.changePct > 0,
+                down: idx.changePct < 0,
+              }"
+            >
+              {{ idx.changePct !== null ? (idx.changePct > 0 ? '+' : '') + idx.changePct + '%' : '--' }}
+            </span>
+          </div>
           <div class="index-chart" :ref="el => setChartRef(el, idx.code)"></div>
         </article>
       </div>
     </section>
 
-    <!-- Stats Row -->
     <section class="stats-row">
-      <article class="stat-card" v-for="item in statCards" :key="item.label">
-        <span class="stat-label">{{ item.label }}</span>
+      <article class="stat-card stat-card-primary" v-for="item in statCards" :key="item.label">
+        <div class="stat-head">
+          <span class="stat-label">{{ item.label }}</span>
+          <span class="stat-trend">{{ item.trend }}</span>
+        </div>
         <strong class="stat-value">{{ item.value }}</strong>
         <span class="stat-note">{{ item.note }}</span>
       </article>
     </section>
 
-    <!-- Content Grid -->
     <section class="content-grid">
       <div class="main-col">
-        <div class="card-head">
-          <h3>常用入口</h3>
-          <span class="card-link">{{ modules.length }} 项</span>
-        </div>
-        <div class="module-grid">
-          <RouterLink
-            v-for="item in modules"
-            :key="item.path"
-            :to="item.path"
-            class="module-item"
-          >
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.desc }}</span>
-          </RouterLink>
+        <div class="module-panel">
+          <div class="card-head">
+            <h3>常用入口</h3>
+            <span class="card-link">{{ modules.length }} 项</span>
+          </div>
+          <div class="module-grid">
+            <RouterLink v-for="item in modules" :key="item.path" :to="item.path" class="module-item">
+              <span class="module-meta">{{ item.meta }}</span>
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.desc }}</span>
+            </RouterLink>
+          </div>
         </div>
       </div>
 
       <div class="side-col">
-        <div class="side-card">
+        <div class="side-card sync-card">
           <div class="card-head">
             <h3>同步状态</h3>
             <RouterLink to="/data-preparation" class="card-link">管理</RouterLink>
           </div>
           <div class="sync-info">
             <div class="sync-row">
-              <span class="sync-dot" :class="{ ready: syncStatus.row_count }"></span>
-              <strong>交易总表</strong>
-              <span>{{ syncStatus.synced_at ? formatTime(syncStatus.synced_at) : '未同步' }}</span>
+              <div class="sync-main">
+                <span class="sync-dot" :class="{ ready: syncStatus.row_count }"></span>
+                <strong>交易总表</strong>
+              </div>
+              <span class="sync-status">{{ syncStatus.row_count ? '已同步' : '未连接' }}</span>
             </div>
+            <span class="sync-time">{{ syncStatus.synced_at ? formatTime(syncStatus.synced_at) : '尚未同步' }}</span>
+
             <div class="sync-row">
-              <span class="sync-dot" :class="{ ready: docStatus.doc_count }"></span>
-              <strong>物料文档</strong>
-              <span>{{ docStatus.synced_at ? formatTime(docStatus.synced_at) : '未同步' }}</span>
+              <div class="sync-main">
+                <span class="sync-dot" :class="{ ready: docStatus.doc_count }"></span>
+                <strong>销售物料</strong>
+              </div>
+              <span class="sync-status">{{ docStatus.doc_count ? '已同步' : '未连接' }}</span>
             </div>
+            <span class="sync-time">{{ docStatus.synced_at ? formatTime(docStatus.synced_at) : '尚未同步' }}</span>
+
             <div class="sync-row">
-              <span class="sync-dot" :class="{ ready: rebateStatus.row_count }"></span>
-              <strong>返费明细</strong>
-              <span>{{ rebateStatus.synced_at ? formatTime(rebateStatus.synced_at) : '未同步' }}</span>
+              <div class="sync-main">
+                <span class="sync-dot" :class="{ ready: rebateStatus.row_count }"></span>
+                <strong>返费明细</strong>
+              </div>
+              <span class="sync-status">{{ rebateStatus.row_count ? '已同步' : '未连接' }}</span>
             </div>
+            <span class="sync-time">{{ rebateStatus.synced_at ? formatTime(rebateStatus.synced_at) : '尚未同步' }}</span>
           </div>
         </div>
 
-        <div class="side-card">
+        <div class="side-card focus-card">
           <div class="card-head">
             <h3>今日重点</h3>
           </div>
           <div class="quick-links">
-            <RouterLink to="/product-completion" class="quick-link">观察日历</RouterLink>
-            <RouterLink to="/product-report" class="quick-link">销售物料</RouterLink>
+            <RouterLink to="/product-completion" class="quick-link">
+              <strong>观察日历</strong>
+              <span>检查派息 / 敲出产品</span>
+            </RouterLink>
+            <RouterLink to="/product-report" class="quick-link">
+              <strong>销售物料</strong>
+              <span>查看月度物料与空状态</span>
+            </RouterLink>
+            <RouterLink to="/rebate-analysis" class="quick-link">
+              <strong>返费复核</strong>
+              <span>快速进入待返 / 已返分析</span>
+            </RouterLink>
           </div>
         </div>
       </div>
@@ -120,7 +144,7 @@ const rebateStatus = ref({})
 
 const indexItems = ref([
   { code: '000852.SH', name: '中证1000', value: null, changePct: null },
-  { code: '513180.SH', name: '恒科ETF', value: null, changePct: null },
+  { code: '513180.SH', name: '恒生科技ETF', value: null, changePct: null },
   { code: '000905.SH', name: '中证500', value: null, changePct: null },
   { code: '000300.SH', name: '沪深300', value: null, changePct: null },
   { code: '000001.SH', name: '上证指数', value: null, changePct: null },
@@ -128,17 +152,16 @@ const indexItems = ref([
 ])
 
 const statCards = computed(() => [
-  { label: '产品总数', value: stats.value.totalProducts.toLocaleString('zh-CN'), note: '全部产品' },
-  { label: '存续产品', value: stats.value.activeProducts.toLocaleString('zh-CN'), note: '持有中' },
-  { label: '客户数量', value: stats.value.totalCustomers.toLocaleString('zh-CN'), note: '已登记' },
+  { label: '产品总数', value: stats.value.totalProducts.toLocaleString('zh-CN'), note: '全部产品', trend: '规模' },
+  { label: '运行中', value: stats.value.activeProducts.toLocaleString('zh-CN'), note: '用于今日观察与跟踪', trend: '运行中' },
 ])
 
 const modules = [
-  { path: '/data-preparation', title: '数据准备', desc: '飞书同步' },
-  { path: '/product-completion', title: '观察日历', desc: '敲出 / 派息' },
-  { path: '/product-report', title: '销售物料', desc: '产品物料' },
-  { path: '/holding-analysis', title: '产品&持仓', desc: '产品与客户持有' },
-  { path: '/rebate-analysis', title: '返费', desc: '待返费与已返费' },
+  { path: '/product-completion', title: '派息 / 敲出', desc: '观察日历与记录生成', meta: '观察' },
+  { path: '/product-report', title: '销售物料', desc: '按月份查看产品物料', meta: '物料' },
+  { path: '/holding-analysis', title: '产品&持仓', desc: '产品和客户持仓分析', meta: '分析' },
+  { path: '/rebate-analysis', title: '返费', desc: '待返与已返记录复核', meta: '结算' },
+  { path: '/data-preparation', title: '数据准备', desc: '飞书同步与数据接入', meta: '数据' },
 ]
 
 const chartRefs = {}
@@ -213,7 +236,7 @@ async function loadKlines() {
       chartInstances.set(idx.code, chart)
       const closes = result.klines.map(point => point.close)
       const isUp = closes[closes.length - 1] >= closes[0]
-      const color = isUp ? '#dc2626' : '#16a34a'
+      const color = isUp ? '#b91c1c' : '#047857'
       chart.setOption({
         grid: { top: 2, bottom: 2, left: 2, right: 2 },
         xAxis: { type: 'category', show: false, boundaryGap: false },
@@ -223,11 +246,11 @@ async function loadKlines() {
           data: closes,
           smooth: true,
           symbol: 'none',
-          lineStyle: { width: 1.5, color },
+          lineStyle: { width: 1.75, color },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: color + '30' },
-              { offset: 1, color: color + '05' },
+              { offset: 0, color: color + '28' },
+              { offset: 1, color: color + '04' },
             ]),
           },
         }],
@@ -254,143 +277,195 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-top: 8px;
 }
 
-/* ─── Hero ─── */
 .hero-section {
   display: grid;
-  grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.5fr);
-  gap: 22px;
-  align-items: center;
+  grid-template-columns: minmax(320px, 0.78fr) minmax(0, 1.4fr);
+  gap: 24px;
+  align-items: stretch;
   margin-bottom: 22px;
-  padding: 22px;
-  background: var(--bg-card);
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(44, 92, 224, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.9));
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 
 .hero-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.hero-kicker {
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .hero-title {
   color: var(--ink-strong);
-  font-size: 24px;
-  font-weight: 750;
+  font-size: 32px;
+  font-weight: 800;
   line-height: 1.15;
+  letter-spacing: -0.02em;
+  max-width: 560px;
 }
 
 .hero-desc {
   color: var(--ink-soft);
   font-size: 14px;
-  line-height: 1.6;
-  max-width: 400px;
+  line-height: 1.75;
+  max-width: 480px;
 }
 
 .hero-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: 4px;
 }
 
 .hero-indices {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 6px;
-  background: var(--bg-hover, #f9fafb);
-  border-radius: var(--radius);
+  gap: 10px;
+  align-self: stretch;
 }
 
-.hero-indices .index-card {
+.index-card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 12px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 132px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
   box-shadow: var(--shadow-sm);
 }
 
 .index-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 8px;
 }
 
 .index-name {
+  display: block;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-soft);
+  font-weight: 700;
+  color: var(--ink-strong);
 }
 
 .index-code {
+  display: block;
+  margin-top: 2px;
   font-size: 11px;
   color: var(--ink-faint);
   font-family: var(--font-mono);
 }
 
+.index-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.index-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .index-value {
-  font-size: 17px;
-  font-weight: 750;
+  font-size: 22px;
+  font-weight: 800;
   color: var(--ink-strong);
-  line-height: 1.2;
+  line-height: 1.1;
   font-family: var(--font-mono);
 }
 
 .index-change {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink-faint);
 }
 
 .index-chart {
   width: 100%;
-  height: 48px;
-  margin-top: 4px;
+  height: 60px;
 }
 
 .index-change.up {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 .index-change.down {
-  color: #16a34a;
+  color: var(--success);
 }
 
-/* ─── Stats ─── */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .stat-card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 16px;
+  gap: 6px;
+  padding: 18px 18px 16px;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+}
+
+.stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .stat-label {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink-soft);
 }
 
+.stat-trend {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #edf2f7;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .stat-value {
-  font-size: 26px;
-  font-weight: 750;
+  font-size: 30px;
+  font-weight: 800;
   color: var(--ink-strong);
   line-height: 1.1;
   font-family: var(--font-mono);
@@ -401,103 +476,124 @@ onUnmounted(() => {
   color: var(--ink-faint);
 }
 
-/* ─── Content Grid ─── */
 .content-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 18px;
+}
+
+.module-panel,
+.side-card {
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .card-head h3 {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--ink-strong);
 }
 
 .card-link {
   font-size: 13px;
   color: var(--ink-soft);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .module-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .module-item {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 16px;
-  background: var(--bg-card);
+  gap: 6px;
+  min-height: 120px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
+  border-radius: 14px;
   box-shadow: var(--shadow-sm);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .module-item:hover {
-  border-color: var(--border);
+  transform: translateY(-1px);
+  border-color: rgba(31, 58, 138, 0.12);
   box-shadow: var(--shadow-md);
 }
 
+.module-meta {
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .module-item strong {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
   color: var(--ink-strong);
 }
 
-.module-item span {
+.module-item span:last-child {
   font-size: 12px;
   color: var(--ink-soft);
+  line-height: 1.6;
 }
 
-/* ─── Side Column ─── */
 .side-col {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.side-card {
-  padding: 18px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
-
 .sync-info {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 10px;
 }
 
 .sync-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sync-main {
+  display: flex;
+  align-items: center;
   gap: 10px;
 }
 
-.sync-row strong {
+.sync-main strong {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink-strong);
-  flex: 1;
 }
 
-.sync-row span {
-  font-size: 13px;
+.sync-status,
+.sync-time {
+  font-size: 12px;
   color: var(--ink-soft);
+}
+
+.sync-time {
+  padding-left: 18px;
 }
 
 .sync-dot {
@@ -515,38 +611,35 @@ onUnmounted(() => {
 .quick-links {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 .quick-link {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--brand);
-  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--border-soft);
-  transition: color 150ms ease;
 }
 
 .quick-link:last-child {
   border-bottom: none;
 }
 
-.quick-link:hover {
-  color: var(--brand-strong);
+.quick-link strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink-strong);
 }
 
-/* ─── Responsive ─── */
+.quick-link span {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
 @media (max-width: 1180px) {
   .hero-section {
     grid-template-columns: 1fr;
-  }
-
-  .hero-chart {
-    display: none;
-  }
-
-  .stats-row {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .content-grid {
@@ -554,7 +647,7 @@ onUnmounted(() => {
   }
 
   .module-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -565,18 +658,16 @@ onUnmounted(() => {
 }
 
 @media (max-width: 640px) {
-  .stats-row {
-    grid-template-columns: 1fr;
-  }
-
-  .module-grid {
-    grid-template-columns: 1fr;
-  }
-
   .hero-section {
-    padding: 18px;
+    padding: 20px;
   }
 
+  .hero-title {
+    font-size: 26px;
+  }
+
+  .stats-row,
+  .module-grid,
   .hero-indices {
     grid-template-columns: 1fr;
   }

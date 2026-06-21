@@ -20,9 +20,11 @@ defineProps({
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  gap: 16px;
 }
 
 .panel-card-header-row .panel-card-header {
   margin-bottom: 0;
+  letter-spacing: -0.01em;
 }
 </style>

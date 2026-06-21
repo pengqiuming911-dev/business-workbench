@@ -1,6 +1,6 @@
 <template>
   <transition name="drawer-slide">
-    <aside v-if="open" class="agent-drawer">
+    <aside v-if="open" class="agent-drawer" :class="{ docked }">
       <div class="drawer-header">
         <h3 class="drawer-title">衍选智能体</h3>
         <button class="drawer-close" @click="emit('close')">
@@ -61,7 +61,10 @@ import { X, Sparkles, Zap, Loader2, ArrowUp } from '@lucide/vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
-defineProps({ open: { type: Boolean, default: false } })
+defineProps({
+  open: { type: Boolean, default: false },
+  docked: { type: Boolean, default: false },
+})
 const emit = defineEmits(['close'])
 
 const inputText = ref('')
@@ -190,13 +193,17 @@ async function send() {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 400px;
+  width: 392px;
   z-index: 180;
   background: #fff;
   border-left: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.06);
+  box-shadow: -12px 0 40px rgba(15, 23, 42, 0.12);
+}
+
+.agent-drawer.docked {
+  box-shadow: none;
 }
 
 .drawer-header {
@@ -264,8 +271,8 @@ async function send() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
-  color: #10b981;
+  background: linear-gradient(135deg, var(--brand-soft), #dbe7ff);
+  color: var(--brand);
 }
 
 .welcome-text {
@@ -298,8 +305,8 @@ async function send() {
 }
 
 .suggestion-btn:hover {
-  background: #f0fdf8;
-  border-color: #10b981;
+  background: var(--bg-hover);
+  border-color: var(--brand);
 }
 
 /* Messages */
@@ -321,7 +328,7 @@ async function send() {
 }
 
 .user .msg-bubble {
-  background: #10b981;
+  background: var(--brand);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
@@ -396,7 +403,7 @@ async function send() {
 }
 
 .chat-input:focus {
-  border-color: #10b981;
+  border-color: var(--brand);
 }
 
 .send-btn {
@@ -407,7 +414,7 @@ async function send() {
   justify-content: center;
   border: none;
   border-radius: 50%;
-  background: #10b981;
+  background: var(--brand);
   color: #fff;
   cursor: pointer;
   transition: opacity 150ms ease;
