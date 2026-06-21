@@ -820,6 +820,7 @@ function downloadCSV() {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  font-size: 12px;
 }
 
 .rebate-pending-page > .page-header {
