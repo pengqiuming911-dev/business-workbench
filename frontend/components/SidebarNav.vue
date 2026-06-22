@@ -3,8 +3,8 @@
     <div class="sidebar-inner">
       <div class="sidebar-brand">
         <RouterLink to="/" class="brand-link">
-          <img :src="logoImg" alt="业务工作台" class="brand-logo" />
-          <span v-if="!collapsed" class="brand-text">业务工作台</span>
+          <img :src="logoImg" alt="衍选运营平台" class="brand-logo" />
+          <span v-if="!collapsed" class="brand-text">衍选运营平台</span>
         </RouterLink>
         <button v-if="!collapsed" class="collapse-btn" @click="emit('collapse')">
           <ChevronsLeft :size="18" :stroke-width="2" />
@@ -35,14 +35,26 @@
           <Clock :size="20" :stroke-width="2" />
           <span v-if="!collapsed">日志</span>
         </RouterLink>
+
         <RouterLink
           to="/user-profile"
-          class="nav-item"
-          :class="{ active: currentPath === '/user-profile' }"
+          class="account-card"
+          :class="{ active: currentPath === '/user-profile', collapsed }"
           @click="emit('navigate')"
         >
-          <User :size="20" :stroke-width="2" />
-          <span v-if="!collapsed">客户画像</span>
+          <img
+            v-if="authUser?.avatar_url"
+            :src="authUser.avatar_url"
+            :alt="displayName"
+            class="account-avatar"
+          />
+          <div v-else class="account-avatar account-avatar-fallback">
+            <User :size="16" :stroke-width="2" />
+          </div>
+          <div v-if="!collapsed" class="account-copy">
+            <span class="account-name">{{ displayName }}</span>
+            <span class="account-meta">{{ displayMeta }}</span>
+          </div>
         </RouterLink>
       </div>
     </div>
@@ -50,7 +62,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
   LayoutDashboard,
@@ -76,6 +88,19 @@ const emit = defineEmits(['navigate', 'close', 'collapse'])
 const route = useRoute()
 const currentPath = computed(() => route.path)
 
+const authUser = ref(null)
+const authorized = ref(false)
+
+const displayName = computed(() => {
+  if (!authorized.value) return '飞书未连接'
+  return authUser.value?.name || authUser.value?.en_name || '当前账号'
+})
+
+const displayMeta = computed(() => {
+  if (!authorized.value) return '点击连接飞书账号'
+  return authUser.value?.email || authUser.value?.open_id || '查看当前登录信息'
+})
+
 const navItems = [
   { path: '/', title: '总览', icon: LayoutDashboard },
   { path: '/data-preparation', title: '数据准备', icon: FileSpreadsheet },
@@ -85,6 +110,27 @@ const navItems = [
   { path: '/product-completion', title: '派息/敲出', icon: CalendarDays },
   { path: '/push-settings', title: '推送设置', icon: Send },
 ]
+
+onMounted(() => {
+  loadAuthUser()
+  window.addEventListener('auth-status-changed', loadAuthUser)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('auth-status-changed', loadAuthUser)
+})
+
+async function loadAuthUser() {
+  try {
+    const res = await fetch('/api/auth/status')
+    const data = await res.json()
+    authorized.value = Boolean(data.authorized)
+    authUser.value = data.user || null
+  } catch {
+    authorized.value = false
+    authUser.value = null
+  }
+}
 </script>
 
 <style scoped>
@@ -203,10 +249,81 @@ const navItems = [
 .sidebar-bottom {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   border-top: 1px solid var(--border-soft);
   padding-top: 12px;
   margin-top: 8px;
+}
+
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  min-height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.account-card:hover {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(31, 58, 138, 0.16);
+}
+
+.account-card.active {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(230, 238, 255, 0.9));
+  border-color: rgba(31, 58, 138, 0.18);
+}
+
+.account-card.collapsed {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.account-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.account-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(31, 58, 138, 0.16), rgba(44, 92, 224, 0.12));
+  color: var(--brand);
+}
+
+.account-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-name,
+.account-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.account-meta {
+  font-size: 11px;
+  color: var(--ink-soft);
 }
 
 @media (max-width: 860px) {

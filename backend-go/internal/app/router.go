@@ -196,7 +196,27 @@ func (s *Server) health(c *gin.Context) {
 }
 
 func (s *Server) authStatus(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"authorized": s.feishu.Authorized()})
+	authorized := s.feishu.Authorized()
+	if !authorized {
+		c.JSON(http.StatusOK, gin.H{
+			"authorized": false,
+			"user":       nil,
+		})
+		return
+	}
+	user, err := s.feishu.CurrentUser(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"authorized": true,
+			"user":       nil,
+			"user_error": err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"authorized": true,
+		"user":       user,
+	})
 }
 
 func (s *Server) authLogin(c *gin.Context) {
@@ -2674,6 +2694,16 @@ func (s *Server) rebatePending(c *gin.Context) {
 			expectedPerf = performanceReceivable * performanceRatio * (1 - taxPerf)
 		}
 
+		if returnedSub > 0 {
+			expectedSub = returnedSub
+		}
+		if returnedMgmt > 0 {
+			expectedMgmt = returnedMgmt
+		}
+		if returnedPerf > 0 {
+			expectedPerf = returnedPerf
+		}
+
 		outstandingSub := expectedSub - returnedSub
 		outstandingMgmt := expectedMgmt - returnedMgmt
 		outstandingPerf := expectedPerf - returnedPerf
@@ -2736,6 +2766,27 @@ func (s *Server) rebatePending(c *gin.Context) {
 			}
 		}
 		// 第7/8/10项：是否可返自动判定、剔除规则、校验 T/F（采用可能被手工覆盖后的最终值）
+		finalReturnedSub := numberValue(row["returned_subscribe"])
+		finalReturnedMgmt := numberValue(row["returned_management"])
+		finalReturnedPerf := numberValue(row["returned_performance"])
+		finalExpectedSub := numberValue(row["expected_subscribe"])
+		finalExpectedMgmt := numberValue(row["expected_management"])
+		finalExpectedPerf := numberValue(row["expected_performance"])
+		if finalReturnedSub > 0 {
+			finalExpectedSub = finalReturnedSub
+		}
+		if finalReturnedMgmt > 0 {
+			finalExpectedMgmt = finalReturnedMgmt
+		}
+		if finalReturnedPerf > 0 {
+			finalExpectedPerf = finalReturnedPerf
+		}
+		row["expected_subscribe"] = finalExpectedSub
+		row["expected_management"] = finalExpectedMgmt
+		row["expected_performance"] = finalExpectedPerf
+		row["outstanding_subscribe"] = finalExpectedSub - finalReturnedSub
+		row["outstanding_management"] = finalExpectedMgmt - finalReturnedMgmt
+		row["outstanding_performance"] = finalExpectedPerf - finalReturnedPerf
 		decision := computeRebateDecision(rebateDecisionInput{
 			OrderID:         oid,
 			SubRatio:        numberValue(row["subscribe_fee_ratio"]),

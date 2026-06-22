@@ -38,6 +38,16 @@ type DriveWalkResult struct {
 	FolderCount int
 }
 
+type CurrentUser struct {
+	Name      string `json:"name"`
+	EnName    string `json:"en_name"`
+	AvatarURL string `json:"avatar_url"`
+	Email     string `json:"email"`
+	OpenID    string `json:"open_id"`
+	UnionID   string `json:"union_id"`
+	UserID    string `json:"user_id"`
+}
+
 func New(appID, appSecret, redirectURI string) *Client {
 	return &Client{
 		AppID:       appID,
@@ -131,6 +141,29 @@ func (c *Client) ExchangeCode(ctx context.Context, code string) error {
 	c.mu.Unlock()
 	c.persistToken()
 	return nil
+}
+
+func (c *Client) CurrentUser(ctx context.Context) (*CurrentUser, error) {
+	token := c.UserToken()
+	if token == "" {
+		return nil, nil
+	}
+	body, err := c.get(ctx, "https://open.feishu.cn/open-apis/authen/v1/user_info", token)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Code int         `json:"code"`
+		Msg  string      `json:"msg"`
+		Data CurrentUser `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+	if result.Code != 0 {
+		return nil, fmt.Errorf("fetch user info failed (%d): %s", result.Code, result.Msg)
+	}
+	return &result.Data, nil
 }
 
 func (c *Client) ReadSheetRows(ctx context.Context, spreadsheetToken string, sheetID string, colCount int) ([]map[string]any, error) {

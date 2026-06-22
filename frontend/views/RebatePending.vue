@@ -616,14 +616,17 @@ function taxNum(v) {
 
 function calcShouldReturn(item, type) {
   if (type === 'subscribe') {
+    if ((item.returned_subscribe || 0) > 0) return item.returned_subscribe || 0
     // 应返申购费 = 本金 × 申购费率 × 申购费返还比例 × (1 − 申购费扣税)
     return (item.principal || 0) * (item.subscribe_fee_rate || 0) * (item.subscribe_fee_ratio || 0) * (1 - taxNum(item.tax_subscribe_ratio))
   }
   if (type === 'management') {
+    if ((item.returned_management || 0) > 0) return item.returned_management || 0
     // 应返管理费 = 管理费实收 × 管理费返还比例 × (1 − 管理费扣税)
     return (item.management_fee_received || 0) * (item.management_fee_ratio || 0) * (1 - taxNum(item.tax_management_ratio))
   }
   if (type === 'performance') {
+    if ((item.returned_performance || 0) > 0) return item.returned_performance || 0
     // 应返业绩报酬 = 业绩报酬应收 × 业绩报酬返还比例 × (1 − 业绩报酬扣税)
     return (item.performance_fee_receivable || 0) * (item.performance_fee_ratio || 0) * (1 - taxNum(item.tax_performance_ratio))
   }

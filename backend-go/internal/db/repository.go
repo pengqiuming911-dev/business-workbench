@@ -1595,6 +1595,9 @@ func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any
 		       rpm.outstanding_management AS manual_outstanding_management,
 		       rpm.outstanding_performance AS manual_outstanding_performance,
 		       rpm.is_returnable AS manual_is_returnable,
+		       EXISTS(SELECT 1 FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '申购费') AS has_completed_subscribe,
+		       EXISTS(SELECT 1 FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '管理费') AS has_completed_management,
+		       EXISTS(SELECT 1 FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '业绩报酬') AS has_completed_performance,
 		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '申购费'), 0) AS returned_subscribe,
 		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '管理费'), 0) AS returned_management,
 		       COALESCE((SELECT SUM(rc.expense_amount) FROM rebate_completed rc WHERE rc.order_id = t.order_id AND rc.expense_category = '业绩报酬'), 0) AS returned_performance

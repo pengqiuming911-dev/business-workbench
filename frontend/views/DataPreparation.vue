@@ -154,6 +154,7 @@ onMounted(async () => {
   const params = new URLSearchParams(window.location.search)
   if (params.get('auth') === 'success') {
     authorized.value = true
+    window.dispatchEvent(new Event('auth-status-changed'))
     window.history.replaceState({}, '', window.location.pathname)
   } else if (params.get('auth') === 'error') {
     result.value = '飞书授权失败：' + (params.get('msg') || '未知错误')
@@ -166,6 +167,7 @@ async function checkAuth() {
     const res = await fetch('/api/auth/status')
     const data = await res.json()
     authorized.value = data.authorized
+    window.dispatchEvent(new Event('auth-status-changed'))
   } catch {
     authorized.value = false
   }
@@ -227,6 +229,7 @@ async function loginFeishu() {
 async function logout() {
   await fetch('/api/auth/logout', { method: 'DELETE' })
   authorized.value = false
+  window.dispatchEvent(new Event('auth-status-changed'))
 }
 
 async function syncRebateDetailClientSide() {
