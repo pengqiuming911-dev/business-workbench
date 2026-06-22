@@ -38,9 +38,9 @@ type Server struct {
 	Cron     *cron.Cron
 
 	// 待返 sheet 扣税比例缓存（按 order_id），TTL 刷新
-	daifanMu    sync.RWMutex
-	daifanData  *daifanTaxRatios
-	daifanAt    time.Time
+	daifanMu   sync.RWMutex
+	daifanData *daifanTaxRatios
+	daifanAt   time.Time
 }
 
 const daifanCacheTTL = 10 * time.Minute
@@ -50,10 +50,10 @@ const daifanCacheTTL = 10 * time.Minute
 // mgmtReceived/perfReceivable: order_id -> 管理费实收/业绩报酬应收(应收基数，取自该表)。
 // *Orders: 出现在对应区域的 order_id 集合（用于判断"暂不可返"）。
 type daifanTaxRatios struct {
-	subTax, mgmtTax, perfTax             map[string]float64
-	mgmtReceived, perfReceivable         map[string]float64
+	subTax, mgmtTax, perfTax                         map[string]float64
+	mgmtReceived, perfReceivable                     map[string]float64
 	subOutstanding, mgmtOutstanding, perfOutstanding map[string]float64 // 最新返款明细里的未返（列位待确认，暂为空→校验显示"--"）
-	subOrders, mgmtOrders                map[string]bool
+	subOrders, mgmtOrders                            map[string]bool
 }
 
 // rebateDetailOutstanding 取最新返款明细里该订单某费用的未返；未取到返回 nil。
@@ -199,23 +199,36 @@ func (s *Server) authStatus(c *gin.Context) {
 	authorized := s.feishu.Authorized()
 	if !authorized {
 		c.JSON(http.StatusOK, gin.H{
-			"authorized": false,
-			"user":       nil,
+			"authorized":     false,
+			"access_allowed": false,
+			"user":           nil,
 		})
 		return
 	}
 	user, err := s.feishu.CurrentUser(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"authorized": true,
-			"user":       nil,
-			"user_error": err.Error(),
+			"authorized":     true,
+			"access_allowed": false,
+			"user":           nil,
+			"user_error":     err.Error(),
+		})
+		return
+	}
+	if !s.isAllowedFeishuUser(user) {
+		s.feishu.ClearUserToken()
+		c.JSON(http.StatusOK, gin.H{
+			"authorized":     false,
+			"access_allowed": false,
+			"user":           user,
+			"access_message": "当前飞书账号不在允许名单中",
 		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"authorized": true,
-		"user":       user,
+		"authorized":     true,
+		"access_allowed": true,
+		"user":           user,
 	})
 }
 
@@ -247,7 +260,52 @@ func (s *Server) authCallback(c *gin.Context) {
 		c.Redirect(http.StatusFound, target+"/data-preparation?auth=error&msg="+urlQueryEscape(err.Error()))
 		return
 	}
+	user, err := s.feishu.CurrentUser(c.Request.Context())
+	if err != nil {
+		s.feishu.ClearUserToken()
+		c.Redirect(http.StatusFound, target+"/data-preparation?auth=error&msg="+urlQueryEscape(err.Error()))
+		return
+	}
+	if !s.isAllowedFeishuUser(user) {
+		s.feishu.ClearUserToken()
+		c.Redirect(http.StatusFound, target+"/data-preparation?auth=error&msg=access_denied")
+		return
+	}
 	c.Redirect(http.StatusFound, target+"/data-preparation?auth=success")
+}
+
+func (s *Server) isAllowedFeishuUser(user *feishu.CurrentUser) bool {
+	if user == nil {
+		return false
+	}
+	email := strings.ToLower(strings.TrimSpace(user.Email))
+	if email == "" {
+		return false
+	}
+	for _, allowed := range s.cfg.AllowedFeishuEmails {
+		if strings.EqualFold(strings.TrimSpace(allowed), email) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) requireFeishuAccess(c *gin.Context) bool {
+	if !s.feishu.Authorized() {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "链路未授权，请先连接飞书"})
+		return false
+	}
+	user, err := s.feishu.CurrentUser(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return false
+	}
+	if !s.isAllowedFeishuUser(user) {
+		s.feishu.ClearUserToken()
+		c.JSON(http.StatusForbidden, gin.H{"error": "当前飞书账号不在允许名单中"})
+		return false
+	}
+	return true
 }
 
 func (s *Server) authLogout(c *gin.Context) {
@@ -353,8 +411,8 @@ func (s *Server) observationCalendar(c *gin.Context) {
 			closeByDate[p.ID] = byDate
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"month":    month,
-			"status":   "completed",
+			"month":  month,
+			"status": "completed",
 			"calendar": observations.CalendarForMonth(products, month, observations.CalendarOpts{
 				Status:      "completed",
 				CloseByDate: closeByDate,
@@ -457,8 +515,7 @@ func (s *Server) productDocsSyncStatus(c *gin.Context) {
 }
 
 func (s *Server) syncDatabase(c *gin.Context) {
-	if !s.feishu.Authorized() {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录飞书"})
+	if !s.requireFeishuAccess(c) {
 		return
 	}
 
@@ -510,8 +567,7 @@ func (s *Server) syncDatabase(c *gin.Context) {
 }
 
 func (s *Server) syncCoInvest(c *gin.Context) {
-	if !s.feishu.Authorized() {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录飞书"})
+	if !s.requireFeishuAccess(c) {
 		return
 	}
 
@@ -534,6 +590,9 @@ func (s *Server) syncCoInvest(c *gin.Context) {
 }
 
 func (s *Server) driveSharedWithMe(c *gin.Context) {
+	if !s.requireFeishuAccess(c) {
+		return
+	}
 	folderType := ""
 	if c.Query("folder_token") == "" {
 		folderType = "share_with_me"
@@ -547,6 +606,9 @@ func (s *Server) driveSharedWithMe(c *gin.Context) {
 }
 
 func (s *Server) driveSharedSpaces(c *gin.Context) {
+	if !s.requireFeishuAccess(c) {
+		return
+	}
 	data, err := s.feishu.SharedSpaces(c.Request.Context())
 	if err != nil {
 		writeDriveError(c, err)
@@ -556,6 +618,9 @@ func (s *Server) driveSharedSpaces(c *gin.Context) {
 }
 
 func (s *Server) driveSharedFiles(c *gin.Context) {
+	if !s.requireFeishuAccess(c) {
+		return
+	}
 	spaceID := strings.TrimSpace(c.Query("space_id"))
 	if spaceID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 space_id 参数"})
@@ -570,6 +635,9 @@ func (s *Server) driveSharedFiles(c *gin.Context) {
 }
 
 func (s *Server) driveFiles(c *gin.Context) {
+	if !s.requireFeishuAccess(c) {
+		return
+	}
 	data, err := s.feishu.DriveFiles(c.Request.Context(), c.Query("folder_token"), c.Query("page_token"), "")
 	if err != nil {
 		writeDriveError(c, err)
@@ -579,6 +647,9 @@ func (s *Server) driveFiles(c *gin.Context) {
 }
 
 func (s *Server) driveDownload(c *gin.Context) {
+	if !s.requireFeishuAccess(c) {
+		return
+	}
 	fileToken := strings.TrimSpace(c.Query("file_token"))
 	if fileToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 file_token 参数"})
@@ -598,6 +669,9 @@ func (s *Server) driveDownload(c *gin.Context) {
 }
 
 func (s *Server) driveSheetData(c *gin.Context) {
+	if !s.requireFeishuAccess(c) {
+		return
+	}
 	sheetToken := strings.TrimSpace(c.Query("sheet_token"))
 	sheetID := strings.TrimSpace(c.Query("sheet_id"))
 	if sheetToken == "" || sheetID == "" {
@@ -613,6 +687,9 @@ func (s *Server) driveSheetData(c *gin.Context) {
 }
 
 func (s *Server) driveDocContent(c *gin.Context) {
+	if !s.requireFeishuAccess(c) {
+		return
+	}
 	docToken := strings.TrimSpace(c.Query("doc_token"))
 	if docToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 doc_token 参数"})
@@ -627,6 +704,9 @@ func (s *Server) driveDocContent(c *gin.Context) {
 }
 
 func (s *Server) driveExportSheet(c *gin.Context) {
+	if !s.requireFeishuAccess(c) {
+		return
+	}
 	sheetToken := strings.TrimSpace(c.Query("sheet_token"))
 	if sheetToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 sheet_token 参数"})
@@ -645,8 +725,7 @@ func (s *Server) driveExportSheet(c *gin.Context) {
 }
 
 func (s *Server) syncProductDocs(c *gin.Context) {
-	if !s.feishu.Authorized() {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录飞书"})
+	if !s.requireFeishuAccess(c) {
 		return
 	}
 
@@ -697,8 +776,7 @@ func (s *Server) syncProductDocs(c *gin.Context) {
 }
 
 func (s *Server) syncAll(c *gin.Context) {
-	if !s.feishu.Authorized() {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录飞书"})
+	if !s.requireFeishuAccess(c) {
 		return
 	}
 
@@ -782,8 +860,7 @@ func (s *Server) syncAll(c *gin.Context) {
 }
 
 func (s *Server) syncRebateDetail(c *gin.Context) {
-	if !s.feishu.Authorized() {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录飞书"})
+	if !s.requireFeishuAccess(c) {
 		return
 	}
 	info, err := s.performRebateDetailSync(c.Request.Context())
@@ -1926,8 +2003,7 @@ func (s *Server) notImplemented(message string) gin.HandlerFunc {
 
 func (s *Server) syncNotMigrated(message string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !s.feishu.Authorized() {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权，请先登录飞书"})
+		if !s.requireFeishuAccess(c) {
 			return
 		}
 		c.JSON(http.StatusNotImplemented, gin.H{"error": message})
