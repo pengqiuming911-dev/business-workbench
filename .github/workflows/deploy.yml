@@ -85,11 +85,23 @@ jobs:
           set -e
           mkdir -p ${{ env.APP_DIR }}/shared
           mkdir -p ${{ env.APP_DIR }}/releases
+          CURRENT_FEISHU_REDIRECT_URI=""
+          CURRENT_FRONTEND_URL=""
+          if [ -f ${{ env.APP_DIR }}/shared/.env ]; then
+            CURRENT_FEISHU_REDIRECT_URI="$(grep '^FEISHU_REDIRECT_URI=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+            CURRENT_FRONTEND_URL="$(grep '^FRONTEND_URL=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+          fi
+          if [ -z "$CURRENT_FEISHU_REDIRECT_URI" ]; then
+            CURRENT_FEISHU_REDIRECT_URI='${{ secrets.FEISHU_REDIRECT_URI }}'
+          fi
+          if [ -z "$CURRENT_FRONTEND_URL" ]; then
+            CURRENT_FRONTEND_URL='${{ secrets.FRONTEND_URL }}'
+          fi
           cat > ${{ env.APP_DIR }}/shared/.env << 'EOF'
           FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}
-          FEISHU_REDIRECT_URI=${{ secrets.FEISHU_REDIRECT_URI }}
-          FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+          FEISHU_REDIRECT_URI=__FEISHU_REDIRECT_URI__
+          FRONTEND_URL=__FRONTEND_URL__
           PORT=${{ env.PORT }}
           DATABASE_PATH=data.sqlite
           DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
@@ -104,6 +116,8 @@ jobs:
           SMTP_FROM=${{ secrets.SMTP_FROM }}
           CRON_TIMEZONE=Asia/Shanghai
           EOF
+          sed -i "s|__FEISHU_REDIRECT_URI__|$CURRENT_FEISHU_REDIRECT_URI|g" ${{ env.APP_DIR }}/shared/.env
+          sed -i "s|__FRONTEND_URL__|$CURRENT_FRONTEND_URL|g" ${{ env.APP_DIR }}/shared/.env
           chmod 600 ${{ env.APP_DIR }}/shared/.env
           if [ ! -f ${{ env.APP_DIR }}/shared/data.sqlite ] && [ -f ${{ env.APP_DIR }}/backend-go/data.sqlite ]; then
             cp ${{ env.APP_DIR }}/backend-go/data.sqlite ${{ env.APP_DIR }}/shared/data.sqlite

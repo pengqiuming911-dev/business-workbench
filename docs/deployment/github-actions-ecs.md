@@ -47,13 +47,18 @@ Add these repository secrets:
 - `SMTP_PASS`
 - `SMTP_FROM`
 
+Note:
+
+- `FEISHU_REDIRECT_URI` and `FRONTEND_URL` are preserved from the existing server-side `${APP_DIR}/shared/.env` on each deploy when that file already exists.
+- This prevents a successful production deployment from silently reverting the Feishu callback URL back to an older value.
+
 ## What deployment does
 
 1. Build the frontend with Vite.
 2. Build the Go backend for Linux amd64.
 3. Package a release tarball.
 4. Upload the tarball and remote deploy script to the ECS host.
-5. Write `${APP_DIR}/shared/.env` from GitHub secrets.
+5. Write `${APP_DIR}/shared/.env`, preserving existing `FEISHU_REDIRECT_URI` and `FRONTEND_URL` when present.
 6. Unpack into `${APP_DIR}/releases/<release-name>`.
 7. Link shared `.env` and `data.sqlite`.
 8. Switch `${APP_DIR}/current` to the new release.
