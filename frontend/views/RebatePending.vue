@@ -183,7 +183,7 @@
           勾选导出
         </button>
         <button class="btn btn-secondary btn-sm" :disabled="selectedPlanCount === 0" @click="clearAllSelectedPlans">
-          娓呯┖鍕鹃€?
+          清空勾选
         </button>
         <button class="btn btn-secondary btn-sm" @click="showBatchPanel = !showBatchPanel">
           <CheckSquare :size="14" />
