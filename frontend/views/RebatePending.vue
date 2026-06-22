@@ -171,6 +171,9 @@
         <span class="text-label">筛选后 {{ filteredItems.length }} 条 / 全部 {{ items.length }} 条</span>
       </div>
       <div class="action-bar-actions">
+        <button class="btn btn-secondary btn-sm" @click="showReferrerColumn = !showReferrerColumn">
+          {{ showReferrerColumn ? '隐藏返还人' : '显示返还人' }}
+        </button>
       <button class="btn btn-secondary btn-sm" @click="downloadCSV">
         <Download :size="14" />
         下载
@@ -228,6 +231,7 @@
           <col style="min-width: 80px" /><!-- 是否可返 -->
           <col span="3" style="min-width: 74px" /><!-- 校验 x3 -->
           <col span="4" style="min-width: 72px" /><!-- 本次拟返 x3 + 合计 -->
+          <col v-if="showReferrerColumn" style="min-width: 100px" /><!-- 返还人 -->
           <col style="min-width: 120px" /><!-- 操作 -->
         </colgroup>
         <thead>
@@ -246,6 +250,7 @@
             <th colspan="3" class="group-header group-returned">已返</th>
             <th colspan="3" class="group-header group-unreturned">未返</th>
             <th rowspan="2">是否可返</th>
+            <th v-if="showReferrerColumn" rowspan="2">返还人</th>
             <th colspan="3" class="group-header group-check">校验</th>
             <th colspan="4" class="group-header group-plan">本次拟返</th>
             <th rowspan="2">操作</th>
@@ -328,6 +333,7 @@
                 {{ item.is_returnable || '暂不可返' }}
               </span>
             </td>
+            <td v-if="showReferrerColumn">{{ item.rebate_target || '--' }}</td>
             <!-- 校验 -->
             <td class="check-cell">
               <span class="check-pill" :class="checkClass(item.check_subscribe)">{{ item.check_subscribe || '--' }}</span>
@@ -457,6 +463,7 @@ function gotoPage(p) {
 }
 const showAdvanced = ref(false)
 const showBatchPanel = ref(false)
+const showReferrerColumn = ref(false)
 const openDropdown = ref('')
 
 const filters = ref({
