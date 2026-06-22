@@ -268,10 +268,21 @@ func (s *Server) authCallback(c *gin.Context) {
 	}
 	if !s.isAllowedFeishuUser(user) {
 		s.feishu.ClearUserToken()
-		c.Redirect(http.StatusFound, target+"/data-preparation?auth=error&msg=access_denied")
+		c.Redirect(http.StatusFound, target+"/data-preparation?auth=error&msg="+urlQueryEscape(s.accessDeniedMessage(user)))
 		return
 	}
 	c.Redirect(http.StatusFound, target+"/data-preparation?auth=success")
+}
+
+func (s *Server) accessDeniedMessage(user *feishu.CurrentUser) string {
+	if user == nil {
+		return "access_denied: 当前飞书账号信息为空"
+	}
+	email := strings.TrimSpace(user.Email)
+	if email == "" {
+		return fmt.Sprintf("access_denied: 当前账号未返回邮箱（user_id=%s, open_id=%s）", strings.TrimSpace(user.UserID), strings.TrimSpace(user.OpenID))
+	}
+	return fmt.Sprintf("access_denied: 当前账号 %s 不在允许名单中", email)
 }
 
 func (s *Server) isAllowedFeishuUser(user *feishu.CurrentUser) bool {
@@ -302,7 +313,7 @@ func (s *Server) requireFeishuAccess(c *gin.Context) bool {
 	}
 	if !s.isAllowedFeishuUser(user) {
 		s.feishu.ClearUserToken()
-		c.JSON(http.StatusForbidden, gin.H{"error": "当前飞书账号不在允许名单中"})
+		c.JSON(http.StatusForbidden, gin.H{"error": s.accessDeniedMessage(user)})
 		return false
 	}
 	return true
