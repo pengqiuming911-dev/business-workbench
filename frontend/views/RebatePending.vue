@@ -174,14 +174,18 @@
         <button class="btn btn-secondary btn-sm" @click="showReferrerColumn = !showReferrerColumn">
           {{ showReferrerColumn ? '隐藏返还人' : '显示返还人' }}
         </button>
-      <button class="btn btn-secondary btn-sm" @click="downloadCSV">
-        <Download :size="14" />
-        下载
-      </button>
-      <button class="btn btn-secondary btn-sm" @click="showBatchPanel = !showBatchPanel">
-        <CheckSquare :size="14" />
-        批量勾选
-      </button>
+        <button class="btn btn-secondary btn-sm" @click="downloadCSV('filtered')">
+          <Download :size="14" />
+          筛选导出
+        </button>
+        <button class="btn btn-secondary btn-sm" @click="downloadCSV('selected')">
+          <Download :size="14" />
+          勾选导出
+        </button>
+        <button class="btn btn-secondary btn-sm" @click="showBatchPanel = !showBatchPanel">
+          <CheckSquare :size="14" />
+          批选
+        </button>
       </div>
     </div>
 
@@ -818,8 +822,11 @@ function resetFilters() {
 }
 
 // --- CSV download ---
-function downloadCSV() {
-  if (items.value.length === 0) return
+function downloadCSV(mode = 'filtered') {
+  const sourceItems = mode === 'selected'
+    ? filteredItems.value.filter(item => item.plan_subscribe || item.plan_management || item.plan_performance)
+    : filteredItems.value
+  if (sourceItems.length === 0) return
 
   const headers = [
     '订单号', '航班编号', '航班名称', '客户姓名', '返还人', '本金', '申购费率',
@@ -834,7 +841,7 @@ function downloadCSV() {
     '本次拟返-申购费', '本次拟返-管理费', '本次拟返-业绩报酬', '本次拟返-合计',
   ]
 
-  const rows = items.value.map(item => [
+  const rows = sourceItems.map(item => [
     item.order_id,
     item.flight_id,
     item.product_name,
