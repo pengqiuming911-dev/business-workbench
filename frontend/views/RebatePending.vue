@@ -182,6 +182,9 @@
           <Download :size="14" />
           勾选导出
         </button>
+        <button class="btn btn-secondary btn-sm" :disabled="selectedPlanCount === 0" @click="clearAllSelectedPlans">
+          娓呯┖鍕鹃€?
+        </button>
         <button class="btn btn-secondary btn-sm" @click="showBatchPanel = !showBatchPanel">
           <CheckSquare :size="14" />
           批选
@@ -461,6 +464,14 @@ const pagedItems = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filteredItems.value.slice(start, start + pageSize.value)
 })
+const selectedPlanCount = computed(() => {
+  return items.value.reduce((count, item) => {
+    if (item.plan_subscribe) count += 1
+    if (item.plan_management) count += 1
+    if (item.plan_performance) count += 1
+    return count
+  }, 0)
+})
 function gotoPage(p) {
   const n = Math.min(Math.max(1, p), totalPages.value)
   page.value = n
@@ -691,6 +702,32 @@ async function togglePlan(item, field, event) {
     // Revert on failure
     item[field] = checked ? 0 : 1
   }
+}
+
+async function clearAllSelectedPlans() {
+  const targets = items.value.filter(item => item.plan_subscribe || item.plan_management || item.plan_performance)
+  if (targets.length === 0) return
+
+  for (const item of targets) {
+    item.plan_subscribe = 0
+    item.plan_management = 0
+    item.plan_performance = 0
+  }
+
+  await Promise.all(
+    targets.map(item =>
+      fetch('/api/rebate/pending/status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: item.order_id,
+          plan_subscribe: 0,
+          plan_management: 0,
+          plan_performance: 0,
+        }),
+      }).catch(() => {})
+    )
+  )
 }
 
 // --- Batch operations ---
