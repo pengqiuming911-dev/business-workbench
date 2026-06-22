@@ -52,7 +52,11 @@ Note:
 
 - `FEISHU_REDIRECT_URI` and `FRONTEND_URL` are preserved from the existing server-side `${APP_DIR}/shared/.env` on each deploy when that file already exists.
 - This prevents a successful production deployment from silently reverting the Feishu callback URL back to an older value.
-- If `FEISHU_ALLOWED_EMAILS` is not set, the backend falls back to the built-in allowlist for the three approved emails.
+- If `FEISHU_ALLOWED_EMAILS` is not set, the backend falls back to the built-in allowlist for the approved emails:
+  - `lvjunliang@iyanxuan.cn`
+  - `fanweifeng@iyanxuan.cn`
+  - `zhaochunhui@iyanxuan.cn`
+  - `pengqiuming@iyanxuan.cn`
 
 ## What deployment does
 

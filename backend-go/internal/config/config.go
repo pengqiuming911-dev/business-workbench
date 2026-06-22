@@ -44,6 +44,7 @@ func Load() Config {
 			"lvjunliang@iyanxuan.cn",
 			"fanweifeng@iyanxuan.cn",
 			"zhaochunhui@iyanxuan.cn",
+			"pengqiuming@iyanxuan.cn",
 		}),
 		DeepSeekAPIKey:    os.Getenv("DEEPSEEK_API_KEY"),
 		DeepSeekAPIURL:    getEnv("DEEPSEEK_API_URL", "https://api.deepseek.com"),
