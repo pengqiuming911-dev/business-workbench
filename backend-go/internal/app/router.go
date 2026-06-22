@@ -215,16 +215,6 @@ func (s *Server) authStatus(c *gin.Context) {
 		})
 		return
 	}
-	if !s.isAllowedFeishuUser(user) {
-		s.feishu.ClearUserToken()
-		c.JSON(http.StatusOK, gin.H{
-			"authorized":     false,
-			"access_allowed": false,
-			"user":           user,
-			"access_message": "当前飞书账号不在允许名单中",
-		})
-		return
-	}
 	c.JSON(http.StatusOK, gin.H{
 		"authorized":     true,
 		"access_allowed": true,
@@ -260,33 +250,7 @@ func (s *Server) authCallback(c *gin.Context) {
 		c.Redirect(http.StatusFound, target+"/data-preparation?auth=error&msg="+urlQueryEscape(err.Error()))
 		return
 	}
-	user, err := s.feishu.CurrentUser(c.Request.Context())
-	if err != nil {
-		s.feishu.ClearUserToken()
-		c.Redirect(http.StatusFound, target+"/data-preparation?auth=error&msg="+urlQueryEscape(err.Error()))
-		return
-	}
-	if !s.isAllowedFeishuUser(user) {
-		s.feishu.ClearUserToken()
-		c.Redirect(http.StatusFound, target+"/data-preparation?auth=error&msg="+urlQueryEscape(s.accessDeniedMessage(user)))
-		return
-	}
 	c.Redirect(http.StatusFound, target+"/data-preparation?auth=success")
-}
-
-func (s *Server) accessDeniedMessage(user *feishu.CurrentUser) string {
-	if user == nil {
-		return "access_denied: 当前飞书账号信息为空"
-	}
-	email := strings.TrimSpace(user.Email)
-	if email == "" {
-		return fmt.Sprintf("access_denied: 当前账号未返回邮箱（user_id=%s, open_id=%s）", strings.TrimSpace(user.UserID), strings.TrimSpace(user.OpenID))
-	}
-	return fmt.Sprintf("access_denied: 当前账号 %s 不在允许名单中", email)
-}
-
-func (s *Server) isAllowedFeishuUser(user *feishu.CurrentUser) bool {
-	return true
 }
 
 func (s *Server) requireFeishuAccess(c *gin.Context) bool {
@@ -294,14 +258,9 @@ func (s *Server) requireFeishuAccess(c *gin.Context) bool {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "链路未授权，请先连接飞书"})
 		return false
 	}
-	user, err := s.feishu.CurrentUser(c.Request.Context())
+	_, err := s.feishu.CurrentUser(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return false
-	}
-	if !s.isAllowedFeishuUser(user) {
-		s.feishu.ClearUserToken()
-		c.JSON(http.StatusForbidden, gin.H{"error": s.accessDeniedMessage(user)})
 		return false
 	}
 	return true

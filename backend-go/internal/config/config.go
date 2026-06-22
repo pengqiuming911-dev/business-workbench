@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -15,7 +14,6 @@ type Config struct {
 	FeishuAppID         string
 	FeishuAppSecret     string
 	FeishuRedirectURI   string
-	AllowedFeishuEmails []string
 	DeepSeekAPIKey      string
 	DeepSeekAPIURL      string
 	DeepSeekModel       string
@@ -40,12 +38,6 @@ func Load() Config {
 		FeishuAppID:       os.Getenv("FEISHU_APP_ID"),
 		FeishuAppSecret:   os.Getenv("FEISHU_APP_SECRET"),
 		FeishuRedirectURI: os.Getenv("FEISHU_REDIRECT_URI"),
-		AllowedFeishuEmails: parseListEnv("FEISHU_ALLOWED_EMAILS", []string{
-			"lvjunliang@iyanxuan.cn",
-			"fanweifeng@iyanxuan.cn",
-			"zhaochunhui@iyanxuan.cn",
-			"pengqiuming@iyanxuan.cn",
-		}),
 		DeepSeekAPIKey:    os.Getenv("DEEPSEEK_API_KEY"),
 		DeepSeekAPIURL:    getEnv("DEEPSEEK_API_URL", "https://api.deepseek.com"),
 		DeepSeekModel:     getEnv("DEEPSEEK_MODEL", "deepseek-chat"),
@@ -81,36 +73,4 @@ func getEnv(key string, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-func parseListEnv(key string, fallback []string) []string {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return fallback
-	}
-	parts := strings.FieldsFunc(raw, func(r rune) bool {
-		switch r {
-		case ',', ';', '\n', '\r', '\t':
-			return true
-		default:
-			return false
-		}
-	})
-	var out []string
-	seen := map[string]struct{}{}
-	for _, part := range parts {
-		value := strings.ToLower(strings.TrimSpace(part))
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	if len(out) == 0 {
-		return fallback
-	}
-	return out
 }
