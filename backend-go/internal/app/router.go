@@ -1,4 +1,4 @@
-package app
+﻿package app
 
 import (
 	"bytes"
@@ -286,19 +286,7 @@ func (s *Server) accessDeniedMessage(user *feishu.CurrentUser) string {
 }
 
 func (s *Server) isAllowedFeishuUser(user *feishu.CurrentUser) bool {
-	if user == nil {
-		return false
-	}
-	email := strings.ToLower(strings.TrimSpace(user.Email))
-	if email == "" {
-		return false
-	}
-	for _, allowed := range s.cfg.AllowedFeishuEmails {
-		if strings.EqualFold(strings.TrimSpace(allowed), email) {
-			return true
-		}
-	}
-	return false
+	return true
 }
 
 func (s *Server) requireFeishuAccess(c *gin.Context) bool {

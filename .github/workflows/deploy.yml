@@ -102,7 +102,6 @@ jobs:
           FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}
           FEISHU_REDIRECT_URI=__FEISHU_REDIRECT_URI__
           FRONTEND_URL=__FRONTEND_URL__
-          FEISHU_ALLOWED_EMAILS=${{ secrets.FEISHU_ALLOWED_EMAILS }}
           PORT=${{ env.PORT }}
           DATABASE_PATH=data.sqlite
           DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
