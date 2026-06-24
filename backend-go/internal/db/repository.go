@@ -594,6 +594,26 @@ func (s *Store) UpsertPoster(row model.Poster) error {
 	return err
 }
 
+func (s *Store) SavePosterArtifact(productID, observationDate, fieldsJSON, pngPath, contentHash string) (int64, error) {
+	res, err := s.DB.Exec(`INSERT INTO poster_artifacts (product_id, observation_date, fields_json, png_path, content_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		productID, observationDate, fieldsJSON, nullableDBString(pngPath), contentHash, isoNow())
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (s *Store) QueryPosterArtifact(id int64) (model.PosterArtifact, error) {
+	var row model.PosterArtifact
+	var pngPath sql.NullString
+	err := s.DB.QueryRow(`SELECT id, product_id, observation_date, fields_json, png_path, content_hash, created_at FROM poster_artifacts WHERE id = ?`, id).
+		Scan(&row.ID, &row.ProductID, &row.ObservationDate, &row.FieldsJSON, &pngPath, &row.ContentHash, &row.CreatedAt)
+	if pngPath.Valid {
+		row.PngPath = pngPath.String
+	}
+	return row, err
+}
+
 func (s *Store) SearchCustomersForAgent(keyword, industry, isDedicated, isCompetitor string, limit int) ([]map[string]any, error) {
 	if limit <= 0 {
 		limit = 20

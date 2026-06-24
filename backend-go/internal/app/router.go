@@ -3,11 +3,13 @@
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -153,6 +155,7 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.GET("/api/posters/today", server.postersToday)
 	router.GET("/api/posters", server.posters)
 	router.POST("/api/posters/generate", server.generatePosters)
+	router.POST("/api/posters/artifact", server.savePosterArtifact)
 	router.GET("/api/push-config", server.getPushConfig)
 	router.PUT("/api/push-config", server.putPushConfig)
 	router.POST("/api/push/test", server.testPush)
@@ -1490,6 +1493,52 @@ func (s *Server) generatePosters(c *gin.Context) {
 		"today":     targetDate,
 		"message":   message,
 	})
+}
+
+func (s *Server) savePosterArtifact(c *gin.Context) {
+	var req struct {
+		ProductID       string          `json:"product_id"`
+		ObservationDate string          `json:"observation_date"`
+		Fields          map[string]any  `json:"fields"`
+		PNGBase64       string          `json:"png_base64"`
+		ContentHash     string          `json:"content_hash"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.ProductID == "" || req.ContentHash == "" || req.PNGBase64 == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "product_id, content_hash, png_base64 are required"})
+		return
+	}
+	fieldsJSON, _ := json.Marshal(req.Fields)
+
+	id, err := s.store.SavePosterArtifact(req.ProductID, req.ObservationDate, string(fieldsJSON), "", req.ContentHash)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	dir := "public/poster-artifacts"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		writeError(c, err)
+		return
+	}
+	pngPath := fmt.Sprintf("%s/%d.png", dir, id)
+	data, err := base64.StdEncoding.DecodeString(req.PNGBase64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid png_base64: " + err.Error()})
+		return
+	}
+	if err := os.WriteFile(pngPath, data, 0o644); err != nil {
+		writeError(c, err)
+		return
+	}
+	// 回填 png_path(省一个 repo 方法:直接 Exec)
+	if _, err := s.store.DB.Exec(`UPDATE poster_artifacts SET png_path = ? WHERE id = ?`, pngPath, id); err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"id": id, "url": "/public/poster-artifacts/" + fmt.Sprint(id) + ".png"})
 }
 
 func (s *Server) getPushConfig(c *gin.Context) {

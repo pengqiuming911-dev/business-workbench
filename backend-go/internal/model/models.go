@@ -192,3 +192,13 @@ type AgentMessage struct {
 	ToolCallID     string `json:"tool_call_id"`
 	CreatedAt      string `json:"created_at"`
 }
+
+type PosterArtifact struct {
+	ID              int64  `json:"id"`
+	ProductID       string `json:"product_id"`
+	ObservationDate string `json:"observation_date"`
+	FieldsJSON      string `json:"fields_json"`
+	PngPath         string `json:"png_path"`
+	ContentHash     string `json:"content_hash"`
+	CreatedAt       string `json:"created_at"`
+}
