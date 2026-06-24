@@ -180,3 +180,35 @@ func derefInt(value *int) int {
 	}
 	return *value
 }
+
+// BuildArtifact 把计算好的喜报数据转成前端模板直接消费的展示字段 map。
+// 所有数字在此一次性格式化成字符串,前端与 agent 都不得再解析或改写这些数字。
+func BuildArtifact(product model.Product, data Data, observationDate string) map[string]any {
+	return map[string]any{
+		"product_id":               product.ID,
+		"product_name":             product.Name,
+		"observation_date":         observationDate,
+		"observation_date_display": FormatChineseDate(observationDate),
+		"entry_date":               product.IssueDate,
+		"entry_date_display":       FormatChineseDate(product.IssueDate),
+		// 数字字段(锁死,前端原样展示)
+		"annualized_return":        fmt.Sprintf("%.2f", data.AnnualizedReturn*100),
+		"monthly_coupon":           fmt.Sprintf("%.2f", data.MonthlyCoupon*100),
+		"cumulative_dividend_rate": fmt.Sprintf("%.2f", data.CumulativeDividendRate*100),
+		"dividend_count":           data.DividendCount,
+		"underlying_name":          data.UnderlyingName,
+		"dividend_barrier_value":   data.DividendBarrierValue,
+		"knockout_value":           data.KnockoutValue,
+		"parachute_value":          data.ParachuteValue,
+		// 文案字段(默认值,agent 不可改数字类;disclaimer 措辞锁死)
+		"title":               "分红观察喜报",
+		"subtitle":            "IMPORTANT MESSAGE",
+		"congrats":            "Congratulations",
+		"congrat_text_prefix": "热烈祝贺",
+		"label_yield":         "年化收益:",
+		"label_cumulative":    "累计分红",
+		"label_monthly":       "本月分红:",
+		"qr_caption":          "扫码了解更多详情",
+		"disclaimer":          "* 本产品仅面向合格投资者,衍生品为高风险资产,投资需谨慎",
+	}
+}
