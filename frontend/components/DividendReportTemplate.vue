@@ -105,7 +105,7 @@ defineExpose({ downloadPng, getPngDataUrl })
 </script>
 
 <style scoped>
-:root{
+.stage{
   --red:#cf141d;
   --deep-red:#c71018;
   --paper:#f5f0e7;
