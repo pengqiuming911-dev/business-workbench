@@ -217,6 +217,17 @@ func (r *streamResult) mergeToolCall(delta toolCallDelta) {
 	}
 }
 
+// extractArtifact 从工具返回结果里安全取出 poster_artifact 载荷。
+// 返回 false 表示该工具结果不含喜报 artifact(普通工具调用)。
+func extractArtifact(toolResult map[string]any) (map[string]any, bool) {
+	raw, ok := toolResult["poster_artifact"]
+	if !ok {
+		return nil, false
+	}
+	m, ok := raw.(map[string]any)
+	return m, ok
+}
+
 func (s *Service) executeTool(name string, rawArgs string) map[string]any {
 	var args map[string]any
 	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
