@@ -20,6 +20,10 @@
       <div v-if="hasContent || streaming" class="message-card">
         <div class="message-content" v-html="renderedContent"></div>
       </div>
+
+      <div v-if="artifact" class="artifact-card">
+        <DividendReportTemplate :fields="artifact" @downloaded="d => archivePoster(artifact, d)" />
+      </div>
     </div>
   </div>
 </template>
@@ -29,12 +33,15 @@ import { computed } from 'vue'
 import { Bot, User } from '@lucide/vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import DividendReportTemplate from './DividendReportTemplate.vue'
+import { archivePoster } from '../utils/posterArchive.js'
 
 const props = defineProps({
   role: { type: String, required: true },
   content: { type: String, default: '' },
   streaming: { type: Boolean, default: false },
   toolCalls: { type: Array, default: null },
+  artifact: { type: Object, default: null },
 })
 
 marked.setOptions({
@@ -204,6 +211,10 @@ const renderedContent = computed(() => {
   content: '▋';
   color: #2f6cf6;
   animation: blink 1s step-end infinite;
+}
+
+.artifact-card {
+  margin-top: 10px;
 }
 
 @keyframes blink {

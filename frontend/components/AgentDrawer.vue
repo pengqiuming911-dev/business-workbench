@@ -28,6 +28,9 @@
                 <Loader2 v-if="msg.toolLoading" :size="12" :stroke-width="2.5" class="spin" />
               </div>
               <div v-if="msg.content" class="msg-bubble" v-html="renderMarkdown(msg.content)"></div>
+              <div v-if="msg.artifact" class="artifact-card">
+                <DividendReportTemplate :fields="msg.artifact" @downloaded="d => archivePoster(msg.artifact, d)" />
+              </div>
             </div>
           </template>
 
@@ -60,6 +63,8 @@ import { ref, nextTick, watch } from 'vue'
 import { X, Sparkles, Zap, Loader2, ArrowUp } from '@lucide/vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import DividendReportTemplate from './DividendReportTemplate.vue'
+import { archivePoster } from '../utils/posterArchive.js'
 
 defineProps({
   open: { type: Boolean, default: false },
@@ -127,7 +132,7 @@ async function send() {
 
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
-    let assistantMsg = { role: 'assistant', content: '' }
+    let assistantMsg = { role: 'assistant', content: '', artifact: null }
     messages.value.push(assistantMsg)
 
     let buffer = ''
@@ -162,6 +167,16 @@ async function send() {
             case 'tool_done': {
               const tc = [...messages.value].reverse().find(m => m.toolName === event.name && m.toolLoading)
               if (tc) tc.toolLoading = false
+              break
+            }
+            case 'poster_artifact': {
+              const last = messages.value[messages.value.length - 1]
+              if (last && last.role === 'assistant') {
+                last.artifact = event.artifact
+              } else {
+                messages.value.push({ role: 'assistant', content: '', artifact: event.artifact })
+              }
+              scrollToBottom()
               break
             }
             case 'error':
