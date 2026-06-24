@@ -16,12 +16,13 @@ import (
 	"business-workbench/backend-go/internal/db"
 	"business-workbench/backend-go/internal/model"
 	"business-workbench/backend-go/internal/observations"
+	"business-workbench/backend-go/internal/posters"
 	"business-workbench/backend-go/internal/retriever"
 )
 
 const maxToolRounds = 12
 
-const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。"
+const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。\n\n当用户想要生成、制作、下载「喜报」「分红喜报」「分红观察喜报」时：先调用 search_products 找到目标产品的 product_id，再调用 generate_poster(product_id, observation_date) 生成。喜报里的所有数字（年化收益、本月分红、累计分红率、累计分红次数、派息界限、止盈界限、末月降至、挂钩标的、入场时间）都由系统从真实数据计算，你绝不可在对话中编造、估算或改写这些数字，也不可在 generate_poster 参数里传任何数字。若系统返回错误（如无该观察日记录），如实告知用户，不要自行补数。"
 
 type Service struct {
 	cfg    config.Config
@@ -34,6 +35,7 @@ type StreamCallbacks struct {
 	OnDelta     func(string)
 	OnToolCall  func(string)
 	OnToolDone  func(string)
+	OnArtifact  func(map[string]any)
 }
 
 func NewService(cfg config.Config, store *db.Store) *Service {
@@ -79,6 +81,9 @@ func (s *Service) StreamChat(ctx context.Context, history []model.AgentMessage, 
 				callbacks.OnToolCall(toolCall.Function.Name)
 			}
 			toolResult := s.executeTool(toolCall.Function.Name, toolCall.Function.Arguments)
+			if art, ok := extractArtifact(toolResult); ok && callbacks.OnArtifact != nil {
+				callbacks.OnArtifact(art)
+			}
 			if callbacks.OnToolDone != nil {
 				callbacks.OnToolDone(toolCall.Function.Name)
 			}
@@ -259,6 +264,8 @@ func (s *Service) executeTool(name string, rawArgs string) map[string]any {
 		return s.getProductAnalytics(args)
 	case "get_posters":
 		return s.getPosters(args)
+	case "generate_poster":
+		return s.generatePoster(args)
 	case "search_product_docs":
 		return s.searchProductDocs(args)
 	case "get_channels_summary":
@@ -432,6 +439,61 @@ func (s *Service) getPosters(args map[string]any) map[string]any {
 		return map[string]any{"error": err.Error()}
 	}
 	return map[string]any{"count": len(posters), "posters": posters}
+}
+
+// generatePoster 是 agent 的喜报生成工具：按产品 ID + 观察日从 DB 拉真实数据，
+// 经 posters.GenerateData / BuildArtifact 组装成展示字段，以 poster_artifact 返回。
+// 数字全部来自 DB，本函数不产生、不接受任何数字入参。
+func (s *Service) generatePoster(args map[string]any) map[string]any {
+	productID := stringArg(args, "product_id")
+	observationDate := stringArg(args, "observation_date")
+	if observationDate == "" {
+		observationDate = time.Now().Format("2006-01-02")
+	}
+	if productID == "" {
+		return map[string]any{"error": "product_id is required"}
+	}
+
+	products, err := s.store.QueryOngoingProducts()
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	var product *model.Product
+	for i := range products {
+		if products[i].ID == productID {
+			product = &products[i]
+			break
+		}
+	}
+	if product == nil {
+		return map[string]any{"error": "product not found or not ongoing: " + productID}
+	}
+
+	records, err := s.store.QueryObservationsByProduct(productID)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	monthsSinceEntry := 0
+	found := false
+	for i := range records {
+		if records[i].ObservationDate == observationDate && records[i].MonthsSinceEntry != nil {
+			monthsSinceEntry = *records[i].MonthsSinceEntry
+			found = true
+			break
+		}
+	}
+	if !found {
+		return map[string]any{"error": "no observation record for " + observationDate + " on product " + productID}
+	}
+
+	data := posters.GenerateData(*product, observationDate, monthsSinceEntry)
+	artifact := posters.BuildArtifact(*product, data, observationDate)
+	return map[string]any{
+		"poster_artifact":  artifact,
+		"product_id":       productID,
+		"observation_date": observationDate,
+		"message":          "已生成「" + product.Name + "」(" + observationDate + ")的分红观察喜报，请在下方查看并下载。",
+	}
 }
 
 func (s *Service) searchProductDocs(args map[string]any) map[string]any {
@@ -848,6 +910,21 @@ func toolDefinitions() []toolDefinition {
 						"date":       map[string]any{"type": "string", "description": "观察日期 YYYY-MM-DD"},
 						"product_id": map[string]any{"type": "string", "description": "产品 ID"},
 					},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "generate_poster",
+				"description": "为指定产品在指定观察日生成分红观察喜报（可下载的 PNG）。所有数字（年化、本月分红、累计分红率、界限、标的等）均由系统从该产品的真实观察数据计算，不要在参数里提供任何数字。先调用 search_products 拿到 product_id，再调用本工具。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"product_id":       map[string]any{"type": "string", "description": "产品 ID（由 search_products 返回）"},
+						"observation_date": map[string]any{"type": "string", "description": "观察日 YYYY-MM-DD，默认今天"},
+					},
+					"required": []string{"product_id"},
 				},
 			},
 		},

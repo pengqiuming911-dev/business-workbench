@@ -1933,6 +1933,9 @@ func (s *Server) agentChat(c *gin.Context) {
 		OnToolDone: func(name string) {
 			writeSSE(c, gin.H{"type": "tool_done", "name": name})
 		},
+		OnArtifact: func(a map[string]any) {
+			writeSSE(c, gin.H{"type": "poster_artifact", "artifact": a})
+		},
 	})
 	if err != nil {
 		writeSSE(c, gin.H{"type": "error", "error": err.Error()})
