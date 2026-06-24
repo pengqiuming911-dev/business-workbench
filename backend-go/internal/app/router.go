@@ -1513,6 +1513,14 @@ func (s *Server) savePosterArtifact(c *gin.Context) {
 	}
 	fieldsJSON, _ := json.Marshal(req.Fields)
 
+	// Decode + validate png_base64 BEFORE insert so a bad payload never leaves
+	// an orphan archive row (committed DB row with no PNG file on disk).
+	data, err := base64.StdEncoding.DecodeString(req.PNGBase64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid png_base64: " + err.Error()})
+		return
+	}
+
 	id, err := s.store.SavePosterArtifact(req.ProductID, req.ObservationDate, string(fieldsJSON), "", req.ContentHash)
 	if err != nil {
 		writeError(c, err)
@@ -1524,11 +1532,6 @@ func (s *Server) savePosterArtifact(c *gin.Context) {
 		return
 	}
 	pngPath := fmt.Sprintf("%s/%d.png", dir, id)
-	data, err := base64.StdEncoding.DecodeString(req.PNGBase64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid png_base64: " + err.Error()})
-		return
-	}
 	if err := os.WriteFile(pngPath, data, 0o644); err != nil {
 		writeError(c, err)
 		return
