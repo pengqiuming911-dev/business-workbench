@@ -69,7 +69,10 @@ func runTongyuBacktest(params map[string]any, creds tongyuCreds, chromePath stri
 
 // newBrowserContext 起无头 Chrome。chromePath 空时让 chromedp 自动找 Chrome。
 // 用持久化 userDataDir 降低验证码触发概率（参考文档建议）。
+// 包裹 90s 超时：executeTool 同步无 per-tool 超时，通毓站点挂起会让 SSE 流无限阻塞；
+// 超时后 chromedp 取消 → chromedp.Run 返回 err → runTongyuBacktest 退回 [胜率待补]。
 func newBrowserContext(parent context.Context, chromePath string) (context.Context, context.CancelFunc) {
+	timeoutCtx, cancelTimeout := context.WithTimeout(parent, 90*time.Second)
 	opts := append([]chromedp.ExecAllocatorOption{},
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -77,14 +80,16 @@ func newBrowserContext(parent context.Context, chromePath string) (context.Conte
 		chromedp.DisableGPU,
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("lang", "zh-CN"),
+		// 持久化 profile 降低验证码触发概率（参考 tongyu-winrate.md）；固定相对路径，未来可改配置项。
+		chromedp.UserDataDir("tongyu-chrome-profile"),
 	)
 	if chromePath != "" {
 		opts = append(opts, chromedp.ExecPath(chromePath))
 	}
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(parent, opts...)
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(timeoutCtx, opts...)
 	ctx, cancel := chromedp.NewContext(allocCtx)
-	// 合并 cancel：取消时先 ctx 再 allocCtx
-	return ctx, func() { cancel(); cancelAlloc() }
+	// 合并 cancel：取消时先 ctx 再 allocCtx 再 timeoutCtx
+	return ctx, func() { cancel(); cancelAlloc(); cancelTimeout() }
 }
 
 // loginTongyu 登录通毓。用页面中央账号密码框（不是顶部"管理员登录"）。
@@ -138,7 +143,11 @@ func selectStructure(ctx context.Context, structure string) error {
 			continue
 		}
 		// 点含该结构名的 label/span（antd 单选/多选用 label 包裹）
-		_ = chromedp.Run(ctx, chromedp.Click(fmt.Sprintf(`//label[contains(.,'%s')]|//span[contains(.,'%s')]`, part, part), chromedp.BySearch))
+		// 捕获点击错误：基础结构（DCN/雪球）若点空，页面保留默认结构，后续字段对错表单、
+		// 立即分析提交，readWinrate 会返回"真实但属错结构"的胜率——agent 会自信地引用错数。
+		if err := chromedp.Run(ctx, chromedp.Click(fmt.Sprintf(`//label[contains(.,'%s')]|//span[contains(.,'%s')]`, part, part), chromedp.BySearch)); err != nil {
+			return fmt.Errorf("点结构 %q 失败: %w", part, err)
+		}
 		// FIX: 原简报中此处为裸 chromedp.Sleep(...)，Action 未经 chromedp.Run 执行是 no-op。
 		// 改用 time.Sleep 让等待真正生效。
 		time.Sleep(300 * time.Millisecond)
