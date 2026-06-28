@@ -126,6 +126,7 @@ func loginTongyu(ctx context.Context, creds tongyuCreds) error {
 		_ = chromedp.Run(ctx, chromedp.FullScreenshot(&shot, 90))
 		_ = os.MkdirAll("public/poster-artifacts", 0o755)
 		_ = os.WriteFile("public/poster-artifacts/tongyu-login-debug.png", shot, 0o644)
+		_ = os.WriteFile("public/poster-artifacts/tongyu-login-debug.txt", []byte("URL: "+url+"\n\nBODY:\n"+body), 0o644)
 		snippet := body
 		if len(snippet) > 500 {
 			snippet = snippet[:500]
