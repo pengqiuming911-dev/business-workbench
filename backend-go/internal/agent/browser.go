@@ -33,8 +33,10 @@ func runTongyuBacktest(params map[string]any, creds tongyuCreds, chromePath stri
 	); err != nil {
 		return "", "进入回测页失败：" + err.Error(), err
 	}
-	// 关掉可能遮挡表单的"快捷查询"对话框（若存在）
-	_ = chromedp.Run(ctx, chromedp.Click("//button[contains(@class,'close')]", chromedp.BySearch))
+	// 关掉可能遮挡表单的"快捷查询"对话框（若存在，2s 内点不到就跳过——不阻塞主流程）
+	closeCtx, closeCancel := context.WithTimeout(ctx, 2*time.Second)
+	_ = chromedp.Run(closeCtx, chromedp.Click("//button[contains(@class,'close')]", chromedp.BySearch))
+	closeCancel()
 
 	// 选结构类型：按 structure_type 点对应单选/多选。structure_type 由 agent 从对话判断传入（如 "DCN+降敲+降落伞"）。
 	structure := stringArg(params, "structure_type")
