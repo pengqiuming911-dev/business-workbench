@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -227,4 +229,140 @@ func firstPercent(s string) string {
 		}
 	}
 	return ""
+}
+
+// screenshotAMAC 打开 AMAC 详情页（JS 异步加载值），等值出现后整页截图存 outPath。
+// url 用 references/amac-manager.md 的模板（type=1 管理人 / type=2 产品）。
+func screenshotAMAC(url, outPath string) error {
+	ctx, cancel := newBrowserContext(context.Background(), "")
+	defer cancel()
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(url),
+		chromedp.Sleep(2*time.Second), // 等 JS 填值
+	); err != nil {
+		return err
+	}
+	var buf []byte
+	if err := chromedp.Run(ctx, chromedp.CaptureScreenshot(&buf)); err != nil {
+		return err
+	}
+	return os.WriteFile(outPath, buf, 0o644)
+}
+
+// screenshotProductCard 进通毓"产品点位"小工具，按参数填表→提交→复制为图片→取图存 outPath。
+// 剪贴板读不到时回退元素截图。流程见 references/product-position-card.md。
+func screenshotProductCard(params map[string]any, creds tongyuCreds, chromePath, outPath string) error {
+	ctx, cancel := newBrowserContext(context.Background(), chromePath)
+	defer cancel()
+	if err := loginTongyu(ctx, creds); err != nil {
+		return err
+	}
+	if hasCaptcha(ctx) {
+		return fmt.Errorf("遇验证码，产品卡截图失败")
+	}
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate("https://terminal.tongyu-quant.com/smallTool/index.html#/product-position"),
+		chromedp.Sleep(2*time.Second),
+	); err != nil {
+		return err
+	}
+	// 选产品类型（原生 select）
+	// 适配：chromedp v0.15.1 无 SetAttribute；改用 Evaluate 设 select.selectedIndex 并派发
+	// change/input 事件（Vue/原生均监听 change）。保持简报意图：按 structure_type 选 DCN/锁盈。
+	if pt := stringArg(params, "structure_type"); pt != "" {
+		js := fmt.Sprintf(`(function(){
+			var s = document.querySelector('select');
+			if (!s) return;
+			var v = %q;
+			for (var i = 0; i < s.options.length; i++) {
+				if (s.options[i].value === v || s.options[i].text === v) {
+					s.selectedIndex = i;
+					break;
+				}
+			}
+			s.dispatchEvent(new Event('change', {bubbles: true}));
+			s.dispatchEvent(new Event('input', {bubbles: true}));
+		})()`, selectProductType(pt))
+		_ = chromedp.Run(ctx, chromedp.Evaluate(js, nil))
+	}
+	// 按标签填数值字段
+	for _, f := range productCardFields(params) {
+		_ = fillByLabel(ctx, f.Label, f.Value)
+	}
+	// 点提交
+	if err := chromedp.Run(ctx, chromedp.Click(`//button/span[contains(text(),'提交')]`, chromedp.BySearch)); err != nil {
+		return err
+	}
+	// FIX: 简报此处为裸 chromedp.Sleep(...)，Action 未经 chromedp.Run 是 no-op；改用 time.Sleep。
+	time.Sleep(1 * time.Second)
+	// 点"复制为图片"
+	_ = chromedp.Run(ctx, chromedp.Click(`//button/span[contains(text(),'复制为图片')]`, chromedp.BySearch))
+	// 优先：剪贴板读 PNG
+	if png, err := readClipboardPNG(ctx); err == nil && len(png) > 0 {
+		return os.WriteFile(outPath, png, 0o644)
+	}
+	// 兜底：结果卡元素截图
+	var buf []byte
+	shotCtx, cancelShot := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelShot()
+	if err := chromedp.Run(shotCtx, chromedp.Screenshot(`//*[contains(@class,'product-result')]`, &buf, chromedp.BySearch)); err != nil {
+		return fmt.Errorf("剪贴板与元素截图均失败: %w", err)
+	}
+	return os.WriteFile(outPath, buf, 0o644)
+}
+
+// selectProductType 把 structure_type 映射成通毓产品点位页 select 的值（DCN/锁盈）。
+func selectProductType(structure string) string {
+	s := strings.ToLower(structure)
+	if strings.Contains(s, "锁盈") || strings.Contains(s, "经典") {
+		return "锁盈"
+	}
+	return "DCN"
+}
+
+// productCardFields 把产品参数映射成产品点位页表单字段标签+值（references/product-position-card.md 表）。
+func productCardFields(params map[string]any) []formField {
+	get := func(k string) string { return stringArg(params, k) }
+	var out []formField
+	add := func(label, key string) {
+		if v := get(key); v != "" {
+			out = append(out, formField{Label: label, Value: v})
+		}
+	}
+	add("期限(月)", "期限")
+	add("锁定期(月)", "锁定期")
+	add("保证金(%)", "保证金")
+	add("敲出线(%)", "期初敲出线")
+	add("降敲(每月)", "降敲")
+	add("降落伞(%)", "降落伞")
+	add("每月或有派息(%)", "费后派息")
+	add("派息线(%)", "派息线")
+	add("入场点位", "current_price")
+	return out
+}
+
+// readClipboardPNG 用浏览器 evaluate 调 navigator.clipboard.read 取 image/png，返回 PNG 字节。
+func readClipboardPNG(ctx context.Context) ([]byte, error) {
+	var b64 string
+	js := `(async () => {
+		const items = await navigator.clipboard.read();
+		for (const it of items) {
+			for (const type of it.types) {
+				if (type === 'image/png') {
+					const blob = await it.getType(type);
+					const arr = new Uint8Array(await blob.arrayBuffer());
+					let s = ''; for (let i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
+					return btoa(s);
+				}
+			}
+		}
+		return '';
+	})()`
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &b64)); err != nil {
+		return nil, err
+	}
+	if b64 == "" {
+		return nil, fmt.Errorf("clipboard 无 image/png")
+	}
+	return base64.StdEncoding.DecodeString(b64)
 }
