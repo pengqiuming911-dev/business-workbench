@@ -107,7 +107,7 @@ func loginTongyu(ctx context.Context, creds tongyuCreds) error {
 		chromedp.WaitVisible(`//input[@type='text' or @name='username' or contains(@placeholder,'账号') or contains(@placeholder,'用户')][1]`, chromedp.BySearch),
 		chromedp.SendKeys(`//input[@type='text' or @name='username' or contains(@placeholder,'账号') or contains(@placeholder,'用户')][1]`, creds.User, chromedp.BySearch),
 		chromedp.SendKeys(`//input[@type='password'][1]`, creds.Pass, chromedp.BySearch),
-		chromedp.Click(`//button[contains(.,'登录') or contains(.,'Login')][1]`, chromedp.BySearch),
+		chromedp.Click(`//button[contains(.,'登录账号') or contains(.,'Login')][1]`, chromedp.BySearch),
 		chromedp.Sleep(2*time.Second),
 	); err != nil {
 		return err
