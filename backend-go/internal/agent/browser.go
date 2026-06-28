@@ -149,13 +149,15 @@ func hasCaptcha(ctx context.Context) bool {
 // structure_type 形如 "DCN+降敲+降落伞"（agent 从对话判断传入）。
 // 实现按标签文本点击；首次 live 运行按真实 DOM 调选择器。
 func selectStructure(ctx context.Context, structure string) error {
-	// DEBUG: 在点结构前先抓页面状态（click 超时后 ctx 已死，事后抓为空）
+	// DEBUG: 在点结构前先抓页面 URL + body（click 超时后 ctx 已死，事后抓为空）
+	var debugURL string
+	_ = chromedp.Run(ctx, chromedp.Location(&debugURL))
 	var body string
 	_ = chromedp.Run(ctx, chromedp.Text("body", &body, chromedp.ByQuery))
 	var shot []byte
 	_ = chromedp.Run(ctx, chromedp.FullScreenshot(&shot, 90))
 	_ = os.MkdirAll("public/poster-artifacts", 0o755)
-	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.txt", []byte(body), 0o644)
+	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.txt", []byte("URL: "+debugURL+"\n\nBODY:\n"+body), 0o644)
 	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.png", shot, 0o644)
 	for _, part := range strings.Split(structure, "+") {
 		part = strings.TrimSpace(part)
