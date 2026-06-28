@@ -26,3 +26,7 @@ Thumbs.db
 .playwright-mcp/
 .superpowers/
 backend-go/.gocache/
+
+# generated runtime artifacts (poster PNGs, 推介材料 docx)
+public/
+backend-go/public/
