@@ -2,7 +2,9 @@ package agent
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +24,12 @@ type docxSection struct {
 type docxLink struct {
 	Label string
 	URL   string
+}
+
+// pendingImage 是待写入 word/media 的图片。BuildDocx 主流程收集后写 zip。
+type pendingImage struct {
+	Target string
+	Data   []byte
 }
 
 // docxBuilder 在装配过程中计数关系 id（图片 Task 2 用 imgIdx、超链接用 linkIdx）。
@@ -47,10 +55,17 @@ func BuildDocx(sections []docxSection, outputPath string) error {
 	defer zw.Close()
 
 	b := &docxBuilder{}
+	images := []pendingImage{}
 	var body strings.Builder
 	var rels strings.Builder
 	for _, s := range sections {
-		b.writeSection(&body, &rels, s)
+		b.writeSection(&body, &rels, s, &images)
+	}
+	// 写图片 media 文件
+	for _, p := range images {
+		if err := writeZipBytes(zw, "word/"+p.Target, p.Data); err != nil {
+			return err
+		}
 	}
 
 	if err := writeZip(zw, "[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -79,7 +94,7 @@ func BuildDocx(sections []docxSection, outputPath string) error {
 	return nil
 }
 
-func (b *docxBuilder) writeSection(body, rels *strings.Builder, s docxSection) {
+func (b *docxBuilder) writeSection(body, rels *strings.Builder, s docxSection, images *[]pendingImage) {
 	clean := stripNonBmp(s.Text)
 	switch s.Type {
 	case "heading":
@@ -97,8 +112,11 @@ func (b *docxBuilder) writeSection(body, rels *strings.Builder, s docxSection) {
 	case "separator":
 		body.WriteString(`<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr></w:pPr></w:p>`)
 	case "image":
-		// Task 1：占位。Task 2 换成 writeImageSection 真嵌入。
-		body.WriteString(imagePlaceholderXML(s.Caption))
+		// Task 2：真嵌入（path 读不到仍走红字占位）。
+		b.imgIdx++
+		if err := writeImageSection(body, rels, s, b.imgIdx, images); err != nil {
+			body.WriteString(imagePlaceholderXML(s.Caption))
+		}
 	case "link_list":
 		for _, it := range s.Items {
 			b.linkIdx++
@@ -123,7 +141,52 @@ func imagePlaceholderXML(caption string) string {
 	if caption == "" {
 		caption = "图片"
 	}
-	return `<w:p><w:r><w:rPr><w:rFonts w:ascii="微软雅黑" w:eastAsia="微软雅黑"/><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">[图片待补:` + xmlEscape(caption) + `]</w:t></w:r></w:p>`
+	return `<w:p><w:r><w:rPr><w:rFonts w:ascii="微软雅黑" w:eastAsia="微软雅黑"/><w:color w:val="FF0000"/></w:rPr><w:t xml:space="preserve">[图片待补:` + xmlEscape(stripNonBmp(caption)) + `]</w:t></w:r></w:p>`
+}
+
+// writeImageSection 读 PNG、解码取宽高、按 20cm 高度上限等比缩放、写 rels + drawing XML、并把图片数据 append 到 images（由 BuildDocx 写 zip）。
+// 返回 error 时调用方写红字占位。
+func writeImageSection(body, rels *strings.Builder, s docxSection, idx int, images *[]pendingImage) error {
+	data, err := os.ReadFile(s.Path)
+	if err != nil {
+		return err
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	bounds := img.Bounds()
+	pxW, pxH := bounds.Dx(), bounds.Dy()
+	if pxW <= 0 || pxH <= 0 {
+		return fmt.Errorf("invalid image dimensions %dx%d", pxW, pxH)
+	}
+	// PNG 无物理 DPI，按 96px/inch 换算；20cm 高度上限 = 7200000 EMU。
+	const maxH = 7200000
+	emuW := int(float64(pxW) / 96.0 * 914400)
+	emuH := int(float64(pxH) / 96.0 * 914400)
+	if emuH > maxH {
+		scale := float64(maxH) / float64(emuH)
+		emuH = maxH
+		emuW = int(float64(emuW) * scale)
+	}
+	id := fmt.Sprintf("rIdImg%d", idx)
+	target := fmt.Sprintf("media/image%d.png", idx)
+	*images = append(*images, pendingImage{Target: target, Data: data})
+	rels.WriteString(fmt.Sprintf(`<Relationship Id="%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="%s"/>`, id, target))
+	body.WriteString(fmt.Sprintf(`<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="%d" name="image%d"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="%d" name="image%d"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`, emuW, emuH, idx, idx, idx, idx, id, emuW, emuH))
+	if s.Caption != "" {
+		body.WriteString(`<w:p><w:r><w:rPr><w:rFonts w:ascii="微软雅黑" w:eastAsia="微软雅黑"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t xml:space="preserve">` + xmlEscape(stripNonBmp(s.Caption)) + `</w:t></w:r></w:p>`)
+	}
+	return nil
+}
+
+func writeZipBytes(w *zip.Writer, name string, data []byte) error {
+	fw, err := w.Create(name)
+	if err != nil {
+		return err
+	}
+	_, err = fw.Write(data)
+	return err
 }
 
 // stripNonBmp 剥离 BMP 外字符（emoji 如 🚀），保留 BMP 内文字。

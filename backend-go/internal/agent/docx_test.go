@@ -2,6 +2,10 @@ package agent
 
 import (
 	"archive/zip"
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -85,4 +89,75 @@ func readZipFile(t *testing.T, zr *zip.ReadCloser, name string) string {
 	defer f.Close()
 	b, _ := io.ReadAll(f)
 	return string(b)
+}
+
+func TestBuildDocx_ImageEmbedded(t *testing.T) {
+	dir := t.TempDir()
+	pngPath := filepath.Join(dir, "card.png")
+	if err := os.WriteFile(pngPath, png200x100(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "with-image.docx")
+	sections := []docxSection{
+		{Type: "heading", Text: "产品派息与敲出观察点位表"},
+		{Type: "image", Path: pngPath, Caption: "产品卡"},
+	}
+	if err := BuildDocx(sections, out); err != nil {
+		t.Fatalf("BuildDocx: %v", err)
+	}
+	zr, _ := zip.OpenReader(out)
+	defer zr.Close()
+	names := map[string]bool{}
+	for _, f := range zr.File {
+		names[f.Name] = true
+	}
+	if !names["word/media/image1.png"] {
+		t.Error("图片未嵌入到 word/media/image1.png")
+	}
+	doc := readZipFile(t, zr, "word/document.xml")
+	if !strings.Contains(doc, "产品派息与敲出观察点位表") {
+		t.Error("标题缺失")
+	}
+	if !strings.Contains(doc, "rIdImg1") {
+		t.Error("document.xml 缺图片 drawing 引用 rIdImg1")
+	}
+	rels := readZipFile(t, zr, "word/_rels/document.xml.rels")
+	if !strings.Contains(rels, "media/image1.png") {
+		t.Error("rels 缺 image1.png 关系")
+	}
+}
+
+func TestBuildDocx_ImageMissingPlaceholder(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "no-image.docx")
+	sections := []docxSection{
+		{Type: "image", Path: filepath.Join(dir, "nonexistent.png"), Caption: "一页通"},
+	}
+	if err := BuildDocx(sections, out); err != nil {
+		t.Fatalf("BuildDocx: %v", err)
+	}
+	zr, _ := zip.OpenReader(out)
+	defer zr.Close()
+	doc := readZipFile(t, zr, "word/document.xml")
+	if !strings.Contains(doc, "[图片待补:一页通]") {
+		t.Errorf("缺图应插红字占位，got: %s", doc)
+	}
+	for _, f := range zr.File {
+		if strings.HasPrefix(f.Name, "word/media/") {
+			t.Errorf("缺图不应嵌入 media 文件，found %s", f.Name)
+		}
+	}
+}
+
+// png200x100 返回一张 200x100 纯色 PNG 的字节。
+func png200x100() []byte {
+	var buf bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 200, 100))
+	for y := 0; y < 100; y++ {
+		for x := 0; x < 200; x++ {
+			img.Set(x, y, color.RGBA{R: 200, G: 200, B: 200, A: 255})
+		}
+	}
+	png.Encode(&buf, img)
+	return buf.Bytes()
 }
