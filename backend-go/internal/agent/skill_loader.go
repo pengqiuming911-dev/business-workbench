@@ -8,14 +8,14 @@ import (
 //go:embed skills
 var skillFS embed.FS
 
-// copywriterSkillDir 是 embed.FS 中 skills 根目录；具体 skill 名通过参数拼接。
+// skillsRoot 是 embed.FS 中 skills 根目录；具体 skill 名通过参数拼接。
 // 当前 skills/ 下仅嵌入 "structured-product-copywriter"。
-const copywriterSkillDir = "skills"
+const skillsRoot = "skills"
 
 // LoadSkillContent 返回指定 skill 的 verbatim SKILL.md。
 // 当前仅嵌入 "structured-product-copywriter"。
 func LoadSkillContent(name string) (string, error) {
-	path := fmt.Sprintf("%s/%s/SKILL.md", copywriterSkillDir, name)
+	path := fmt.Sprintf("%s/%s/SKILL.md", skillsRoot, name)
 	b, err := skillFS.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("skill %q not found: %w", name, err)
@@ -25,7 +25,7 @@ func LoadSkillContent(name string) (string, error) {
 
 // GetSkillReference 返回某 skill 下 references/ 里的参考文档（refName 不带 .md）。
 func GetSkillReference(skillName, refName string) (string, error) {
-	path := fmt.Sprintf("%s/%s/references/%s.md", copywriterSkillDir, skillName, refName)
+	path := fmt.Sprintf("%s/%s/references/%s.md", skillsRoot, skillName, refName)
 	b, err := skillFS.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("reference %q of skill %q not found: %w", refName, skillName, err)

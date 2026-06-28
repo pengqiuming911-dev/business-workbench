@@ -70,7 +70,10 @@ func splitQuoted(text string) string {
 
 // fetchFromTencent: v_sh000852="1~000852~中证1000~8810.34~..."  parts[3]=最新价。
 func fetchFromTencent(base, code string) (string, float64, error) {
-	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/q=%s", base, code), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/q=%s", base, code), nil)
+	if err != nil {
+		return "", 0, err
+	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	resp, err := quoteHTTPClient.Do(req)
 	if err != nil {
@@ -99,7 +102,10 @@ func fetchFromTencent(base, code string) (string, float64, error) {
 
 // fetchFromSina: hq_str_sh000852="中证1000,开盘,昨收,最新,..."  parts[3]=最新价。需 Referer。
 func fetchFromSina(base, code string) (string, float64, error) {
-	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/list=%s", base, code), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/list=%s", base, code), nil)
+	if err != nil {
+		return "", 0, err
+	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Referer", "https://finance.sina.com.cn")
 	resp, err := quoteHTTPClient.Do(req)
@@ -134,7 +140,10 @@ func fetchFromEastmoney(base, code string) (string, float64, error) {
 		prefix = "0"
 	}
 	secid := fmt.Sprintf("%s.%s", prefix, code[2:])
-	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/qt/stock/get?secid=%s&fields=f43,f58", base, secid), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/qt/stock/get?secid=%s&fields=f43,f58", base, secid), nil)
+	if err != nil {
+		return "", 0, err
+	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	resp, err := quoteHTTPClient.Do(req)
 	if err != nil {
@@ -169,7 +178,7 @@ func FetchQuote(code string) (name string, price float64, source string, err err
 		{fetchFromSina, sinaBase, "sina"},
 		{fetchFromEastmoney, eastmoneyBase, "eastmoney"},
 	}
-	var lastErr error
+	var lastErr error = fmt.Errorf("no source returned a valid price")
 	for _, s := range sources {
 		n, p, e := s.fn(s.base, code)
 		if e == nil && p > 0 {
