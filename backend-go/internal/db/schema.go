@@ -255,6 +255,16 @@ CREATE TABLE IF NOT EXISTS posters (
   FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
+CREATE TABLE IF NOT EXISTS poster_artifacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id TEXT NOT NULL,
+  observation_date TEXT NOT NULL,
+  fields_json TEXT NOT NULL,
+  png_path TEXT,
+  content_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS activity_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   type TEXT NOT NULL,

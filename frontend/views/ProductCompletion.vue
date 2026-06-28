@@ -4,6 +4,7 @@
       <button class="btn tab-btn" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">全量</button>
       <button class="btn tab-btn" :class="{ active: activeTab === 'calendar' }" @click="activeTab = 'calendar'; loadCalendarData()">观察日历</button>
       <button class="btn tab-btn" :class="{ active: activeTab === 'today' }" @click="activeTab = 'today'; loadTodayData()">今日观察</button>
+      <button class="btn tab-btn" :class="{ active: activeTab === 'copy' }" @click="activeTab = 'copy'; loadTodayData()">喜报文案</button>
     </div>
 
     <div v-if="activeTab === 'all'">
@@ -216,6 +217,7 @@
                   <th class="num">派息线</th>
                   <th class="col-center">是否敲出</th>
                   <th class="col-center">是否派息</th>
+                  <th class="col-center">喜报文案</th>
                 </tr>
               </thead>
               <tbody>
@@ -235,6 +237,15 @@
                   <td class="col-center" :class="dividendClass(todayObs(p)?.is_dividend)">
                     {{ todayObs(p)?.is_dividend || '--' }}
                   </td>
+                  <td class="col-center">
+                    <button
+                      class="btn btn-sm btn-secondary"
+                      :disabled="!eventType(p)"
+                      @click.stop="openCopywriter(p)"
+                    >
+                      生成文案
+                    </button>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -247,11 +258,86 @@
         <p>今日无产品需要观察派息/敲出。</p>
       </div>
     </div>
+
+    <div v-if="activeTab === 'copy'" class="copywriter-page">
+      <div class="copywriter-intro">
+        <div>
+          <h2 class="text-section">喜报文案</h2>
+          <p class="text-body">选择今日已触发敲出或派息的产品，生成可直接发送的通知文案和喜报内容。</p>
+        </div>
+        <button class="btn btn-secondary" :disabled="todayLoading" @click="loadTodayData">
+          {{ todayLoading ? '刷新中...' : '刷新今日观察' }}
+        </button>
+      </div>
+
+      <div v-if="todayLoading" class="loading-state"><p>加载中...</p></div>
+      <div v-else class="copywriter-layout">
+        <PanelCard title="今日触发产品">
+          <div v-if="copyCandidates.length" class="copy-product-list">
+            <button
+              v-for="p in copyCandidates"
+              :key="p.id"
+              class="copy-product-item"
+              :class="{ active: selectedCopyProduct?.id === p.id }"
+              @click="selectCopyProduct(p)"
+            >
+              <span class="copy-product-main">
+                <strong>{{ p.name || p.id }}</strong>
+                <span>{{ p.code || '--' }}</span>
+              </span>
+              <span class="badge" :class="eventType(p) === 'knockout' ? 'badge-red' : 'badge-green'">
+                {{ eventType(p) === 'knockout' ? '敲出' : '派息' }}
+              </span>
+            </button>
+          </div>
+          <div v-else class="copy-empty">今日暂无已触发敲出或派息的产品。</div>
+        </PanelCard>
+
+        <PanelCard title="文案参数">
+          <div v-if="selectedCopyProduct" class="copy-settings">
+            <div class="form-row">
+              <label>文案类型</label>
+              <select v-model="copyEventType" class="input">
+                <option value="knockout" :disabled="todayObs(selectedCopyProduct)?.is_knocked_out !== '是'">敲出</option>
+                <option value="dividend" :disabled="todayObs(selectedCopyProduct)?.is_dividend !== '是'">派息</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>T+天数</label>
+              <input v-model.number="copyTDays" type="number" min="0" class="input" />
+            </div>
+            <div class="form-row">
+              <label>到账日期</label>
+              <input v-model="copyArrivalDate" type="date" class="input" />
+            </div>
+            <div class="form-row">
+              <label>到账说明</label>
+              <input v-model="copyArrivalNote" type="text" class="input" placeholder="例如：本周五 / 下周一" />
+            </div>
+          </div>
+          <div v-else class="copy-empty">请先选择一个触发产品。</div>
+        </PanelCard>
+
+        <PanelCard title="通知文案">
+          <template #header-actions>
+            <button class="btn btn-sm btn-secondary" :disabled="!notificationCopy" @click="copyText(notificationCopy)">复制</button>
+          </template>
+          <textarea class="textarea copy-textarea" readonly :value="notificationCopy"></textarea>
+        </PanelCard>
+
+        <PanelCard title="喜报内容">
+          <template #header-actions>
+            <button class="btn btn-sm btn-secondary" :disabled="!posterCopy" @click="copyText(posterCopy)">复制</button>
+          </template>
+          <textarea class="textarea copy-textarea" readonly :value="posterCopy"></textarea>
+        </PanelCard>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import PanelCard from '../components/PanelCard.vue'
 import FullscreenToggle from '../components/FullscreenToggle.vue'
 
@@ -270,6 +356,11 @@ const todayDate = ref(new Date().toISOString().slice(0, 10))
 const todayProducts = ref([])
 const todayLoading = ref(false)
 const todayLoaded = ref(false)
+const selectedCopyProduct = ref(null)
+const copyEventType = ref('knockout')
+const copyTDays = ref(4)
+const copyArrivalDate = ref('')
+const copyArrivalNote = ref('')
 
 const calendarMonth = ref(new Date().toISOString().slice(0, 7))
 const calendarStatus = ref('ongoing')
@@ -280,6 +371,12 @@ const calendarError = ref('')
 const weekDays = ['一', '二', '三', '四', '五', '六', '日']
 
 onMounted(() => loadData())
+
+watch(copyTDays, value => {
+  if (!selectedCopyProduct.value) return
+  copyArrivalDate.value = addBusinessDays(todayDate.value, value)
+  copyArrivalNote.value = weekdayNote(copyArrivalDate.value)
+})
 
 async function loadData() {
   errorMsg.value = ''
@@ -304,6 +401,9 @@ async function loadTodayData() {
     if (!res.ok) throw new Error(data.error || '加载失败')
     todayProducts.value = (data.products || []).filter(p => !p.name || !p.name.includes('【专】'))
     todayDate.value = data.today || todayDate.value
+    if (!selectedCopyProduct.value && copyCandidates.value.length) {
+      selectCopyProduct(copyCandidates.value[0])
+    }
   } catch (err) {
     errorMsg.value = err.message
   } finally {
@@ -392,6 +492,20 @@ const calendarProductCount = computed(() => (
   Array.from(calendarMap.value.values()).reduce((sum, products) => sum + products.length, 0)
 ))
 
+const copyCandidates = computed(() => (
+  todayProducts.value.filter(p => eventType(p))
+))
+
+const notificationCopy = computed(() => {
+  if (!selectedCopyProduct.value) return ''
+  return buildNotificationCopy(selectedCopyProduct.value, copyEventType.value)
+})
+
+const posterCopy = computed(() => {
+  if (!selectedCopyProduct.value) return ''
+  return buildPosterCopy(selectedCopyProduct.value, copyEventType.value)
+})
+
 const calendarCells = computed(() => {
   const [year, month] = calendarMonth.value.split('-').map(Number)
   if (!year || !month) return []
@@ -432,6 +546,26 @@ function todayObs(product) {
   return product.observations.find(o => o.date === todayDate.value) || product.observations[product.observations.length - 1]
 }
 
+function eventType(product) {
+  const obs = todayObs(product)
+  if (obs?.is_knocked_out === '是') return 'knockout'
+  if (obs?.is_dividend === '是') return 'dividend'
+  return ''
+}
+
+function openCopywriter(product) {
+  selectCopyProduct(product)
+  activeTab.value = 'copy'
+}
+
+function selectCopyProduct(product) {
+  selectedCopyProduct.value = product
+  copyEventType.value = eventType(product) || 'knockout'
+  copyTDays.value = copyEventType.value === 'knockout' ? 4 : 3
+  copyArrivalDate.value = addBusinessDays(todayDate.value, copyTDays.value)
+  copyArrivalNote.value = weekdayNote(copyArrivalDate.value)
+}
+
 function computeMonthsSince(product) {
   if (!product.issue_date) return '--'
   const entry = new Date(product.issue_date)
@@ -448,6 +582,206 @@ function formatPrice(val, product) {
   if (val === null || val === undefined) return '--'
   const decimals = isETF(product) ? 3 : 2
   return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
+
+function formatPlainPrice(val, product) {
+  if (val === null || val === undefined) return '--'
+  const decimals = isETF(product) ? 3 : 2
+  return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: false })
+}
+
+function formatPercent(value, digits = 0) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '--'
+  const ratio = Math.abs(Number(value)) > 2 ? Number(value) / 100 : Number(value)
+  return `${(ratio * 100).toFixed(digits)}%`
+}
+
+function underlyingName(product) {
+  const code = product?.code || ''
+  return code.split(/[（(]/)[0].trim() || '--'
+}
+
+function productName(product) {
+  return product?.name || product?.id || '--'
+}
+
+function maskedProductName(product) {
+  const name = productName(product)
+  const match = name.match(/^(.).*?(\d+号(?:[（(][^)）]+[)）])?)/)
+  if (match) return `${match[1]}*${match[2]}`
+  return name.length > 1 ? `${name[0]}*${name.slice(-1)}` : name
+}
+
+function underlyingIndexName(product) {
+  const name = underlyingName(product)
+  if (!name || name === '--') return '--'
+  if (name.includes('指数') || name.includes('ETF')) return name
+  return `${name}指数`
+}
+
+function formatChineseDate(dateStr, withYear = true) {
+  const date = parseLocalDate(dateStr)
+  if (!date) return dateStr || '--'
+  const year = withYear ? `${date.getFullYear()}年` : ''
+  return `${year}${date.getMonth() + 1}月${date.getDate()}日`
+}
+
+function arrivalText() {
+  const dateText = formatChineseDate(copyArrivalDate.value, false)
+  return copyArrivalNote.value ? `${dateText}（${copyArrivalNote.value}）` : dateText
+}
+
+function knockoutLinePercent(product, obs) {
+  if (product.entry_price && obs?.knockout_price) {
+    return formatPercent(Number(obs.knockout_price) / Number(product.entry_price), 0)
+  }
+  return formatPercent(product.first_knockout_ratio, 0)
+}
+
+function currentKnockoutPercent(product, obs, digits = 0) {
+  if (product.entry_price && obs?.knockout_price) {
+    return formatPercent(Number(obs.knockout_price) / Number(product.entry_price), digits)
+  }
+  return formatPercent(product.first_knockout_ratio, digits)
+}
+
+function barrierPercent(raw, digits = 0) {
+  if (raw === null || raw === undefined || raw === '') return '--'
+  const text = String(raw)
+  const match = text.match(/-?\d+(?:\.\d+)?/)
+  if (!match) return '--'
+  return formatPercent(Number(match[0]), digits)
+}
+
+function eventMonths(product, obs) {
+  const months = Number(obs?.months_since_entry)
+  if (Number.isFinite(months) && months > 0) return Math.round(months)
+  const issue = parseLocalDate(product.issue_date)
+  const observe = parseLocalDate(obs?.date || todayDate.value)
+  if (!issue || !observe) return 0
+  return Math.max(0, (observe.getFullYear() - issue.getFullYear()) * 12 + observe.getMonth() - issue.getMonth())
+}
+
+function annualizedRate(product) {
+  if (product.monthly_coupon) return normalizeRatio(product.monthly_coupon) * 12
+  const months = Number(product.duration_months)
+  if (months > 0 && months <= 12 && product.coupon_1st) return normalizeRatio(product.coupon_1st)
+  if (months > 12 && product.coupon_2nd) return normalizeRatio(product.coupon_2nd)
+  if (product.coupon_1st) return normalizeRatio(product.coupon_1st)
+  if (product.coupon_2nd) return normalizeRatio(product.coupon_2nd)
+  return 0
+}
+
+function normalizeRatio(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return 0
+  return Math.abs(number) > 2 ? number / 100 : number
+}
+
+function formatRateNumber(rate, digits = 2) {
+  return (rate * 100).toFixed(digits)
+}
+
+function dividendCount(product, obs) {
+  return Math.max(0, eventMonths(product, obs))
+}
+
+function priceCompareText(obs, targetPrice, product) {
+  const close = Number(obs?.underlying_price)
+  const target = Number(targetPrice)
+  if (!Number.isFinite(close) || !Number.isFinite(target)) return '达到观察条件'
+  return close >= target
+    ? `大于${copyEventType.value === 'knockout' ? '敲出价' : '派息价'}`
+    : `低于${copyEventType.value === 'knockout' ? '敲出价' : '派息价'}`
+}
+
+function buildNotificationCopy(product, type) {
+  const obs = todayObs(product)
+  if (!obs) return ''
+  const name = productName(product)
+  const closePrice = formatPlainPrice(obs.underlying_price, product)
+  if (type === 'knockout') {
+    const koPrice = formatPlainPrice(obs.knockout_price, product)
+    return [
+      '各位投资人大家好：',
+      '',
+      `【${name}】于${formatChineseDate(product.issue_date)}进场`,
+      '',
+      `✅️挂钩标的：【${underlyingName(product)}】`,
+      `✅️入场价：【${formatPlainPrice(product.entry_price, product)}】`,
+      `✅️敲出观察线：【${knockoutLinePercent(product, obs)}】，对应敲出线【${koPrice}】`,
+      `✅️今天收盘价：【${closePrice}】${priceCompareText(obs, obs.knockout_price, product)}，触发敲出事件。`,
+      '',
+      `资金将于T+【${copyTDays.value}】交易日，也就是${arrivalText()}到账。`,
+      '',
+      '恭喜各位投资人！[庆祝][庆祝][庆祝]',
+    ].join('\n')
+  }
+  const dividendLine = formatPlainPrice(obs.dividend_line, product)
+  return [
+    '各位投资者大家好！',
+    '',
+    `【${name}】于${formatChineseDate(product.issue_date)}进场`,
+    `✅️挂钩标的：【${underlyingName(product)}】`,
+    `✅️派息观察线：【${formatPercent(product.dividend_barrier, 0)}】，对应派息线【${dividendLine}】`,
+    `✅️今天收盘价：【${closePrice}】${priceCompareText(obs, obs.dividend_line, product)}，触发派息分红事件。`,
+    '',
+    `分红将于T+【${copyTDays.value}】日，也就是${arrivalText()}到账。`,
+    '',
+    '恭喜各位投资人！[庆祝][庆祝]',
+  ].join('\n')
+}
+
+function buildPosterCopy(product, type) {
+  const obs = todayObs(product)
+  if (!obs) return ''
+  const maskedName = maskedProductName(product)
+  const observeDate = formatChineseDate(obs.date || todayDate.value)
+  const entryDate = formatChineseDate(product.issue_date)
+  if (type === 'knockout') {
+    const months = eventMonths(product, obs)
+    const annualized = annualizedRate(product)
+    const absoluteReturn = annualized / 12 * months
+    return `帮我把这个图片里的“致*4号”改为“${maskedName}”；把“2026年3月2日”改成“${observeDate}”；把“敲出绝对收益12.03%”中的“12.03”改为“${formatRateNumber(absoluteReturn)}”，把“年化收益48.10%”中的“48.10”改为“${formatRateNumber(annualized)}”；把“存续时间3月”中的“3”改成“${months}”，把“中证1000指数”改成“${underlyingIndexName(product)}”；把“下跌保护界限：70%”中的“70”改成“${barrierPercent(product.parachute).replace('%', '')}”；把“止盈界限:101%”中的“101”改成“${currentKnockoutPercent(product, obs).replace('%', '')}”；把“2025年11月 28日”改成“${entryDate}”`
+  }
+  const monthlyCoupon = normalizeRatio(product.monthly_coupon)
+  const count = dividendCount(product, obs)
+  const cumulative = monthlyCoupon * count
+  return `这张图帮我把“鹿*8号（三期）”改为“${maskedName}”；把“2026年4月30日”改成“${observeDate}”；把15.96%改成“${formatRateNumber(monthlyCoupon * 12)}%”；把“分红3次”改成“分红${count}次”；把“3.99%”改成“${formatRateNumber(cumulative)}%”；把“1.33%”改为“${formatRateNumber(monthlyCoupon)}%”；把“恒科ETF指数”改成“${underlyingIndexName(product)}”；把“80%”改成“${formatPercent(product.dividend_barrier, 0)}”；把“102%”改成“${currentKnockoutPercent(product, obs)}”；把“75%”改成“${barrierPercent(product.parachute)}”；把“2026年1月30日”改成“${entryDate}”`
+}
+
+async function copyText(text) {
+  if (!text) return
+  await navigator.clipboard.writeText(text)
+  successMsg.value = '文案已复制'
+}
+
+function parseLocalDate(dateStr) {
+  if (!dateStr) return null
+  const [year, month, day] = dateStr.split('-').map(Number)
+  if (!year || !month || !day) return null
+  return new Date(year, month - 1, day)
+}
+
+function toDateInput(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function addBusinessDays(dateStr, days) {
+  const date = parseLocalDate(dateStr) || new Date()
+  let remaining = Number(days) || 0
+  while (remaining > 0) {
+    date.setDate(date.getDate() + 1)
+    const day = date.getDay()
+    if (day !== 0 && day !== 6) remaining -= 1
+  }
+  return toDateInput(date)
+}
+
+function weekdayNote(dateStr) {
+  const date = parseLocalDate(dateStr)
+  if (!date) return ''
+  return `周${['日', '一', '二', '三', '四', '五', '六'][date.getDay()]}`
 }
 
 function knockoutClass(status) {
@@ -935,5 +1269,126 @@ function fmtCalPrice(val) {
 
 .cal-detail-dividend strong {
   color: #0a7a54;
+}
+
+.copywriter-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.copywriter-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.copywriter-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(260px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.copywriter-layout .panel-card:nth-child(n + 3) {
+  grid-column: span 1;
+}
+
+.copy-product-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.copy-product-item {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: #fff;
+  text-align: left;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.copy-product-item:hover,
+.copy-product-item.active {
+  border-color: rgba(44, 92, 224, 0.28);
+  background: #f8fbff;
+  box-shadow: var(--shadow-sm);
+}
+
+.copy-product-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.copy-product-main strong,
+.copy-product-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-product-main strong {
+  color: var(--ink-strong);
+  font-size: 13px;
+}
+
+.copy-product-main span {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.copy-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.copy-textarea {
+  min-height: 320px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.copy-empty {
+  padding: 28px 12px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 980px) {
+  .copywriter-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .copywriter-layout .panel-card:nth-child(n + 3) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .copywriter-intro {
+    flex-direction: column;
+  }
+
+  .copywriter-intro .btn {
+    width: 100%;
+  }
 }
 </style>

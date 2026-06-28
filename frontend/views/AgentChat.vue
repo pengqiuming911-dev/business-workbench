@@ -64,6 +64,7 @@
               :content="msg.content"
               :streaming="msg.streaming"
               :tool-calls="msg.tool_calls_display"
+              :artifact="msg.artifact"
             />
           </template>
 
@@ -206,6 +207,7 @@ async function sendMessage() {
     streaming: true,
     tool_calls_display: [],
     hasContent: false,
+    artifact: null,
   })
 
   try {
@@ -275,6 +277,12 @@ async function sendMessage() {
           if (msg && msg.tool_calls_display) {
             const tc = [...msg.tool_calls_display].reverse().find((t) => t.name === event.name && t.status === 'calling')
             if (tc) tc.status = 'done'
+          }
+        } else if (event.type === 'poster_artifact') {
+          const msg = messages.value.find((m) => m._tempId === assistantMsgId)
+          if (msg) {
+            msg.artifact = event.artifact
+            scrollToBottom()
           }
         } else if (event.type === 'done') {
           streaming.value = false

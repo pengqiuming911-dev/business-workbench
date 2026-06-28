@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -16,12 +17,13 @@ import (
 	"business-workbench/backend-go/internal/db"
 	"business-workbench/backend-go/internal/model"
 	"business-workbench/backend-go/internal/observations"
+	"business-workbench/backend-go/internal/posters"
 	"business-workbench/backend-go/internal/retriever"
 )
 
 const maxToolRounds = 12
 
-const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。"
+const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。\n\n当用户想要生成、制作、下载「喜报」「分红喜报」「分红观察喜报」时：先调用 search_products 找到目标产品的 product_id，再调用 generate_poster(product_id, observation_date) 生成。喜报里的所有数字（年化收益、本月分红、累计分红率、累计分红次数、派息界限、止盈界限、末月降至、挂钩标的、入场时间）都由系统从真实数据计算，你绝不可在对话中编造、估算或改写这些数字，也不可在 generate_poster 参数里传任何数字。若系统返回错误（如无该观察日记录），如实告知用户，不要自行补数。\n\n当用户想要生成结构化产品推介文案/材料（雪球/降敲雪球/DCN/FCN/限亏雪球等）时：先调用 load_skill('structured-product-copywriter') 加载完整工作流，再严格按其步骤执行——核对 10 项参数（缺了一次性问全）、取当前点位、做点位换算、产出长版+短版文案。文案里的「当前点位」必须调 fetch_quote 取真实值，绝对点位（降落伞/敲出/派息触发）必须调 calc_points 计算，你绝不可在对话中编造点位、胜率或自行做小数换算。胜率步骤：调用 fetch_winrate 取真实回测胜率（structure_type 由你判断传入）；若 fetch_winrate 返回 [胜率待补]（无凭证/遇验证码/站点不可达），如实告知并请用户手动提供，绝不编一个胜率数字。历史参考底部属判断性数据，问用户要，不要自己填。若 fetch_quote 失败，如实告知并让用户手动提供点位。走到通毓胜率/AMAC/Word 等重步骤时，可调 get_skill_reference 取对应参考文档。\n\n当用户要出 Word 推介材料/材料时：按 references/docx-template.md 的 10 章顺序组装 manifest 调 build_docx。文案用 fetch_quote/calc_points/fetch_winrate 已算的真实数字，build_docx 只装配不改数字。管理人/产品公示图调 screenshot_amac（传 AMAC URL），产品点位卡调 screenshot_product_card。一页通/托管募集账户/胜率结果截图等用户手动贴或 v1 未取的，留 image 占位（缺图自动红字 [图片待补]，不报错）。"
 
 type Service struct {
 	cfg    config.Config
@@ -34,6 +36,7 @@ type StreamCallbacks struct {
 	OnDelta     func(string)
 	OnToolCall  func(string)
 	OnToolDone  func(string)
+	OnArtifact  func(map[string]any)
 }
 
 func NewService(cfg config.Config, store *db.Store) *Service {
@@ -79,6 +82,9 @@ func (s *Service) StreamChat(ctx context.Context, history []model.AgentMessage, 
 				callbacks.OnToolCall(toolCall.Function.Name)
 			}
 			toolResult := s.executeTool(toolCall.Function.Name, toolCall.Function.Arguments)
+			if art, ok := extractArtifact(toolResult); ok && callbacks.OnArtifact != nil {
+				callbacks.OnArtifact(art)
+			}
 			if callbacks.OnToolDone != nil {
 				callbacks.OnToolDone(toolCall.Function.Name)
 			}
@@ -217,6 +223,17 @@ func (r *streamResult) mergeToolCall(delta toolCallDelta) {
 	}
 }
 
+// extractArtifact 从工具返回结果里安全取出 poster_artifact 载荷。
+// 返回 false 表示该工具结果不含喜报 artifact(普通工具调用)。
+func extractArtifact(toolResult map[string]any) (map[string]any, bool) {
+	raw, ok := toolResult["poster_artifact"]
+	if !ok {
+		return nil, false
+	}
+	m, ok := raw.(map[string]any)
+	return m, ok
+}
+
 func (s *Service) executeTool(name string, rawArgs string) map[string]any {
 	var args map[string]any
 	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
@@ -248,12 +265,30 @@ func (s *Service) executeTool(name string, rawArgs string) map[string]any {
 		return s.getProductAnalytics(args)
 	case "get_posters":
 		return s.getPosters(args)
+	case "generate_poster":
+		return s.generatePoster(args)
 	case "search_product_docs":
 		return s.searchProductDocs(args)
 	case "get_channels_summary":
 		return s.getChannelsSummary()
 	case "get_sync_status":
 		return s.getSyncStatus()
+	case "load_skill":
+		return s.loadSkill(args)
+	case "get_skill_reference":
+		return s.getSkillReference(args)
+	case "fetch_quote":
+		return s.fetchQuote(args)
+	case "calc_points":
+		return s.calcPoints(args)
+	case "fetch_winrate":
+		return s.fetchWinrate(args)
+	case "screenshot_amac":
+		return s.screenshotAMACTool(args)
+	case "screenshot_product_card":
+		return s.screenshotProductCardTool(args)
+	case "build_docx":
+		return s.buildDocxTool(args)
 	case "get_activity_logs":
 		return s.getActivityLogs(args)
 	default:
@@ -423,6 +458,61 @@ func (s *Service) getPosters(args map[string]any) map[string]any {
 	return map[string]any{"count": len(posters), "posters": posters}
 }
 
+// generatePoster 是 agent 的喜报生成工具：按产品 ID + 观察日从 DB 拉真实数据，
+// 经 posters.GenerateData / BuildArtifact 组装成展示字段，以 poster_artifact 返回。
+// 数字全部来自 DB，本函数不产生、不接受任何数字入参。
+func (s *Service) generatePoster(args map[string]any) map[string]any {
+	productID := stringArg(args, "product_id")
+	observationDate := stringArg(args, "observation_date")
+	if observationDate == "" {
+		observationDate = time.Now().Format("2006-01-02")
+	}
+	if productID == "" {
+		return map[string]any{"error": "product_id is required"}
+	}
+
+	products, err := s.store.QueryOngoingProducts()
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	var product *model.Product
+	for i := range products {
+		if products[i].ID == productID {
+			product = &products[i]
+			break
+		}
+	}
+	if product == nil {
+		return map[string]any{"error": "product not found or not ongoing: " + productID}
+	}
+
+	records, err := s.store.QueryObservationsByProduct(productID)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	monthsSinceEntry := 0
+	found := false
+	for i := range records {
+		if records[i].ObservationDate == observationDate && records[i].MonthsSinceEntry != nil {
+			monthsSinceEntry = *records[i].MonthsSinceEntry
+			found = true
+			break
+		}
+	}
+	if !found {
+		return map[string]any{"error": "no observation record for " + observationDate + " on product " + productID}
+	}
+
+	data := posters.GenerateData(*product, observationDate, monthsSinceEntry)
+	artifact := posters.BuildArtifact(*product, data, observationDate)
+	return map[string]any{
+		"poster_artifact":  artifact,
+		"product_id":       productID,
+		"observation_date": observationDate,
+		"message":          "已生成「" + product.Name + "」(" + observationDate + ")的分红观察喜报，请在下方查看并下载。",
+	}
+}
+
 func (s *Service) searchProductDocs(args map[string]any) map[string]any {
 	rows, err := s.store.SearchProductDocs(
 		stringArg(args, "keyword"),
@@ -460,6 +550,91 @@ func (s *Service) getActivityLogs(args map[string]any) map[string]any {
 		return map[string]any{"error": err.Error()}
 	}
 	return map[string]any{"count": len(rows), "logs": rows}
+}
+
+// screenshotAMACTool 是 agent 工具入口：按 AMAC URL 截图，返回 /public URL + path。
+func (s *Service) screenshotAMACTool(args map[string]any) map[string]any {
+	url := stringArg(args, "url")
+	if url == "" {
+		return map[string]any{"error": "url is required"}
+	}
+	id := nextPublicID()
+	outPath := fmt.Sprintf("public/poster-artifacts/%s.png", id)
+	if err := screenshotAMAC(url, outPath); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	return map[string]any{"url": "/public/poster-artifacts/" + id + ".png", "path": outPath}
+}
+
+// screenshotProductCardTool 是 agent 工具入口：按产品参数生成通毓产品点位卡图。
+func (s *Service) screenshotProductCardTool(args map[string]any) map[string]any {
+	if s.cfg.TongyuUser == "" || s.cfg.TongyuPass == "" {
+		return map[string]any{"error": "未配置 TONGYU_USER/TONGYU_PASS，无法取产品卡图"}
+	}
+	id := nextPublicID()
+	outPath := fmt.Sprintf("public/poster-artifacts/%s.png", id)
+	if err := screenshotProductCard(args, tongyuCreds{User: s.cfg.TongyuUser, Pass: s.cfg.TongyuPass}, s.cfg.ChromePath, outPath); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	return map[string]any{"url": "/public/poster-artifacts/" + id + ".png", "path": outPath}
+}
+
+// buildDocxTool 是 agent 工具入口：按 manifest 装配 .docx，返回 /public 下载 URL。
+func (s *Service) buildDocxTool(args map[string]any) map[string]any {
+	sections, err := parseManifest(args)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	id := nextPublicID()
+	outPath := fmt.Sprintf("public/推介材料/%s.docx", id)
+	if err := os.MkdirAll("public/推介材料", 0o755); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	if err := BuildDocx(sections, outPath); err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	return map[string]any{"url": "/public/推介材料/" + id + ".docx", "path": outPath}
+}
+
+func nextPublicID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
+}
+
+// parseManifest 把 agent 传入的 manifest（args["sections"] 数组）解析成 docxSection 切片。
+// 每个 section: {type, text, path, caption, items:[{label,url}]}。
+func parseManifest(args map[string]any) ([]docxSection, error) {
+	raw, ok := args["sections"]
+	if !ok {
+		return nil, fmt.Errorf("sections is required")
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("sections must be an array")
+	}
+	var out []docxSection
+	for _, e := range arr {
+		m, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		sec := docxSection{
+			Type:    stringArg(m, "type"),
+			Text:    stringArg(m, "text"),
+			Path:    stringArg(m, "path"),
+			Caption: stringArg(m, "caption"),
+		}
+		if items, ok := m["items"].([]any); ok {
+			for _, it := range items {
+				im, ok := it.(map[string]any)
+				if !ok {
+					continue
+				}
+				sec.Items = append(sec.Items, docxLink{Label: stringArg(im, "label"), URL: stringArg(im, "url")})
+			}
+		}
+		out = append(out, sec)
+	}
+	return out, nil
 }
 
 func filterCalendarProducts(products []model.Product, query map[string]string) []model.Product {
@@ -843,6 +1018,21 @@ func toolDefinitions() []toolDefinition {
 		{
 			Type: "function",
 			Function: map[string]any{
+				"name":        "generate_poster",
+				"description": "为指定产品在指定观察日生成分红观察喜报（可下载的 PNG）。所有数字（年化、本月分红、累计分红率、界限、标的等）均由系统从该产品的真实观察数据计算，不要在参数里提供任何数字。先调用 search_products 拿到 product_id，再调用本工具。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"product_id":       map[string]any{"type": "string", "description": "产品 ID（由 search_products 返回）"},
+						"observation_date": map[string]any{"type": "string", "description": "观察日 YYYY-MM-DD，默认今天"},
+					},
+					"required": []string{"product_id"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
 				"name":        "search_product_docs",
 				"description": "搜索投顾文档内容或标题，返回文档名、目录和内容预览。",
 				"parameters": map[string]any{
@@ -882,6 +1072,142 @@ func toolDefinitions() []toolDefinition {
 						"type":  map[string]any{"type": "string", "description": "日志类型"},
 						"limit": map[string]any{"type": "integer", "description": "返回数量，默认 50"},
 					},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "load_skill",
+				"description": "加载结构化产品推介文案生成 skill 的完整工作流（SKILL.md 原文）。当用户想要生成结构化产品推介文案/材料（雪球/降敲雪球/DCN/FCN/限亏雪球等）时，先调用本工具，再严格按返回的工作流步骤执行。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": map[string]any{"type": "string", "description": "skill 名，默认 structured-product-copywriter"},
+					},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "get_skill_reference",
+				"description": "按需获取 skill 的某份重步骤参考文档（如 tongyu-winrate 通毓胜率流程、amac-manager AMAC 公示、product-position-card 产品点位卡、docx-template Word 模板）。走到该步骤时再调。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"skill": map[string]any{"type": "string", "description": "skill 名，默认 structured-product-copywriter"},
+						"name":  map[string]any{"type": "string", "description": "参考文档名（不带 .md），如 tongyu-winrate"},
+					},
+					"required": []string{"name"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "fetch_quote",
+				"description": "获取指数/个股当前实时点位（腾讯→新浪→东财三源兜底）。文案里所有「当前点位」必须来自本工具，绝不编造。失败时如实告知并让用户手动提供，不要补数。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"标的":   map[string]any{"type": "string", "description": "标的名（如 中证1000/沪深300/创业板指）或代码（如 sh000852）"},
+						"code": map[string]any{"type": "string", "description": "可选，直接给代码 sh000852/sz399006"},
+					},
+					"required": []string{"标的"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "calc_points",
+				"description": "按当前点位 + 降落伞/期初敲出线/派息线百分比，机械换算绝对点位（降落伞点位、期初敲出点位、派息触发点位）+ 口语化约点。文案里的绝对点位必须来自本工具，绝不自己算小数。current_price 先用 fetch_quote 拿到。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"降落伞":           map[string]any{"type": "string", "description": "如 60%"},
+						"期初敲出线":         map[string]any{"type": "string", "description": "如 101%"},
+						"派息线":           map[string]any{"type": "string", "description": "如 78%；不适用时留空"},
+						"current_price": map[string]any{"type": "number", "description": "fetch_quote 返回的当前点位"},
+					},
+					"required": []string{"降落伞", "期初敲出线", "current_price"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "fetch_winrate",
+				"description": "通过通毓终端结构化产品回测算真实胜率。需要 TONGYU 凭证（服务端配置）；遇验证码/登录失败/站点不可达会返回 [胜率待补] 占位，届时请用户手动提供，绝不编造胜率。structure_type 由你从对话判断（如 DCN/雪球+降敲+降落伞）。标的用中文名或代码。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"structure_type": map[string]any{"type": "string", "description": "结构类型，如 DCN、雪球；含叠加条款用 + 连，如 DCN+降敲+降落伞"},
+						"标的":             map[string]any{"type": "string", "description": "标的名（如 中证1000）或代码"},
+						"期限":             map[string]any{"type": "string", "description": "如 36"},
+						"锁定期":            map[string]any{"type": "string", "description": "如 3；无则不传"},
+						"期初敲出线":          map[string]any{"type": "string", "description": "如 101"},
+						"降敲":             map[string]any{"type": "string", "description": "如 0.5"},
+						"降落伞":            map[string]any{"type": "string", "description": "如 60"},
+						"派息线":            map[string]any{"type": "string", "description": "如 78；不适用不传"},
+						"费后派息":           map[string]any{"type": "string", "description": "如 1.39"},
+						"保证金":            map[string]any{"type": "string", "description": "如 50"},
+						"是否追保":           map[string]any{"type": "string", "description": "不追保/追保"},
+					},
+					"required": []string{"structure_type", "标的", "期限", "期初敲出线", "降落伞", "费后派息", "保证金"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "screenshot_amac",
+				"description": "截 AMAC（amac.org.cn）管理人/产品公示页整页图。URL 形如 https://www.amac.org.cn/index/qzss/details/?type=1&code=<管理人登记编号> 或 type=2&code=<产品编码>&ctype=P。用于推介材料的管理人/产品公示图。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"url": map[string]any{"type": "string", "description": "AMAC 详情页 URL"},
+					},
+					"required": []string{"url"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "screenshot_product_card",
+				"description": "用通毓终端产品点位小工具按产品参数生成产品结构解析卡图。用于推介材料的派息敲出观察点位表图。需 TONGYU 凭证。structure_type/参数同 fetch_winrate。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"structure_type": map[string]any{"type": "string"},
+						"标的":           map[string]any{"type": "string"},
+						"期限":           map[string]any{"type": "string"},
+						"锁定期":          map[string]any{"type": "string"},
+						"期初敲出线":        map[string]any{"type": "string"},
+						"降敲":           map[string]any{"type": "string"},
+						"降落伞":          map[string]any{"type": "string"},
+						"派息线":          map[string]any{"type": "string"},
+						"费后派息":         map[string]any{"type": "string"},
+						"保证金":          map[string]any{"type": "string"},
+						"current_price": map[string]any{"type": "string"},
+					},
+					"required": []string{"structure_type", "标的", "期限", "期初敲出线", "降落伞", "费后派息", "保证金", "current_price"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "build_docx",
+				"description": "按 manifest 装配 Word 推介材料 .docx。sections 数组每项 {type,text,path,caption,items}。type: heading/subheading/body/params/image/separator/link_list。image 的 path 用 screenshot_amac/screenshot_product_card 返回的 path；缺图自动插红字占位，不报错。用户要出 Word 材料时调本工具。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"sections": map[string]any{"type": "array", "description": "章节数组，按 docx-template.md 顺序：长版/短版文案→公告群通知→派息敲出观察点位表图→胜率数据→一页通→管理人公示图→产品公示图→托管募集账户→销售常见问题"},
+					},
+					"required": []string{"sections"},
 				},
 			},
 		},
