@@ -22,7 +22,7 @@ import (
 
 const maxToolRounds = 12
 
-const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。\n\n当用户想要生成、制作、下载「喜报」「分红喜报」「分红观察喜报」时：先调用 search_products 找到目标产品的 product_id，再调用 generate_poster(product_id, observation_date) 生成。喜报里的所有数字（年化收益、本月分红、累计分红率、累计分红次数、派息界限、止盈界限、末月降至、挂钩标的、入场时间）都由系统从真实数据计算，你绝不可在对话中编造、估算或改写这些数字，也不可在 generate_poster 参数里传任何数字。若系统返回错误（如无该观察日记录），如实告知用户，不要自行补数。"
+const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。\n\n当用户想要生成、制作、下载「喜报」「分红喜报」「分红观察喜报」时：先调用 search_products 找到目标产品的 product_id，再调用 generate_poster(product_id, observation_date) 生成。喜报里的所有数字（年化收益、本月分红、累计分红率、累计分红次数、派息界限、止盈界限、末月降至、挂钩标的、入场时间）都由系统从真实数据计算，你绝不可在对话中编造、估算或改写这些数字，也不可在 generate_poster 参数里传任何数字。若系统返回错误（如无该观察日记录），如实告知用户，不要自行补数。\n\n当用户想要生成结构化产品推介文案/材料（雪球/降敲雪球/DCN/FCN/限亏雪球等）时：先调用 load_skill('structured-product-copywriter') 加载完整工作流，再严格按其步骤执行——核对 10 项参数（缺了一次性问全）、取当前点位、做点位换算、产出长版+短版文案。文案里的「当前点位」必须调 fetch_quote 取真实值，绝对点位（降落伞/敲出/派息触发）必须调 calc_points 计算，你绝不可在对话中编造点位、胜率或自行做小数换算。胜率步骤：当前阶段无自动获取工具，用 [胜率待补] 占位并请用户手动提供，不要编一个胜率数字。历史参考底部属判断性数据，问用户要，不要自己填。若 fetch_quote 失败，如实告知并让用户手动提供点位。走到通毓胜率/AMAC/Word 等重步骤时，可调 get_skill_reference 取对应参考文档。"
 
 type Service struct {
 	cfg    config.Config
@@ -272,6 +272,14 @@ func (s *Service) executeTool(name string, rawArgs string) map[string]any {
 		return s.getChannelsSummary()
 	case "get_sync_status":
 		return s.getSyncStatus()
+	case "load_skill":
+		return s.loadSkill(args)
+	case "get_skill_reference":
+		return s.getSkillReference(args)
+	case "fetch_quote":
+		return s.fetchQuote(args)
+	case "calc_points":
+		return s.calcPoints(args)
 	case "get_activity_logs":
 		return s.getActivityLogs(args)
 	default:
@@ -970,6 +978,66 @@ func toolDefinitions() []toolDefinition {
 						"type":  map[string]any{"type": "string", "description": "日志类型"},
 						"limit": map[string]any{"type": "integer", "description": "返回数量，默认 50"},
 					},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "load_skill",
+				"description": "加载结构化产品推介文案生成 skill 的完整工作流（SKILL.md 原文）。当用户想要生成结构化产品推介文案/材料（雪球/降敲雪球/DCN/FCN/限亏雪球等）时，先调用本工具，再严格按返回的工作流步骤执行。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": map[string]any{"type": "string", "description": "skill 名，默认 structured-product-copywriter"},
+					},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "get_skill_reference",
+				"description": "按需获取 skill 的某份重步骤参考文档（如 tongyu-winrate 通毓胜率流程、amac-manager AMAC 公示、product-position-card 产品点位卡、docx-template Word 模板）。走到该步骤时再调。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"skill": map[string]any{"type": "string", "description": "skill 名，默认 structured-product-copywriter"},
+						"name":  map[string]any{"type": "string", "description": "参考文档名（不带 .md），如 tongyu-winrate"},
+					},
+					"required": []string{"name"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "fetch_quote",
+				"description": "获取指数/个股当前实时点位（腾讯→新浪→东财三源兜底）。文案里所有「当前点位」必须来自本工具，绝不编造。失败时如实告知并让用户手动提供，不要补数。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"标的":  map[string]any{"type": "string", "description": "标的名（如 中证1000/沪深300/创业板指）或代码（如 sh000852）"},
+						"code": map[string]any{"type": "string", "description": "可选，直接给代码 sh000852/sz399006"},
+					},
+					"required": []string{"标的"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "calc_points",
+				"description": "按当前点位 + 降落伞/期初敲出线/派息线百分比，机械换算绝对点位（降落伞点位、期初敲出点位、派息触发点位）+ 口语化约点。文案里的绝对点位必须来自本工具，绝不自己算小数。current_price 先用 fetch_quote 拿到。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"降落伞":         map[string]any{"type": "string", "description": "如 60%"},
+						"期初敲出线":      map[string]any{"type": "string", "description": "如 101%"},
+						"派息线":         map[string]any{"type": "string", "description": "如 78%；不适用时留空"},
+						"current_price": map[string]any{"type": "number", "description": "fetch_quote 返回的当前点位"},
+					},
+					"required": []string{"降落伞", "期初敲出线", "current_price"},
 				},
 			},
 		},
