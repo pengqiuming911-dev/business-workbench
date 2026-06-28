@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"fmt"
 	"strings"
 
 	"business-workbench/backend-go/internal/config"
@@ -69,10 +68,4 @@ func (s *Service) fetchWinrate(args map[string]any) map[string]any {
 type tongyuCreds struct {
 	User string
 	Pass string
-}
-
-// runTongyuBacktest 由 Task 2 实现。此处先返回"未实现"占位以保 Task 1 编译通过——
-// Task 1 的测试只走 dry-run/无凭证分支，不触达本函数。
-func runTongyuBacktest(params map[string]any, creds tongyuCreds, chromePath string) (winrate, reason string, err error) {
-	return "", "winrate live flow not implemented (Task 2)", fmt.Errorf("not implemented")
 }
