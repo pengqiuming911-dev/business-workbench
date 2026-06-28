@@ -121,7 +121,16 @@ func loginTongyu(ctx context.Context, creds tongyuCreds) error {
 		if strings.Contains(body, "用户名或密码错误") {
 			return errors.New("用户名或密码错误（凭证错，不重试）")
 		}
-		return errors.New("登录后未跳转主页")
+		// DEBUG: 截图 + body 片段供选择器调参（live tuning）
+		var shot []byte
+		_ = chromedp.Run(ctx, chromedp.FullScreenshot(&shot, 90))
+		_ = os.MkdirAll("public/poster-artifacts", 0o755)
+		_ = os.WriteFile("public/poster-artifacts/tongyu-login-debug.png", shot, 0o644)
+		snippet := body
+		if len(snippet) > 500 {
+			snippet = snippet[:500]
+		}
+		return fmt.Errorf("登录后未跳转主页 (url=%s); body=%s; screenshot=public/poster-artifacts/tongyu-login-debug.png", url, snippet)
 	}
 	return nil
 }
