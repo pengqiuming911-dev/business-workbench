@@ -149,23 +149,21 @@ func hasCaptcha(ctx context.Context) bool {
 // structure_type 形如 "DCN+降敲+降落伞"（agent 从对话判断传入）。
 // 实现按标签文本点击；首次 live 运行按真实 DOM 调选择器。
 func selectStructure(ctx context.Context, structure string) error {
+	// DEBUG: 在点结构前先抓页面状态（click 超时后 ctx 已死，事后抓为空）
+	var body string
+	_ = chromedp.Run(ctx, chromedp.Text("body", &body, chromedp.ByQuery))
+	var shot []byte
+	_ = chromedp.Run(ctx, chromedp.FullScreenshot(&shot, 90))
+	_ = os.MkdirAll("public/poster-artifacts", 0o755)
+	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.txt", []byte(body), 0o644)
+	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.png", shot, 0o644)
 	for _, part := range strings.Split(structure, "+") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
 		// 点含该结构名的 label/span（antd 单选/多选用 label 包裹）
-		// 捕获点击错误：基础结构（DCN/雪球）若点空，页面保留默认结构，后续字段对错表单、
-		// 立即分析提交，readWinrate 会返回"真实但属错结构"的胜率——agent 会自信地引用错数。
 		if err := chromedp.Run(ctx, chromedp.Click(fmt.Sprintf(`//label[contains(.,'%s')]|//span[contains(.,'%s')]`, part, part), chromedp.BySearch)); err != nil {
-			// DEBUG: 截图 + body 供选择器调参
-			var shot []byte
-			_ = chromedp.Run(ctx, chromedp.FullScreenshot(&shot, 90))
-			var body string
-			_ = chromedp.Run(ctx, chromedp.Text("body", &body, chromedp.ByQuery))
-			_ = os.MkdirAll("public/poster-artifacts", 0o755)
-			_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.png", shot, 0o644)
-			_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.txt", []byte(body), 0o644)
 			return fmt.Errorf("点结构 %q 失败: %w", part, err)
 		}
 		// FIX: 原简报中此处为裸 chromedp.Sleep(...)，Action 未经 chromedp.Run 执行是 no-op。
