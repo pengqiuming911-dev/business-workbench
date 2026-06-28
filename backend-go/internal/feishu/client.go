@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,9 @@ import (
 	"sync"
 	"time"
 )
+
+// feishuBase 是飞书开放平台 base URL，默认官方；测试可覆盖以指向 httptest。
+var feishuBase = "https://open.feishu.cn"
 
 type Client struct {
 	AppID       string
@@ -475,7 +479,7 @@ func (c *Client) DriveFiles(ctx context.Context, folderToken string, pageToken s
 	if folderType != "" {
 		params.Set("folder_type", folderType)
 	}
-	return c.getData(ctx, "https://open.feishu.cn/open-apis/drive/v1/files?"+params.Encode())
+	return c.getData(ctx, feishuBase+"/open-apis/drive/v1/files?"+params.Encode())
 }
 
 func (c *Client) SharedSpaces(ctx context.Context) (map[string]any, error) {
@@ -843,4 +847,139 @@ func colLetter(n int) string {
 		n /= 26
 	}
 	return out
+}
+
+// CreateFolder 在 parentToken 下创建名为 name 的文件夹，返回新文件夹 token。
+func (c *Client) CreateFolder(ctx context.Context, parentToken, name string) (string, error) {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	body, err := c.post(ctx, feishuBase+"/open-apis/drive/v1/files/create_folder", map[string]any{
+		"name":         name,
+		"folder_token": parentToken,
+	}, token)
+	if err != nil {
+		return "", err
+	}
+	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("create_folder parse: %w", err)
+	}
+	if resp.Code != 0 {
+		return "", fmt.Errorf("create_folder code %d: %s", resp.Code, resp.Msg)
+	}
+	if resp.Data.Token == "" {
+		return "", fmt.Errorf("create_folder returned empty token")
+	}
+	return resp.Data.Token, nil
+}
+
+// FindSubfolder 在 parentToken 下找名为 name 的子文件夹，返回其 token + 是否找到。
+func (c *Client) FindSubfolder(ctx context.Context, parentToken, name string) (string, bool, error) {
+	raw, err := c.DriveFiles(ctx, parentToken, "", "")
+	if err != nil {
+		return "", false, err
+	}
+	// DriveFiles -> getData 已解包到 data 层，raw 即 data map（含 "files" 键）。
+	files, _ := raw["files"].([]any)
+	for _, f := range files {
+		m, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		n, _ := m["name"].(string)
+		ty, _ := m["type"].(string)
+		if n == name && (ty == "folder" || ty == "") {
+			if tok, _ := m["token"].(string); tok != "" {
+				return tok, true, nil
+			}
+		}
+	}
+	return "", false, nil
+}
+
+// UploadDocx 把 data 作为 fileName 上传到 parentFolderToken，返回 file_token。
+// URL 由调用方（buildDocxTool）用 config.FeishuDriveDomain 构造，避免 feishu 包依赖 config。
+// 用 upload_all（单次，< 20MB）。
+func (c *Client) UploadDocx(ctx context.Context, parentFolderToken, fileName string, data []byte) (string, error) {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	body, err := c.postMultipart(ctx, feishuBase+"/open-apis/drive/v1/files/upload_all",
+		map[string]string{
+			"file_name":   fileName,
+			"parent_type": "explorer",
+			"parent_node": parentFolderToken,
+			"size":        fmt.Sprintf("%d", len(data)),
+		}, fileName, data, token)
+	if err != nil {
+		return "", err
+	}
+	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			FileToken string `json:"file_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("upload_all parse: %w", err)
+	}
+	if resp.Code != 0 {
+		return "", fmt.Errorf("upload_all code %d: %s", resp.Code, resp.Msg)
+	}
+	if resp.Data.FileToken == "" {
+		return "", fmt.Errorf("upload_all returned empty file_token")
+	}
+	return resp.Data.FileToken, nil
+}
+
+// postMultipart 发 multipart/form-data 请求。fields 为普通字段，fileName+data 为文件字段。
+func (c *Client) postMultipart(ctx context.Context, endpoint string, fields map[string]string, fileName string, data []byte, bearer string) ([]byte, error) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		if err := mw.WriteField(k, v); err != nil {
+			return nil, err
+		}
+	}
+	fw, err := mw.CreateFormFile("file", fileName)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := fw.Write(data); err != nil {
+		return nil, err
+	}
+	if err := mw.Close(); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, &buf)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var out bytes.Buffer
+	if _, err := out.ReadFrom(resp.Body); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("feishu API status %d: %s", resp.StatusCode, out.String())
+	}
+	return out.Bytes(), nil
 }
