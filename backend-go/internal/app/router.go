@@ -2079,6 +2079,7 @@ func productObservationPayload(product model.Product, merged []gin.H) gin.H {
 		"issue_date":            product.IssueDate,
 		"subscribe_amount":      product.SubscribeAmount,
 		"dividend_barrier":      product.DividendBarrier,
+		"parachute":             product.Parachute,
 		"holiday_adjust":        product.HolidayAdjust,
 		"lock_days":             product.LockDays,
 		"duration_months":       product.DurationMonths,
