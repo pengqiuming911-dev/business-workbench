@@ -105,10 +105,10 @@ frontend/                # S1 无改动（文案=assistant 文本）；S3 加一
 - 产品卡：通毓 `smallTool/index.html#/product-position`，按 `product-position-card.md` 填表，「复制为图片」→ 读剪贴板 PNG，截图兜底。
 
 **`build_docx(manifest)`** (`docx.go`)
-- Go docx 库——推荐 **`github.com/unidoc/unioffice`**（MIT 足以覆盖 标题/段落/图片/表格，能撑住 `docx-template.md` 的章节结构）。S3 落地时评估；若有 license/拉取问题，fallback 到 `github.com/carmel/docx2go` 类最小库。
+- Go docx 库——**自写最小纯 Go 写入器**（`archive/zip` + `encoding/xml`，仅 stdlib）。调研结论：`unioffice` 是**商业付费**（非 MIT）、`fumiama/go-docx` 是 **AGPL v3**、MIT 替代（nguyenthenguyen/docx 等）均无完整 image+table+hyperlink 能力。用户已选自写以避 license 问题、保纯 Go。覆盖 `docx-template.md` 的 7 种 section（heading/subheading/body/params/image/separator/link_list）+ 图片 20cm 高度上限缩放 + 缺图红字占位 + BMP 外 emoji 剥离 + 雅黑/Consolas 字体。
 - 输入 `manifest` = 章节结构（文案长版/短版 → 公告群通知 → 派息敲出观察表图 → 胜率数据+图 → 一页通 → 管理人公示图 → 产品公示图 → 托管募集账户 → 销售常见问题），含文本内容 + 图片 URL（来自截图工具，或 `[图片待补:xxx]` 占位——镜像 `build_docx.py` 的缺图行为）。
 - 输出：写 `public/推介材料/<id>.docx`，返回 `{"url": "/public/推介材料/<id>.docx"}`。前端加一个下载链接卡（仅 S3 的小组件）。
-- 测试：固定 manifest → 非空 `.docx` 且标题数符合预期（用 `unioffice` 读回校验；不做深度内容断言）。
+- 测试：固定 manifest → 非空 `.docx`，用 `archive/zip` 读回校验 zip 结构（[Content_Types].xml/word/document.xml/media）+ XML 文本 + 图片嵌入 + 缺图占位。
 
 ## Cross-Cutting
 
@@ -131,7 +131,7 @@ frontend/                # S1 无改动（文案=assistant 文本）；S3 加一
 | `calc_points` | unit | 表驱动；锁 8800×60%=5280、8800×101%=8888、口语约点「5200点左右」 |
 | `fetch_winrate` | 人工验收 + dry-run | `WINRATE_DRY_RUN=true` 返回 canned 98.17% 以脱离通毓测 agent 流程；线上通毓做 live 验收 |
 | `screenshot_*` | 人工验收 | 需浏览器+线上 AMAC/通毓，无法单测 |
-| `build_docx` | unit(轻) | 固定 manifest → 非空 `.docx` 且标题数符合；用 `unioffice` 读回 |
+| `build_docx` | unit(轻) | 固定 manifest → 非空 `.docx` 且标题数符合；用 archive/zip 读回 |
 | agent 流程(端到端) | 人工验收 | 需 DeepSeek + 线上服务，与 `generate_poster` 同豁免类 |
 
 `calc_points` 与 `fetch_quote` 是高价值纯函数测试——它们是护数字的闸门工具，给与喜报 `BuildArtifact` 同等待遇。
@@ -141,20 +141,20 @@ frontend/                # S1 无改动（文案=assistant 文本）；S3 加一
 - **config**（`config.Config`，env，与 `DEEPSEEK_API_KEY` 一致）：S2/S3 加 `TONGYU_USER` / `TONGYU_PASS`；`WINRATE_DRY_RUN`（默认 false）；`CHROME_PATH`（可选，默认无头）。**S1 无新 config。**
 - **生产运维：** S2/S3 需 ECS（阿里云 47.103.54.197）装 Chrome。这是真运维步骤——装无头 Chrome + 依赖、验证 server 上 `chromedp` 能起。**S1 无运维变更即可发布。** 合 S2 前与运维 flag。
 - **凭证安全：** tongyu 凭证只从 env 读，绝不进仓库/skill 文件/prompt。skill 已强制；工具从 config 读，不记日志。
-- **`chromedp` 依赖：** `go.mod` 加 `github.com/chromedp/chromedp`。浏览器步骤唯一非平凡新 Go 依赖；S1 不加任何依赖。`unioffice` 于 S3 加。
+- **`chromedp` 依赖：** `go.mod` 加 `github.com/chromedp/chromedp`。浏览器步骤唯一非平凡新 Go 依赖；S1 不加任何依赖。自写 docx 写入器于 S3 加（无新第三方依赖）。
 
 ### Phasing / merge plan
 
 - **PR1 (S1):** `skill_loader` + `fetch_quote` + `calc_points` + 工具注册 + `systemPrompt` 指令 + 单测。胜率走 `[胜率待补]`。无 Chrome、无新二进制依赖、无运维变更。独立可合。
 - **PR2 (S2):** `fetch_winrate` + `browser.go` chromedp helper + config + dry-run。前置：server 装 Chrome。合后 agent 可取真实胜率。
-- **PR3 (S3):** `screenshot_amac` + `screenshot_product_card` + `build_docx` + `unioffice` + 前端下载链接卡。复用 S2 的 `browser.go`。
+- **PR3 (S3):** `screenshot_amac` + `screenshot_product_card` + `build_docx`（自写 docx 写入器）+ 前端下载链接卡。复用 S2 的 `browser.go`。
 - 每阶段独立验收清单；本 spec 一份文档覆盖三阶段，但实现分阶段，S1 不被 Chrome 运维阻塞。
 
 ## Key Decisions（设计时确认）
 
 1. **`calc_points` 用 Go 工具**（与 skill 原文唯一偏差：机械换算→Go，判断→LLM）。理由：客户可见点位、LLM 小数算术不可靠、沿用喜报数字零例外。
 2. **文案 = S1 普通文本**，「复制按钮」延后。
-3. **`unioffice` 作 docx 库候选**（S3 落地评估，有 fallback）。
+3. **自写最小纯 Go docx 写入器**（unioffice 商业/fumiama AGPL/MIT 库不全，用户已选自写避 license）。
 4. **skill 内容 `load_skill` 按需加载**（非 systemPrompt 常驻），fallback 为提升进 systemPrompt。
 5. **参数来自用户对话**（非 DB），按 skill 原文；与喜报（DB 锁死）是不同业务场景。
 6. **v1 不归档文案**，规避喜报归档矛盾；日后归档则服务端重算。
