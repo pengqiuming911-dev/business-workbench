@@ -17,25 +17,14 @@ AMAC 全站搜索详情页,同一个 URL 模板,`type` 区分管理人/产品:
 
 ## 关键坑:数据是 JS 异步加载的
 
-AMAC 详情页的初始 HTML **只有字段名**(登记编号/成立时间等),**值**(P1006143/上官永强等)是 JS 异步加载的。所以**纯 urllib GET 抓不到值**,必须用浏览器渲染后取。用 Playwright 导航到 URL,等 1~2 秒让 JS 填值,再截图或读 DOM。
+AMAC 详情页的初始 HTML **只有字段名**(登记编号/成立时间等),**值**(P1006143/上官永强等)是 JS 异步加载的。所以**纯 HTTP GET 抓不到值**,必须用浏览器渲染后取。agent 的 `screenshot_amac` 工具(chromedp)会导航到 URL、等 JS 填值、整页截图——你只需把 AMAC URL 传给工具,无需自己驱动浏览器。
 
 ## 取数(两种输出)
 
-1. **整页截图**(做公示凭证图,放 Word 里):
-   ```js
-   await page.goto(url); await page.waitForTimeout(2000);
-   await page.screenshot({path: 'amac-xxx-fullpage.png', fullPage: true});
-   ```
-   fullPage 截图带 AMAC 官网头 + 详情,做公示凭证最合适。图偏高,build_docx 已做高度上限(20cm)防撑爆页。
+1. **整页截图**(做公示凭证图,放 Word 里):调 `screenshot_amac` 工具,传 AMAC 详情页 URL。工具用 chromedp 渲染页面(等 JS 填值)、整页截图,返回 PNG 的 `/public/...` path + URL。
+   fullPage 截图带 AMAC 官网头 + 详情,做公示凭证最合适。图偏高,`build_docx` 已做高度上限(20cm)防撑爆页。
 
-2. **结构化字段**(做文字表格,可选):用 `browser_evaluate` 读 DOM。页面字段是"key: value"成对,但有些挤在一行,用按行 `innerText` 解析更稳:
-   ```js
-   () => {
-     const lines = (document.querySelector('main')||document.body).innerText.split('\n').map(s=>s.trim()).filter(Boolean);
-     return lines;
-   }
-   ```
-   拿到行数组后,自己挑要的字段(管理人名称、登记编号、成立时间、机构类型、注册资本、实缴资本、法定代表人、办公地址、运作产品数等;产品:产品名称、产品编码、基金类型、成立/备案时间、到期日、管理人名称、托管人、运作状态)。
+2. **结构化字段**(做文字表格,可选):目前 `screenshot_amac` 工具只做整页截图,不提取结构化字段。若需要管理人/产品的字段值(登记编号、成立时间、法定代表人、托管人、运作状态等)做文字表格,从截图人工读取,或后续扩展工具支持 DOM 解析。
 
 ## 管理人 vs 产品 字段
 

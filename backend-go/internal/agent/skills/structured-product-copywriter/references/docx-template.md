@@ -1,6 +1,6 @@
 # Word 推介材料模板
 
-用户最终要的输出是 **Word(.docx)** 推介材料,不是 PDF。本文档定义标准章节结构和 manifest 写法,供 `scripts/build_docx.py` 渲染。
+用户最终要的输出是 **Word(.docx)** 推介材料,不是 PDF。本文档定义标准章节结构和 manifest 写法,供 agent 的 `build_docx` 工具装配(并上传飞书 Drive)。
 
 ## 标准章节顺序
 
@@ -25,7 +25,7 @@
 
 ## manifest JSON 结构
 
-`build_docx.py --manifest manifest.json --output out.docx`。manifest 里图片路径找不到会自动插"[图片待补:xxx]"红字占位,不报错——所以一页通/托管截图这类用户手动贴的,留个不存在的路径即可。
+`build_docx` 工具(传 sections 数组 manifest,工具自动装配 .docx 并上传飞书 Drive「某年某月产品」文件夹,返回飞书链接)。manifest 里图片路径找不到会自动插"[图片待补:xxx]"红字占位,不报错——所以一页通/托管截图这类用户手动贴的,留个不存在的路径即可。
 
 section 类型:`heading`(一级标题)、`subheading`(二级)、`body`(正文,按 `\n` 分段)、`params`(参数块等宽小字)、`image`(图+caption,等比缩放、高度上限 20cm)、`separator`(分隔线)、`copy_file`(读文案文件,自动按行判别 标题/参数/正文/分隔)、`link_list`(带超链接的列表,每项 `{label,url}`)。
 
@@ -37,5 +37,5 @@ section 类型:`heading`(一级标题)、`subheading`(二级)、`body`(正文,�
 
 ## 注意
 
-- 文案里的数字要和实际抓取的一致(当前点位用 `fetch_quote.py`、胜率用通毓回测、管理人/产品信息用 AMAC);用户若给了定稿文案原文(含特定数字),按用户给的原文用,不要擅自改。
+- 文案里的数字要和实际抓取的一致(当前点位用 `fetch_quote` 工具、胜率用 `fetch_winrate` 工具、管理人/产品信息用 AMAC via `screenshot_amac`);用户若给了定稿文案原文(含特定数字),按用户给的原文用,不要擅自改。
 - AMAC 截图偏高,build_docx 高度上限 20cm,会自动按高度缩放;不要手动改图。

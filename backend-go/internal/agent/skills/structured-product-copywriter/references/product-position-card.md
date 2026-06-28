@@ -28,23 +28,19 @@
 | 费后派息 | 每月或有派息(%) | **DCN 下出现**,直接填月票息,如 1.39 |
 | 派息线 | 派息线(%) | **DCN 下出现**,如 78 |
 | 入场时间 | 入场时间(日期) | 如 2026-07-03 |
-| 入场点位 | 入场点位 | 指数点位,用 `fetch_quote.py` 取的当前点位,或入场日预估 |
+| 入场点位 | 入场点位 | 指数点位,用 `fetch_quote` 工具取的当前点位,或入场日预估 |
 
 **票息口径坑**:DCN 用"每月或有派息"(月票息,直接填 1.39);锁盈/经典结构用"区间年化票息"(年化,月票息×12,如 1.39%/月 → 填 16.68)。表单 placeholder 会提示"区间年化票息(%)"或"每月派息比例",按提示口径填,别填错单位。
 
-填数技巧:antd InputNumber 用 `.fill()` 通常生效;不生效就点击→Ctrl+A→逐字输入。产品类型是原生 `<select>`,用 select_option 选。
+填数技巧:`screenshot_product_card` 工具(chromedp)内部按上面的字段映射填表(antd InputNumber 用 SetValue/SendKeys,产品类型原生 `<select>` 用 JS 设 selectedIndex)。你只需把产品参数传给工具,不用自己驱动浏览器。表单字段随产品类型动态变化,执行时每次操作后重新快照、按字段名/placeholder 定位当前 ref,别记死 ref。
 
 ## 生成卡 + 取图
 
-1. 点"提交"按钮 → 弹"表单提交成功"alert,接受它。结果卡(右侧)更新为你的产品。
-2. 点"📋 复制为图片"按钮 → 弹"表格已复制为图片到剪贴板",接受 alert。
-3. **取图**(两种方式,优先第一种):
-   - **剪贴板读取**(得到按钮复制的那张图):用 `browser_evaluate`(allowDangerous)调 `navigator.clipboard.read()`,找 `image/png`,用**分块 base64**(每块 0x8000 字节,用 `String.fromCharCode.apply` 拼接,**不要用 spread 展开整个 Uint8Array——会栈溢出**),`btoa` 后返回;再用 Python `base64.b64decode` 解码存 PNG。返回的 base64 可能很大(1MB+),会超出工具结果 token 上限被存到文件——直接用 Python 从那个文件 regex 提取 `"b64": "..."` 解码即可,不要试图读进上下文。
-   - **元素截图兜底**(剪贴板读不到时):用 `browser_take_screenshot` 对结果卡元素(region,通常 class 含 `product-result` 或快照里的结果卡 ref)截图,直接得到 PNG 文件。视觉等价。
+调 `screenshot_product_card` 工具(chromedp):工具会自动点"提交"→接受 alert→点"📋 复制为图片"→优先读剪贴板 PNG,兜底对结果卡元素(region,class 含 `product-result`)截图。返回 PNG 的 `/public/...` path + URL。你只需传产品参数,无需手动处理 alert/剪贴板/截图。
 
 ## 装进 Word
 
-产品卡 PNG 是 Word 推介材料"产品派息与敲出观察点位表"那一节的图。最终装配用 `scripts/build_docx.py` + manifest JSON(见 `references/docx-template.md`),不再用 PDF。manifest 里这一节写:
+产品卡 PNG 是 Word 推介材料"产品派息与敲出观察点位表"那一节的图。最终装配用 `build_docx` 工具 + manifest(见 `references/docx-template.md`),不再用 PDF。manifest 里这一节写:
 
 ```json
 {"type":"heading","text":"产品派息与敲出观察点位表"},
