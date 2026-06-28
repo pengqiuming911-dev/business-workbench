@@ -1,4 +1,4 @@
-﻿package app
+package app
 
 import (
 	"bytes"
@@ -154,6 +154,7 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.POST("/api/observations/refresh-prices", server.refreshPrices)
 	router.GET("/api/posters/today", server.postersToday)
 	router.GET("/api/posters", server.posters)
+	router.GET("/api/poster-copy", server.posterCopy)
 	router.POST("/api/posters/generate", server.generatePosters)
 	router.POST("/api/posters/artifact", server.savePosterArtifact)
 	router.GET("/api/push-config", server.getPushConfig)
@@ -1407,6 +1408,74 @@ func (s *Server) posters(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"posters": posters})
 }
 
+func (s *Server) posterCopy(c *gin.Context) {
+	mode := "latest"
+	targetDate := strings.TrimSpace(c.Query("date"))
+	if targetDate != "" {
+		mode = "date"
+		if _, err := time.Parse("2006-01-02", targetDate); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "date must be YYYY-MM-DD"})
+			return
+		}
+	} else {
+		latest, err := s.store.LatestObservationDate()
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		targetDate = latest
+	}
+
+	items := []gin.H{}
+	if targetDate != "" {
+		observationsForDate, err := s.store.QueryObservationsByDate(targetDate)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		for _, obs := range observationsForDate {
+			product, err := s.store.ProductByID(obs.ProductID)
+			if err != nil {
+				writeError(c, err)
+				return
+			}
+			if product == nil {
+				continue
+			}
+			monthsSinceEntry := 0
+			if obs.MonthsSinceEntry != nil {
+				monthsSinceEntry = *obs.MonthsSinceEntry
+			} else if info, ok := observationInfoForDate(*product, targetDate); ok {
+				monthsSinceEntry = info.MonthsSinceEntry
+			}
+			data := posters.GenerateData(*product, targetDate, monthsSinceEntry)
+			artifact := posters.BuildArtifact(*product, data, targetDate)
+			artifact["is_knocked_out"] = obs.IsKnockedOut
+			artifact["is_dividend"] = obs.IsDividend
+			artifact["underlying_price"] = obs.UnderlyingPrice
+			artifact["observation_updated_at"] = obs.UpdatedAt
+
+			items = append(items, gin.H{
+				"product":     product,
+				"observation": obs,
+				"artifact":    artifact,
+			})
+		}
+	}
+
+	message := ""
+	if len(items) == 0 {
+		message = "无观察产品"
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"mode":     mode,
+		"date":     targetDate,
+		"empty":    len(items) == 0,
+		"message":  message,
+		"products": items,
+	})
+}
+
 func (s *Server) generatePosters(c *gin.Context) {
 	var req struct {
 		Date string `json:"date"`
@@ -1497,11 +1566,11 @@ func (s *Server) generatePosters(c *gin.Context) {
 
 func (s *Server) savePosterArtifact(c *gin.Context) {
 	var req struct {
-		ProductID       string          `json:"product_id"`
-		ObservationDate string          `json:"observation_date"`
-		Fields          map[string]any  `json:"fields"`
-		PNGBase64       string          `json:"png_base64"`
-		ContentHash     string          `json:"content_hash"`
+		ProductID       string         `json:"product_id"`
+		ObservationDate string         `json:"observation_date"`
+		Fields          map[string]any `json:"fields"`
+		PNGBase64       string         `json:"png_base64"`
+		ContentHash     string         `json:"content_hash"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

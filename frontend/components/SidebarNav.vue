@@ -75,6 +75,7 @@ import {
   ChevronsLeft,
   Receipt,
   CalendarDays,
+  ScrollText,
 } from '@lucide/vue'
 import logoImg from '../assets/business-workbench-logo.jpg'
 
@@ -107,6 +108,7 @@ const navItems = [
   { path: '/holding-analysis', title: '产品&持仓', icon: Activity },
   { path: '/rebate-analysis', title: '返费', icon: Receipt },
   { path: '/product-report', title: '销售物料', icon: FileText },
+  { path: '/poster-copy', title: '喜报文案', icon: ScrollText },
   { path: '/product-completion', title: '派息/敲出', icon: CalendarDays },
   { path: '/push-settings', title: '推送设置', icon: Send },
 ]

@@ -359,6 +359,52 @@ func (s *Store) QueryObservationsByProduct(productID string) ([]model.Observatio
 	return result, rows.Err()
 }
 
+func (s *Store) QueryObservationsByDate(date string) ([]model.Observation, error) {
+	rows, err := s.DB.Query(`
+		SELECT id, product_id, observation_date, knockout_price, dividend_line,
+		       underlying_price, is_knocked_out, is_dividend, months_since_entry, updated_at
+		FROM observations WHERE observation_date = ? ORDER BY updated_at DESC, id DESC
+	`, date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []model.Observation{}
+	for rows.Next() {
+		var row model.Observation
+		var knockout, dividend, underlying sql.NullFloat64
+		var months sql.NullInt64
+		if err := rows.Scan(
+			&row.ID, &row.ProductID, &row.ObservationDate, &knockout, &dividend,
+			&underlying, &row.IsKnockedOut, &row.IsDividend, &months, &row.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		row.KnockoutPrice = floatPtr(knockout)
+		row.DividendLine = floatPtr(dividend)
+		row.UnderlyingPrice = floatPtr(underlying)
+		row.MonthsSinceEntry = intPtr(months)
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) LatestObservationDate() (string, error) {
+	var date sql.NullString
+	err := s.DB.QueryRow(`
+		SELECT observation_date FROM observations
+		ORDER BY observation_date DESC, updated_at DESC, id DESC LIMIT 1
+	`).Scan(&date)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return nullString(date), nil
+}
+
 func (s *Store) QueryPostersByDate(date string) ([]model.Poster, error) {
 	return s.queryPosters("SELECT * FROM posters WHERE observation_date = ? ORDER BY created_at DESC", date)
 }
@@ -1086,27 +1132,27 @@ func (s *Store) scanProducts(query string, args ...any) ([]model.Product, error)
 			return nil
 		}
 		p := model.Product{
-			ID:         toString(v("id")),
-			Name:          toString(v("name")),
-			IssueDate:     toString(v("issue_date")),
-			CompleteDate:  toString(v("complete_date")),
-			Manager:       toString(v("manager")),
-			HoldingStatus: toString(v("holding_status")),
-			StructureType: toString(v("structure_type")),
-			Code:          toString(v("code")),
-			Term:          toString(v("term")),
-			Parachute:     toString(v("parachute")),
-			HolidayAdjust: toString(v("holiday_adjust")),
-			Raw:           toString(v("raw")),
-			KnockIn:       toString(v("knock_in")),
-			KnockedIn:     toString(v("knocked_in")),
-			Custodian:     toString(v("custodian")),
-			Counterparty:  toString(v("counterparty")),
-			IsMain:          toIntPtr(v("is_main")),
-			LockDays:        toIntPtr(v("lock_days")),
-			LockMonths:      toIntPtr(v("lock_months")),
-			SubscribeAmount:   toFloatPtr(v("subscribe_amount")),
-			OutstandingAmount: toFloatPtr(v("outstanding_amount")),
+			ID:                 toString(v("id")),
+			Name:               toString(v("name")),
+			IssueDate:          toString(v("issue_date")),
+			CompleteDate:       toString(v("complete_date")),
+			Manager:            toString(v("manager")),
+			HoldingStatus:      toString(v("holding_status")),
+			StructureType:      toString(v("structure_type")),
+			Code:               toString(v("code")),
+			Term:               toString(v("term")),
+			Parachute:          toString(v("parachute")),
+			HolidayAdjust:      toString(v("holiday_adjust")),
+			Raw:                toString(v("raw")),
+			KnockIn:            toString(v("knock_in")),
+			KnockedIn:          toString(v("knocked_in")),
+			Custodian:          toString(v("custodian")),
+			Counterparty:       toString(v("counterparty")),
+			IsMain:             toIntPtr(v("is_main")),
+			LockDays:           toIntPtr(v("lock_days")),
+			LockMonths:         toIntPtr(v("lock_months")),
+			SubscribeAmount:    toFloatPtr(v("subscribe_amount")),
+			OutstandingAmount:  toFloatPtr(v("outstanding_amount")),
 			FirstKnockoutRatio: toFloatPtr(v("first_knockout_ratio")),
 			EntryPrice:         toFloatPtr(v("entry_price")),
 			MonthlyDecrease:    toFloatPtr(v("monthly_decrease")),

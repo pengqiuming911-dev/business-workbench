@@ -5,6 +5,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/', component: Dashboard },
   { path: '/data-preparation', component: () => import('../views/DataPreparation.vue') },
   { path: '/product-report', component: () => import('../views/ProductReport.vue') },
+  { path: '/poster-copy', component: () => import('../views/PosterCopy.vue') },
   { path: '/product-completion', component: () => import('../views/ProductCompletion.vue') },
   { path: '/holding-analysis', component: () => import('../views/HoldingAnalysis.vue') },
   { path: '/product-analysis', redirect: '/holding-analysis?tab=product' },

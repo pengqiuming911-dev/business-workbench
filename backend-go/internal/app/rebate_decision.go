@@ -6,12 +6,12 @@ import "math"
 // rebate row should be shown, whether it is currently returnable, and whether
 // the page-calculated outstanding values match the detail sheet.
 type rebateDecisionInput struct {
-	OrderID                                      string
-	SubRatio, MgmtRatio, PerfRatio               float64
-	SubReturnable, MgmtReturnable                bool
+	OrderID                                          string
+	SubRatio, MgmtRatio, PerfRatio                   float64
+	SubReturnable, MgmtReturnable                    bool
 	OutstandingSub, OutstandingMgmt, OutstandingPerf float64
-	DetailSub, DetailMgmt, DetailPerf            *float64
-	RebateTarget                                 string
+	DetailSub, DetailMgmt, DetailPerf                *float64
+	RebateTarget                                     string
 }
 
 type rebateDecision struct {

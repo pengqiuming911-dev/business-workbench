@@ -57,30 +57,30 @@ func (s *Store) MigrateHoldingColumns() error {
 	}
 
 	txCols := map[string]string{
-		"product_name":          "TEXT",
-		"customer_name":         "TEXT",
-		"actual_buyer":          "TEXT",
-		"channel_or_direct":     "TEXT",
-		"amount":                "REAL",
-		"subscribe_fee_rate":    "REAL",
-		"subscribe_fee_ratio":   "REAL",
-		"management_fee_ratio":  "REAL",
-		"performance_fee_ratio": "REAL",
-		"management_fee_received": "REAL",
+		"product_name":               "TEXT",
+		"customer_name":              "TEXT",
+		"actual_buyer":               "TEXT",
+		"channel_or_direct":          "TEXT",
+		"amount":                     "REAL",
+		"subscribe_fee_rate":         "REAL",
+		"subscribe_fee_ratio":        "REAL",
+		"management_fee_ratio":       "REAL",
+		"performance_fee_ratio":      "REAL",
+		"management_fee_received":    "REAL",
 		"performance_fee_receivable": "REAL",
-		"rebate_target":         "TEXT",
-		"flight_date":           "TEXT",
-		"holding_status":        "TEXT",
-		"complete_date":         "TEXT",
-		"underlying":            "TEXT",
-		"structure_type":        "TEXT",
-		"lock_period":           "TEXT",
-		"dividend_barrier":      "REAL",
-		"monthly_coupon":        "REAL",
-		"coupon_1st":            "REAL",
-		"tax_subscribe_ratio":   "REAL",
-		"tax_management_ratio":  "REAL",
-		"tax_performance_ratio": "REAL",
+		"rebate_target":              "TEXT",
+		"flight_date":                "TEXT",
+		"holding_status":             "TEXT",
+		"complete_date":              "TEXT",
+		"underlying":                 "TEXT",
+		"structure_type":             "TEXT",
+		"lock_period":                "TEXT",
+		"dividend_barrier":           "REAL",
+		"monthly_coupon":             "REAL",
+		"coupon_1st":                 "REAL",
+		"tax_subscribe_ratio":        "REAL",
+		"tax_management_ratio":       "REAL",
+		"tax_performance_ratio":      "REAL",
 	}
 	for col, colType := range txCols {
 		_, err := s.DB.Exec(fmt.Sprintf("ALTER TABLE transactions ADD COLUMN %s %s", col, colType))
@@ -93,8 +93,8 @@ func (s *Store) MigrateHoldingColumns() error {
 
 func (s *Store) MigrateRebateColumns() error {
 	txCols := map[string]string{
-		"order_id":          "TEXT",
-		"channel_or_direct": "TEXT",
+		"order_id":           "TEXT",
+		"channel_or_direct":  "TEXT",
 		"subscribe_fee_rate": "REAL",
 	}
 	for col, colType := range txCols {
