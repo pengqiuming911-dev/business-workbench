@@ -164,28 +164,35 @@ func selectStructure(ctx context.Context, structure string) error {
 	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.txt", []byte("URL: "+debugURL+"\n\nBODY:\n"+body), 0o644)
 	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.html", []byte(innerHTML), 0o644)
 	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.png", shot, 0o644)
-	for _, part := range strings.Split(structure, "+") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		// 结构选项是 <span class="spantxt">DCN</span> 等；用 JS 直接 click（chromedp.Click 的 WaitVisible 在该 SPA 上超时）
+	targets := structureTargets(structure)
+	if len(targets) == 0 {
+		targets = []string{"经典结构"}
+	}
+	// 先确保进入"组合结构类型"，否则基础结构/叠加条款可能处于 disabled。
+	_ = chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+		var labels = Array.from(document.querySelectorAll('label.ant-radio-wrapper'));
+		var combo = labels.find(function(el){ return (el.textContent || '').indexOf('组合结构类型') >= 0; });
+		if (combo) combo.click();
+	})()`, nil))
+	time.Sleep(300 * time.Millisecond)
+	for _, target := range targets {
 		js := fmt.Sprintf(`(function(){
-			var spans = document.querySelectorAll('span.spantxt');
+			var want = %q;
+			var spans = Array.from(document.querySelectorAll('span.spantxt'));
 			for (var i=0;i<spans.length;i++){
-				var t = spans[i].textContent.trim();
-				if (t === '%[1]s' || t.indexOf('%[1]s') >= 0){
+				var t = (spans[i].textContent || '').replace(/\s+/g, '');
+				if (t === want.replace(/\s+/g, '') || t.indexOf(want.replace(/\s+/g, '')) >= 0){
 					spans[i].click(); return 'ok';
 				}
 			}
-			return 'notfound';
-		})()`, part)
+			return 'notfound:' + want;
+		})()`, target)
 		var res string
 		if err := chromedp.Run(ctx, chromedp.Evaluate(js, &res)); err != nil {
-			return fmt.Errorf("点结构 %q 失败: %w", part, err)
+			return fmt.Errorf("点结构 %q 失败: %w", target, err)
 		}
 		if res != "ok" {
-			return fmt.Errorf("点结构 %q 失败: 未找到 span.spantxt", part)
+			return fmt.Errorf("点结构 %q 失败: 未找到 span.spantxt", target)
 		}
 		// FIX: 原简报中此处为裸 chromedp.Sleep(...)，Action 未经 chromedp.Run 执行是 no-op。
 		// 改用 time.Sleep 让等待真正生效。
@@ -194,16 +201,104 @@ func selectStructure(ctx context.Context, structure string) error {
 	return nil
 }
 
+func structureTargets(structure string) []string {
+	s := strings.TrimSpace(structure)
+	if s == "" {
+		return nil
+	}
+	var targets []string
+	add := func(v string) {
+		for _, existing := range targets {
+			if existing == v {
+				return
+			}
+		}
+		targets = append(targets, v)
+	}
+	lower := strings.ToLower(s)
+	switch {
+	case strings.Contains(lower, "dcn"):
+		add("DCN")
+	case strings.Contains(s, "凤凰"):
+		add("凤凰结构")
+	case strings.Contains(s, "早利"):
+		add("早利结构")
+	case strings.Contains(s, "蝶变"):
+		add("蝶变结构")
+	case strings.Contains(s, "保本"):
+		add("保本结构")
+	case strings.Contains(s, "彩虹"):
+		add("彩虹结构")
+	case strings.Contains(s, "FCN") || strings.Contains(lower, "fcn"):
+		add("FCN")
+	default:
+		// 业务口径里的"雪球/降敲雪球"在通毓页面对应基础结构"经典结构"。
+		add("经典结构")
+	}
+	if strings.Contains(s, "降敲") || strings.Contains(s, "降KO") || strings.Contains(lower, "step") {
+		add("降敲结构")
+	}
+	if strings.Contains(s, "降落伞") || strings.Contains(lower, "airbag") {
+		add("降落伞结构")
+	}
+	return targets
+}
+
 // fillUnderlying 在"挂钩标的"搜索框输标的，选第一条结果。
 func fillUnderlying(ctx context.Context, underlying string) error {
-	if err := chromedp.Run(ctx,
-		chromedp.Click(`//input[@placeholder[contains(.,'标的') or contains(.,'代码') or contains(.,'名称')]][1]`, chromedp.BySearch),
-		chromedp.SendKeys(`//input[@placeholder[contains(.,'标的') or contains(.,'代码') or contains(.,'名称')]][1]`, underlying, chromedp.BySearch),
-		chromedp.Sleep(1*time.Second),
-		chromedp.Click(`//li[contains(@class,'ant-select-item')][1]`, chromedp.BySearch),
-	); err != nil {
+	js := fmt.Sprintf(`(function(){
+		var want = %q;
+		function norm(s){ return (s || '').replace(/\s+/g, '').toLowerCase(); }
+		var labels = Array.from(document.querySelectorAll('label'));
+		var label = labels.find(function(el){ return el.getAttribute('title') === '挂钩标的' || (el.textContent || '').trim() === '挂钩标的'; });
+		if (!label) return 'label-not-found';
+		var item = label.closest('.ant-form-item');
+		if (!item) return 'form-item-not-found';
+		var selected = item.querySelector('.ant-select-selection-item-content, .ant-select-selection-item');
+		if (selected && (norm(want).indexOf(norm(selected.textContent)) >= 0 || norm(selected.textContent).indexOf(norm(want)) >= 0)) {
+			return 'ok-existing';
+		}
+		var selector = item.querySelector('.ant-select-selector');
+		if (!selector) return 'selector-not-found';
+		selector.click();
+		var input = item.querySelector('input[role="combobox"], input.ant-select-selection-search-input');
+		if (!input) return 'input-not-found';
+		input.removeAttribute('readonly');
+		input.focus();
+		var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+		setter.call(input, want);
+		input.dispatchEvent(new Event('input', {bubbles:true}));
+		input.dispatchEvent(new Event('change', {bubbles:true}));
+		return 'searching';
+	})()`, underlying)
+	var res string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &res)); err != nil {
 		return err
 	}
+	if res == "ok-existing" {
+		return nil
+	}
+	if res != "searching" {
+		return fmt.Errorf("填挂钩标的失败: %s", res)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	clickJS := fmt.Sprintf(`(function(){
+		var want = %q;
+		function norm(s){ return (s || '').replace(/\s+/g, '').toLowerCase(); }
+		var options = Array.from(document.querySelectorAll('.ant-select-item-option, [role="option"], li'));
+		var exact = options.find(function(el){ return norm(el.textContent).indexOf(norm(want)) >= 0 || norm(want).indexOf(norm(el.textContent)) >= 0; });
+		var option = exact || options.find(function(el){ return (el.textContent || '').trim() !== ''; });
+		if (!option) return 'option-not-found';
+		option.click();
+		return 'ok';
+	})()`, underlying)
+	if err := chromedp.Run(ctx, chromedp.Evaluate(clickJS, &res)); err != nil {
+		return err
+	}
+	if res != "ok" {
+		return fmt.Errorf("填挂钩标的失败: %s", res)
+	}
+	time.Sleep(300 * time.Millisecond)
 	return nil
 }
 
@@ -211,40 +306,69 @@ func fillUnderlying(ctx context.Context, underlying string) error {
 // 选择器策略：找含标签文本的 span/label，向上找 ant-form-item，取其下 input。
 // 首次 live 运行需按真实 DOM 结构调（参考文档要求按字段名定位当前 ref）。
 func fillByLabel(ctx context.Context, label, value string) error {
-	xpath := fmt.Sprintf(`//span[contains(text(),'%s')]/ancestor::*[contains(@class,'ant-form-item')]//input | //label[contains(.,'%s')]/ancestor::*[contains(@class,'ant-form-item')]//input`, label, label)
-	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(xpath, chromedp.BySearch),
-		chromedp.Click(xpath, chromedp.BySearch),
-		chromedp.SetValue(xpath, value, chromedp.BySearch),
-	); err != nil {
-		// SetValue 失败时回退到 SendKeys 逐字输入（参考文档：fill 不生效改逐字）
-		if e2 := chromedp.Run(ctx, chromedp.SendKeys(xpath, value, chromedp.BySearch)); e2 != nil {
-			return err
+	js := fmt.Sprintf(`(function(){
+		var labelText = %q;
+		var value = %q;
+		function norm(s){ return (s || '').replace(/\s+/g, ''); }
+		var labels = Array.from(document.querySelectorAll('label'));
+		var label = labels.find(function(el){
+			return norm(el.getAttribute('title')) === norm(labelText) || norm(el.textContent) === norm(labelText);
+		}) || labels.find(function(el){
+			return norm(el.getAttribute('title')).indexOf(norm(labelText)) >= 0 || norm(el.textContent).indexOf(norm(labelText)) >= 0;
+		});
+		if (!label) return 'label-not-found';
+		var item = label.closest('.ant-form-item') || label.parentElement;
+		if (!item) return 'form-item-not-found';
+		if (labelText === '是否追保') {
+			var radioLabel = Array.from(item.querySelectorAll('label')).find(function(el){ return norm(el.textContent).indexOf(norm(value)) >= 0; });
+			if (radioLabel) { radioLabel.click(); return 'ok-radio'; }
 		}
+		var input = item.querySelector('input');
+		if (!input) return 'input-not-found';
+		input.focus();
+		var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+		setter.call(input, value);
+		input.dispatchEvent(new Event('input', {bubbles:true}));
+		input.dispatchEvent(new Event('change', {bubbles:true}));
+		input.dispatchEvent(new Event('blur', {bubbles:true}));
+		return 'ok';
+	})()`, label, value)
+	var res string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &res)); err != nil {
+		return err
 	}
+	if res != "ok" && res != "ok-radio" {
+		return fmt.Errorf("填字段 %q 失败: %s", label, res)
+	}
+	time.Sleep(150 * time.Millisecond)
 	return nil
 }
 
 // readWinrate 从结果区读胜率百分比。结果区标题含"买入一份该SNOWBALL合约"。
 // 胜率形如 "98.14%"。按结果区文本正则取首个百分比。
 func readWinrate(ctx context.Context) (string, error) {
-	// 等结果区出现
-	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(`//*[contains(.,'买入一份') or contains(.,'胜率')]`, chromedp.BySearch),
-		chromedp.Sleep(3*time.Second),
-	); err != nil {
+	if err := chromedp.Run(ctx, chromedp.WaitVisible(`//*[contains(.,'买入一份') or contains(.,'胜率')]`, chromedp.BySearch)); err != nil {
 		return "", err
 	}
-	var text string
-	if err := chromedp.Run(ctx, chromedp.Text(`//*[contains(.,'胜率')]`, &text, chromedp.BySearch)); err != nil {
-		return "", err
+	deadline := time.Now().Add(60 * time.Second)
+	var lastText string
+	for time.Now().Before(deadline) {
+		var text string
+		err := chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+			var rows = Array.from(document.querySelectorAll('.chart-tip-box .ant-row, .chart-tip-box'));
+			var row = rows.find(function(el){ return (el.textContent || '').indexOf('胜率') >= 0; });
+			return row ? row.textContent : document.body.innerText;
+		})()`, &text))
+		if err != nil {
+			return "", err
+		}
+		lastText = text
+		if wr := firstPercent(text); wr != "" {
+			return wr, nil
+		}
+		time.Sleep(2 * time.Second)
 	}
-	// 取首个百分比
-	wr := firstPercent(text)
-	if wr == "" {
-		return "", errors.New("结果区未找到胜率百分比")
-	}
-	return wr, nil
+	return "", fmt.Errorf("结果区未找到胜率百分比: %s", lastText)
 }
 
 // firstPercent 从文本里取第一个形如 12.34% 的百分比。

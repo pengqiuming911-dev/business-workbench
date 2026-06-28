@@ -23,14 +23,14 @@ func paramToFormFields(params map[string]any) []formField {
 			out = append(out, formField{Label: label, Value: v})
 		}
 	}
-	add("期限(月)", "期限")
-	add("锁定期(月)", "锁定期")
-	add("首次观察敲出价(%)", "期初敲出线")
-	add("敲出价递减步长(%)", "降敲")
-	add("期末障碍价(%)", "降落伞")
-	add("派息障碍价(%)", "派息线")
-	add("每月或有派息(%)", "费后派息")
-	add("保证金水平(%)", "保证金")
+	add("期限", "期限")
+	add("锁定期", "锁定期")
+	add("首次观察敲出价", "期初敲出线")
+	add("敲出价递减步长", "降敲")
+	add("期末障碍价", "降落伞")
+	add("派息障碍价", "派息线")
+	add("每月或有派息", "费后派息")
+	add("保证金水平", "保证金")
 	add("是否追保", "是否追保")
 	return out
 }

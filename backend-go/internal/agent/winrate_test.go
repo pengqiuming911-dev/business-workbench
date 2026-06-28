@@ -24,15 +24,15 @@ func TestParamToFormFields_FullDCN(t *testing.T) {
 		byLabel[f.Label] = f.Value
 	}
 	cases := map[string]string{
-		"期限(月)":      "36",
-		"锁定期(月)":     "3",
-		"首次观察敲出价(%)": "101",
-		"敲出价递减步长(%)": "0.5",
-		"期末障碍价(%)":   "60",
-		"派息障碍价(%)":   "78",
-		"每月或有派息(%)":  "1.39",
-		"保证金水平(%)":   "50",
-		"是否追保":       "不追保",
+		"期限":      "36",
+		"锁定期":     "3",
+		"首次观察敲出价": "101",
+		"敲出价递减步长": "0.5",
+		"期末障碍价":   "60",
+		"派息障碍价":   "78",
+		"每月或有派息":  "1.39",
+		"保证金水平":   "50",
+		"是否追保":    "不追保",
 	}
 	for label, want := range cases {
 		if got := byLabel[label]; got != want {
@@ -52,11 +52,11 @@ func TestParamToFormFields_OmitsEmpty(t *testing.T) {
 	}
 	fields := paramToFormFields(params)
 	for _, f := range fields {
-		if f.Label == "派息障碍价(%)" {
-			t.Error("派息线为空时不应出现 派息障碍价(%)")
+		if f.Label == "派息障碍价" {
+			t.Error("派息线为空时不应出现 派息障碍价")
 		}
-		if f.Label == "锁定期(月)" {
-			t.Error("锁定期为空时不应出现 锁定期(月)")
+		if f.Label == "锁定期" {
+			t.Error("锁定期为空时不应出现 锁定期")
 		}
 		if f.Value == "" {
 			t.Errorf("field %q value 不应为空", f.Label)
