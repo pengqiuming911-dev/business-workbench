@@ -156,10 +156,13 @@ func selectStructure(ctx context.Context, structure string) error {
 	_ = chromedp.Run(ctx, chromedp.Location(&debugURL))
 	var body string
 	_ = chromedp.Run(ctx, chromedp.Text("body", &body, chromedp.ByQuery))
+	var innerHTML string
+	_ = chromedp.Run(ctx, chromedp.Evaluate(`document.body.innerHTML`, &innerHTML))
 	var shot []byte
 	_ = chromedp.Run(ctx, chromedp.FullScreenshot(&shot, 90))
 	_ = os.MkdirAll("public/poster-artifacts", 0o755)
 	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.txt", []byte("URL: "+debugURL+"\n\nBODY:\n"+body), 0o644)
+	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.html", []byte(innerHTML), 0o644)
 	_ = os.WriteFile("public/poster-artifacts/tongyu-structure-debug.png", shot, 0o644)
 	for _, part := range strings.Split(structure, "+") {
 		part = strings.TrimSpace(part)
