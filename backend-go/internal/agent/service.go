@@ -562,6 +562,7 @@ func (s *Service) screenshotAMACTool(args map[string]any) map[string]any {
 	}
 	id := nextPublicID()
 	outPath := fmt.Sprintf("public/poster-artifacts/%s.png", id)
+	_ = os.MkdirAll("public/poster-artifacts", 0o755)
 	if err := screenshotAMAC(url, outPath); err != nil {
 		return map[string]any{"error": err.Error()}
 	}
@@ -575,6 +576,7 @@ func (s *Service) screenshotProductCardTool(args map[string]any) map[string]any 
 	}
 	id := nextPublicID()
 	outPath := fmt.Sprintf("public/poster-artifacts/%s.png", id)
+	_ = os.MkdirAll("public/poster-artifacts", 0o755)
 	if err := screenshotProductCard(args, tongyuCreds{User: s.cfg.TongyuUser, Pass: s.cfg.TongyuPass}, s.cfg.ChromePath, outPath); err != nil {
 		return map[string]any{"error": err.Error()}
 	}
