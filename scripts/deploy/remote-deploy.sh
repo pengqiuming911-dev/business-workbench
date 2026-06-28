@@ -12,6 +12,7 @@ SHARED_DIR="${APP_DIR}/shared"
 CURRENT_LINK="${APP_DIR}/current"
 ENV_FILE="${SHARED_DIR}/.env"
 DB_FILE="${SHARED_DIR}/data.sqlite"
+FEISHU_TOKEN_FILE="${SHARED_DIR}/.feishu-user-token"
 PREVIOUS_TARGET=""
 
 if [ ! -f "${RELEASE_TARBALL}" ]; then
@@ -44,6 +45,10 @@ ln -sfn "${ENV_FILE}" "${RELEASE_DIR}/backend-go/.env"
 if [ -f "${DB_FILE}" ]; then
   ln -sfn "${DB_FILE}" "${RELEASE_DIR}/backend-go/data.sqlite"
 fi
+
+# 飞书 user token 持久化到 shared/，跨部署保留（OAuth 流程写入此 symlink → shared/.feishu-user-token）。
+# 首次部署 target 可能不存在（dangling），OAuth 后自动创建。
+ln -sfn "${FEISHU_TOKEN_FILE}" "${RELEASE_DIR}/backend-go/.feishu-user-token"
 
 chmod +x "${RELEASE_DIR}/server"
 ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
