@@ -243,7 +243,8 @@ func screenshotAMAC(url, outPath string) error {
 		return err
 	}
 	var buf []byte
-	if err := chromedp.Run(ctx, chromedp.CaptureScreenshot(&buf)); err != nil {
+	// FullScreenshot（整页）而非 CaptureScreenshot（视口）：AMAC 公示页要整页截图作官方来源凭证（references/amac-manager.md 要求 fullPage）。
+	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 100)); err != nil {
 		return err
 	}
 	return os.WriteFile(outPath, buf, 0o644)
