@@ -169,9 +169,23 @@ func selectStructure(ctx context.Context, structure string) error {
 		if part == "" {
 			continue
 		}
-		// 点含该结构名的 label/span（antd 单选/多选用 label 包裹）
-		if err := chromedp.Run(ctx, chromedp.Click(fmt.Sprintf(`//label[contains(.,'%s')]|//span[contains(.,'%s')]`, part, part), chromedp.BySearch)); err != nil {
+		// 结构选项是 <span class="spantxt">DCN</span> 等；用 JS 直接 click（chromedp.Click 的 WaitVisible 在该 SPA 上超时）
+		js := fmt.Sprintf(`(function(){
+			var spans = document.querySelectorAll('span.spantxt');
+			for (var i=0;i<spans.length;i++){
+				var t = spans[i].textContent.trim();
+				if (t === '%[1]s' || t.indexOf('%[1]s') >= 0){
+					spans[i].click(); return 'ok';
+				}
+			}
+			return 'notfound';
+		})()`, part)
+		var res string
+		if err := chromedp.Run(ctx, chromedp.Evaluate(js, &res)); err != nil {
 			return fmt.Errorf("点结构 %q 失败: %w", part, err)
+		}
+		if res != "ok" {
+			return fmt.Errorf("点结构 %q 失败: 未找到 span.spantxt", part)
 		}
 		// FIX: 原简报中此处为裸 chromedp.Sleep(...)，Action 未经 chromedp.Run 执行是 no-op。
 		// 改用 time.Sleep 让等待真正生效。
