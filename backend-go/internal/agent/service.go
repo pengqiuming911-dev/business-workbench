@@ -604,8 +604,8 @@ func (s *Service) buildDocxTool(args map[string]any) map[string]any {
 	// 2. 飞书 client（复用持久化 user token）
 	fc := feishu.New(s.cfg.FeishuAppID, s.cfg.FeishuAppSecret, s.cfg.FeishuRedirectURI)
 	fc.SetTokenPersistPath(".feishu-user-token")
-	// 3. find-or-create 当年当月子文件夹
-	folderName := time.Now().Format("2006年1月")
+	// 3. find-or-create 当年当月子文件夹（命名「某年某月产品」对齐既有产品材料文件夹约定）
+	folderName := time.Now().Format("2006年1月产品")
 	ctx := context.Background()
 	subToken, found, err := fc.FindSubfolder(ctx, s.cfg.FeishuPitchFolderToken, folderName)
 	if err != nil {
