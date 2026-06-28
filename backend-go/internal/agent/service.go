@@ -9,12 +9,14 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"business-workbench/backend-go/internal/config"
 	"business-workbench/backend-go/internal/db"
+	"business-workbench/backend-go/internal/feishu"
 	"business-workbench/backend-go/internal/model"
 	"business-workbench/backend-go/internal/observations"
 	"business-workbench/backend-go/internal/posters"
@@ -23,7 +25,7 @@ import (
 
 const maxToolRounds = 12
 
-const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。\n\n当用户想要生成、制作、下载「喜报」「分红喜报」「分红观察喜报」时：先调用 search_products 找到目标产品的 product_id，再调用 generate_poster(product_id, observation_date) 生成。喜报里的所有数字（年化收益、本月分红、累计分红率、累计分红次数、派息界限、止盈界限、末月降至、挂钩标的、入场时间）都由系统从真实数据计算，你绝不可在对话中编造、估算或改写这些数字，也不可在 generate_poster 参数里传任何数字。若系统返回错误（如无该观察日记录），如实告知用户，不要自行补数。\n\n当用户想要生成结构化产品推介文案/材料（雪球/降敲雪球/DCN/FCN/限亏雪球等）时：先调用 load_skill('structured-product-copywriter') 加载完整工作流，再严格按其步骤执行——核对 10 项参数（缺了一次性问全）、取当前点位、做点位换算、产出长版+短版文案。文案里的「当前点位」必须调 fetch_quote 取真实值，绝对点位（降落伞/敲出/派息触发）必须调 calc_points 计算，你绝不可在对话中编造点位、胜率或自行做小数换算。胜率步骤：调用 fetch_winrate 取真实回测胜率（structure_type 由你判断传入）；若 fetch_winrate 返回 [胜率待补]（无凭证/遇验证码/站点不可达），如实告知并请用户手动提供，绝不编一个胜率数字。历史参考底部属判断性数据，问用户要，不要自己填。若 fetch_quote 失败，如实告知并让用户手动提供点位。走到通毓胜率/AMAC/Word 等重步骤时，可调 get_skill_reference 取对应参考文档。\n\n当用户要出 Word 推介材料/材料时：按 references/docx-template.md 的 10 章顺序组装 manifest 调 build_docx。文案用 fetch_quote/calc_points/fetch_winrate 已算的真实数字，build_docx 只装配不改数字。管理人/产品公示图调 screenshot_amac（传 AMAC URL），产品点位卡调 screenshot_product_card。一页通/托管募集账户/胜率结果截图等用户手动贴或 v1 未取的，留 image 占位（缺图自动红字 [图片待补]，不报错）。"
+const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。\n\n当用户想要生成、制作、下载「喜报」「分红喜报」「分红观察喜报」时：先调用 search_products 找到目标产品的 product_id，再调用 generate_poster(product_id, observation_date) 生成。喜报里的所有数字（年化收益、本月分红、累计分红率、累计分红次数、派息界限、止盈界限、末月降至、挂钩标的、入场时间）都由系统从真实数据计算，你绝不可在对话中编造、估算或改写这些数字，也不可在 generate_poster 参数里传任何数字。若系统返回错误（如无该观察日记录），如实告知用户，不要自行补数。\n\n当用户想要生成结构化产品推介文案/材料（雪球/降敲雪球/DCN/FCN/限亏雪球等）时：先调用 load_skill('structured-product-copywriter') 加载完整工作流，再严格按其步骤执行——核对 10 项参数（缺了一次性问全）、取当前点位、做点位换算、产出长版+短版文案。文案里的「当前点位」必须调 fetch_quote 取真实值，绝对点位（降落伞/敲出/派息触发）必须调 calc_points 计算，你绝不可在对话中编造点位、胜率或自行做小数换算。胜率步骤：调用 fetch_winrate 取真实回测胜率（structure_type 由你判断传入）；若 fetch_winrate 返回 [胜率待补]（无凭证/遇验证码/站点不可达），如实告知并请用户手动提供，绝不编一个胜率数字。历史参考底部属判断性数据，问用户要，不要自己填。若 fetch_quote 失败，如实告知并让用户手动提供点位。走到通毓胜率/AMAC/Word 等重步骤时，可调 get_skill_reference 取对应参考文档。\n\n当用户要出 Word 推介材料/材料时：按 references/docx-template.md 的 10 章顺序组装 manifest 调 build_docx（上传飞书 Drive，返回飞书链接，不落本地）。文案用 fetch_quote/calc_points/fetch_winrate 已算的真实数字，build_docx 只装配不改数字。管理人/产品公示图调 screenshot_amac（传 AMAC URL），产品点位卡调 screenshot_product_card。一页通/托管募集账户/胜率结果截图等用户手动贴或 v1 未取的，留 image 占位（缺图自动红字 [图片待补]，不报错）。"
 
 type Service struct {
 	cfg    config.Config
@@ -579,21 +581,50 @@ func (s *Service) screenshotProductCardTool(args map[string]any) map[string]any 
 	return map[string]any{"url": "/public/poster-artifacts/" + id + ".png", "path": outPath}
 }
 
-// buildDocxTool 是 agent 工具入口：按 manifest 装配 .docx，返回 /public 下载 URL。
+// buildDocxTool 是 agent 工具入口：装配 .docx 并上传到飞书 Drive 当年当月子文件夹，返回飞书 URL。
 func (s *Service) buildDocxTool(args map[string]any) map[string]any {
 	sections, err := parseManifest(args)
 	if err != nil {
 		return map[string]any{"error": err.Error()}
 	}
-	id := nextPublicID()
-	outPath := fmt.Sprintf("public/推介材料/%s.docx", id)
-	if err := os.MkdirAll("public/推介材料", 0o755); err != nil {
+	// 1. 写临时文件
+	tmpDir, err := os.MkdirTemp("", "docx-")
+	if err != nil {
 		return map[string]any{"error": err.Error()}
 	}
-	if err := BuildDocx(sections, outPath); err != nil {
+	defer os.RemoveAll(tmpDir)
+	tmpPath := filepath.Join(tmpDir, "推介材料.docx")
+	if err := BuildDocx(sections, tmpPath); err != nil {
 		return map[string]any{"error": err.Error()}
 	}
-	return map[string]any{"url": "/public/推介材料/" + id + ".docx", "path": outPath}
+	data, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	// 2. 飞书 client（复用持久化 user token）
+	fc := feishu.New(s.cfg.FeishuAppID, s.cfg.FeishuAppSecret, s.cfg.FeishuRedirectURI)
+	fc.SetTokenPersistPath(".feishu-user-token")
+	// 3. find-or-create 当年当月子文件夹
+	folderName := time.Now().Format("2006年1月")
+	ctx := context.Background()
+	subToken, found, err := fc.FindSubfolder(ctx, s.cfg.FeishuPitchFolderToken, folderName)
+	if err != nil {
+		return map[string]any{"error": "查找飞书文件夹失败：" + err.Error()}
+	}
+	if !found {
+		subToken, err = fc.CreateFolder(ctx, s.cfg.FeishuPitchFolderToken, folderName)
+		if err != nil {
+			return map[string]any{"error": "创建飞书文件夹失败：" + err.Error()}
+		}
+	}
+	// 4. 上传
+	fileName := fmt.Sprintf("推介材料_%s.docx", time.Now().Format("20060102_150405"))
+	fileToken, err := fc.UploadDocx(ctx, subToken, fileName, data)
+	if err != nil {
+		return map[string]any{"error": "上传飞书失败：" + err.Error()}
+	}
+	url := "https://" + s.cfg.FeishuDriveDomain + "/file/" + fileToken
+	return map[string]any{"url": url, "file_token": fileToken, "folder": folderName}
 }
 
 func nextPublicID() string {
