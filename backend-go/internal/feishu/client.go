@@ -20,9 +20,18 @@ type Client struct {
 	RedirectURI string
 	HTTP        *http.Client
 
-	mu        sync.RWMutex
-	userToken string
-	tokenPath string // 非空时 user token 持久化到此文件，重启不丢
+	mu           sync.RWMutex
+	userToken    string
+	refreshToken string
+	expiresAt    time.Time
+	tokenPath    string // 非空时 user token 持久化到此文件，重启不丢
+}
+
+// tokenData 用于 token 持久化的 JSON 结构
+type tokenData struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 type DriveFile struct {
@@ -62,20 +71,39 @@ func (c *Client) SetTokenPersistPath(path string) {
 	c.mu.Lock()
 	c.tokenPath = path
 	c.mu.Unlock()
-	if b, err := os.ReadFile(path); err == nil {
-		t := strings.TrimSpace(string(b))
-		if t != "" {
-			c.mu.Lock()
-			c.userToken = t
-			c.mu.Unlock()
-		}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return
 	}
+	content := strings.TrimSpace(string(b))
+	if content == "" {
+		return
+	}
+	// 尝试 JSON 格式（新格式）
+	var td tokenData
+	if err := json.Unmarshal(b, &td); err == nil && td.AccessToken != "" {
+		c.mu.Lock()
+		c.userToken = td.AccessToken
+		c.refreshToken = td.RefreshToken
+		c.expiresAt = td.ExpiresAt
+		c.mu.Unlock()
+		return
+	}
+	// 兼容旧的纯文本格式（仅 access_token）
+	c.mu.Lock()
+	c.userToken = content
+	c.mu.Unlock()
 }
 
 func (c *Client) persistToken() {
 	c.mu.RLock()
 	path := c.tokenPath
 	tok := c.userToken
+	td := tokenData{
+		AccessToken:  c.userToken,
+		RefreshToken: c.refreshToken,
+		ExpiresAt:    c.expiresAt,
+	}
 	c.mu.RUnlock()
 	if path == "" {
 		return
@@ -84,7 +112,11 @@ func (c *Client) persistToken() {
 		_ = os.Remove(path)
 		return
 	}
-	_ = os.WriteFile(path, []byte(tok), 0o600)
+	data, err := json.Marshal(td)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0o600)
 }
 
 func (c *Client) Authorized() bool {
@@ -102,6 +134,8 @@ func (c *Client) UserToken() string {
 func (c *Client) ClearUserToken() {
 	c.mu.Lock()
 	c.userToken = ""
+	c.refreshToken = ""
+	c.expiresAt = time.Time{}
 	c.mu.Unlock()
 	c.persistToken()
 }
@@ -124,7 +158,10 @@ func (c *Client) ExchangeCode(ctx context.Context, code string) error {
 		Code int    `json:"code"`
 		Msg  string `json:"msg"`
 		Data struct {
-			AccessToken string `json:"access_token"`
+			AccessToken      string `json:"access_token"`
+			RefreshToken     string `json:"refresh_token"`
+			ExpiresIn        int    `json:"expires_in"`
+			RefreshExpiresIn int    `json:"refresh_expires_in"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -136,17 +173,87 @@ func (c *Client) ExchangeCode(ctx context.Context, code string) error {
 	if result.Data.AccessToken == "" {
 		return fmt.Errorf("exchange user token failed: empty access_token")
 	}
+	expiresAt := time.Now().Add(time.Duration(result.Data.ExpiresIn) * time.Second)
 	c.mu.Lock()
 	c.userToken = result.Data.AccessToken
+	c.refreshToken = result.Data.RefreshToken
+	c.expiresAt = expiresAt
 	c.mu.Unlock()
 	c.persistToken()
 	return nil
 }
 
-func (c *Client) CurrentUser(ctx context.Context) (*CurrentUser, error) {
-	token := c.UserToken()
+// ensureValidToken 确保当前 access_token 有效，如果即将过期则自动刷新。
+// 返回有效的 access_token，如果无法获取则返回错误。
+func (c *Client) ensureValidToken(ctx context.Context) (string, error) {
+	c.mu.RLock()
+	token := c.userToken
+	refresh := c.refreshToken
+	expiresAt := c.expiresAt
+	c.mu.RUnlock()
+
 	if token == "" {
-		return nil, nil
+		return "", fmt.Errorf("未授权，请先登录飞书")
+	}
+
+	// 如果没有 refresh_token 或未过期，直接返回当前 token
+	// 提前 5 分钟刷新，避免边界情况
+	if refresh == "" || time.Now().Before(expiresAt.Add(-5*time.Minute)) {
+		return token, nil
+	}
+
+	// 需要刷新 token
+	appToken, err := c.appAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("刷新 token 失败: %w", err)
+	}
+
+	payload := map[string]any{
+		"grant_type":    "refresh_token",
+		"refresh_token": refresh,
+	}
+	body, err := c.post(ctx, "https://open.feishu.cn/open-apis/authen/v1/oidc/refresh_access_token", payload, appToken)
+	if err != nil {
+		return "", fmt.Errorf("刷新 token 请求失败: %w", err)
+	}
+
+	var result struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			AccessToken      string `json:"access_token"`
+			RefreshToken     string `json:"refresh_token"`
+			ExpiresIn        int    `json:"expires_in"`
+			RefreshExpiresIn int    `json:"refresh_expires_in"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("刷新 token 响应解析失败: %w", err)
+	}
+	if result.Code != 0 {
+		// refresh_token 已过期或无效，清除 token 要求重新登录
+		c.ClearUserToken()
+		return "", fmt.Errorf("登录已过期，请重新登录飞书 (%d): %s", result.Code, result.Msg)
+	}
+	if result.Data.AccessToken == "" {
+		return "", fmt.Errorf("刷新 token 返回空 access_token")
+	}
+
+	newExpiresAt := time.Now().Add(time.Duration(result.Data.ExpiresIn) * time.Second)
+	c.mu.Lock()
+	c.userToken = result.Data.AccessToken
+	c.refreshToken = result.Data.RefreshToken
+	c.expiresAt = newExpiresAt
+	c.mu.Unlock()
+	c.persistToken()
+
+	return result.Data.AccessToken, nil
+}
+
+func (c *Client) CurrentUser(ctx context.Context) (*CurrentUser, error) {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
 	}
 	body, err := c.get(ctx, "https://open.feishu.cn/open-apis/authen/v1/user_info", token)
 	if err != nil {
@@ -167,9 +274,9 @@ func (c *Client) CurrentUser(ctx context.Context) (*CurrentUser, error) {
 }
 
 func (c *Client) ReadSheetRows(ctx context.Context, spreadsheetToken string, sheetID string, colCount int) ([]map[string]any, error) {
-	token := c.UserToken()
-	if token == "" {
-		return nil, fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
 	}
 	const batch = 500
 	const maxRows = 10000
@@ -219,9 +326,9 @@ func (c *Client) ReadSheetRows(ctx context.Context, spreadsheetToken string, she
 
 // ReadSheetRaw 读取 sheet 原始二维值（保留行顺序），用于需要按行定位（如分界行）的非标准布局。
 func (c *Client) ReadSheetRaw(ctx context.Context, spreadsheetToken string, sheetID string, colCount int) ([][]any, error) {
-	token := c.UserToken()
-	if token == "" {
-		return nil, fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
 	}
 	const batch = 500
 	const maxRows = 10000
@@ -270,9 +377,9 @@ func (c *Client) ReadSheetRaw(ctx context.Context, spreadsheetToken string, shee
 }
 
 func (c *Client) ReadBitableRecords(ctx context.Context, appToken string, tableID string) ([]map[string]any, error) {
-	token := c.UserToken()
-	if token == "" {
-		return nil, fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	result := []map[string]any{}
@@ -319,9 +426,9 @@ func (c *Client) ReadBitableRecords(ctx context.Context, appToken string, tableI
 }
 
 func (c *Client) WalkDriveFolder(ctx context.Context, folderToken string) (DriveWalkResult, error) {
-	token := c.UserToken()
-	if token == "" {
-		return DriveWalkResult{}, fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return DriveWalkResult{}, err
 	}
 	result := DriveWalkResult{Files: []DriveFile{}}
 	if err := c.walkDriveFolder(ctx, token, folderToken, "", &result); err != nil {
@@ -331,9 +438,9 @@ func (c *Client) WalkDriveFolder(ctx context.Context, folderToken string) (Drive
 }
 
 func (c *Client) ReadDocRawContent(ctx context.Context, docToken string) (string, error) {
-	token := c.UserToken()
-	if token == "" {
-		return "", fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return "", err
 	}
 	endpoint := fmt.Sprintf("https://open.feishu.cn/open-apis/docx/v1/documents/%s/raw_content", docToken)
 	body, err := c.get(ctx, endpoint, token)
@@ -389,9 +496,9 @@ func (c *Client) SharedFiles(ctx context.Context, spaceID string, folderToken st
 }
 
 func (c *Client) DownloadFile(ctx context.Context, endpoint string) ([]byte, string, error) {
-	token := c.UserToken()
-	if token == "" {
-		return nil, "", fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -414,9 +521,9 @@ func (c *Client) DownloadFile(ctx context.Context, endpoint string) ([]byte, str
 }
 
 func (c *Client) ExportSheet(ctx context.Context, sheetToken string) ([]byte, string, error) {
-	token := c.UserToken()
-	if token == "" {
-		return nil, "", fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	createBody, err := c.post(ctx, "https://open.feishu.cn/open-apis/drive/v1/export_tasks", map[string]any{
 		"file_extension": "xlsx",
@@ -479,9 +586,9 @@ func (c *Client) ExportSheet(ctx context.Context, sheetToken string) ([]byte, st
 }
 
 func (c *Client) GetSheetMetaData(ctx context.Context, spreadsheetToken string) ([]SheetMeta, error) {
-	token := c.UserToken()
-	if token == "" {
-		return nil, fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
 	}
 	endpoint := fmt.Sprintf("https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/%s/sheets/query", spreadsheetToken)
 	body, err := c.get(ctx, endpoint, token)
@@ -641,9 +748,9 @@ func (c *Client) get(ctx context.Context, endpoint string, bearer string) ([]byt
 }
 
 func (c *Client) getData(ctx context.Context, endpoint string) (map[string]any, error) {
-	token := c.UserToken()
-	if token == "" {
-		return nil, fmt.Errorf("未授权，请先登录飞书")
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
 	}
 	body, err := c.get(ctx, endpoint, token)
 	if err != nil {
