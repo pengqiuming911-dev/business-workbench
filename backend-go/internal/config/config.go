@@ -25,6 +25,10 @@ type Config struct {
 	SMTPUser            string
 	SMTPPass            string
 	SMTPFrom            string
+	TongyuUser          string
+	TongyuPass          string
+	WinrateDryRun       string
+	ChromePath          string
 }
 
 func Load() Config {
@@ -49,6 +53,10 @@ func Load() Config {
 		SMTPUser:          smtpUser,
 		SMTPPass:          os.Getenv("SMTP_PASS"),
 		SMTPFrom:          getEnv("SMTP_FROM", smtpUser),
+		TongyuUser:        os.Getenv("TONGYU_USER"),
+		TongyuPass:        os.Getenv("TONGYU_PASS"),
+		WinrateDryRun:     getEnv("WINRATE_DRY_RUN", "false"),
+		ChromePath:        os.Getenv("CHROME_PATH"),
 	}
 }
 
