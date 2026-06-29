@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
 
@@ -77,6 +78,10 @@ func runTongyuBacktest(params map[string]any, creds tongyuCreds, chromePath stri
 // 超时后 chromedp 取消 → chromedp.Run 返回 err → runTongyuBacktest 退回 [胜率待补]。
 func newBrowserContext(parent context.Context, chromePath string) (context.Context, context.CancelFunc) {
 	timeoutCtx, cancelTimeout := context.WithTimeout(parent, 90*time.Second)
+	userDataDir, _ := os.MkdirTemp("", "tongyu-chrome-profile-")
+	if userDataDir == "" {
+		userDataDir = "tongyu-chrome-profile"
+	}
 	opts := append([]chromedp.ExecAllocatorOption{},
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -84,8 +89,8 @@ func newBrowserContext(parent context.Context, chromePath string) (context.Conte
 		chromedp.DisableGPU,
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("lang", "zh-CN"),
-		// 持久化 profile 降低验证码触发概率（参考 tongyu-winrate.md）；固定相对路径，未来可改配置项。
-		chromedp.UserDataDir("tongyu-chrome-profile"),
+		// 每次用独立 profile，避免连续/并发工具调用时 Chromium profile lock 卡住。
+		chromedp.UserDataDir(userDataDir),
 	)
 	if chromePath != "" {
 		opts = append(opts, chromedp.ExecPath(chromePath))
@@ -93,7 +98,7 @@ func newBrowserContext(parent context.Context, chromePath string) (context.Conte
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(timeoutCtx, opts...)
 	ctx, cancel := chromedp.NewContext(allocCtx)
 	// 合并 cancel：取消时先 ctx 再 allocCtx 再 timeoutCtx
-	return ctx, func() { cancel(); cancelAlloc(); cancelTimeout() }
+	return ctx, func() { cancel(); cancelAlloc(); cancelTimeout(); _ = os.RemoveAll(userDataDir) }
 }
 
 // loginTongyu 登录通毓。用页面中央账号密码框（不是顶部"管理员登录"）。
@@ -414,20 +419,32 @@ func screenshotAMAC(url, outPath string) error {
 // screenshotProductCard 进通毓"产品点位"小工具，按参数填表→提交→复制为图片→取图存 outPath。
 // 剪贴板读不到时回退元素截图。流程见 references/product-position-card.md。
 func screenshotProductCard(params map[string]any, creds tongyuCreds, chromePath, outPath string) error {
-	ctx, cancel := newBrowserContext(context.Background(), chromePath)
+	parent, cancelParent := context.WithTimeout(context.Background(), 70*time.Second)
+	defer cancelParent()
+	ctx, cancel := newBrowserContext(parent, chromePath)
 	defer cancel()
+	chromedp.ListenTarget(ctx, func(ev any) {
+		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
+			go func() {
+				_ = chromedp.Run(ctx, page.HandleJavaScriptDialog(true))
+			}()
+		}
+	})
 	if err := loginTongyu(ctx, creds); err != nil {
 		return err
 	}
 	if hasCaptcha(ctx) {
 		return fmt.Errorf("遇验证码，产品卡截图失败")
 	}
+	debugProductCard(ctx, "after-login")
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate("https://terminal.tongyu-quant.com/smallTool/index.html#/product-position"),
+		chromedp.WaitReady("body", chromedp.ByQuery),
 		chromedp.Sleep(2*time.Second),
 	); err != nil {
 		return err
 	}
+	debugProductCard(ctx, "after-navigate")
 	// 选产品类型（原生 select）
 	// 适配：chromedp v0.15.1 无 SetAttribute；改用 Evaluate 设 select.selectedIndex 并派发
 	// change/input 事件（Vue/原生均监听 change）。保持简报意图：按 structure_type 选 DCN/锁盈。
@@ -446,31 +463,129 @@ func screenshotProductCard(params map[string]any, creds tongyuCreds, chromePath,
 			s.dispatchEvent(new Event('input', {bubbles: true}));
 		})()`, selectProductType(pt))
 		_ = chromedp.Run(ctx, chromedp.Evaluate(js, nil))
+		time.Sleep(500 * time.Millisecond)
 	}
 	// 按标签填数值字段
-	for _, f := range productCardFields(params) {
-		_ = fillByLabel(ctx, f.Label, f.Value)
+	cardName := productCardName(params)
+	for _, f := range productCardFields(params, cardName) {
+		if err := fillByLabel(ctx, f.Label, f.Value); err != nil {
+			debugProductCard(ctx, "fill-failed")
+			return err
+		}
 	}
+	debugProductCard(ctx, "after-fill")
 	// 点提交
-	if err := chromedp.Run(ctx, chromedp.Click(`//button/span[contains(text(),'提交')]`, chromedp.BySearch)); err != nil {
+	submitCtx, cancelSubmit := context.WithTimeout(ctx, 8*time.Second)
+	var submitRes string
+	if err := chromedp.Run(submitCtx, chromedp.Evaluate(`(function(){
+		var buttons = Array.from(document.querySelectorAll('button'));
+		var btn = buttons.find(function(el){ return (el.textContent || '').indexOf('提交') >= 0; });
+		if (!btn) return 'submit-not-found';
+		btn.scrollIntoView({block:'center'});
+		btn.click();
+		return 'ok';
+	})()`, &submitRes)); err != nil {
+		cancelSubmit()
 		return err
 	}
-	// FIX: 简报此处为裸 chromedp.Sleep(...)，Action 未经 chromedp.Run 是 no-op；改用 time.Sleep。
-	time.Sleep(1 * time.Second)
-	// 点"复制为图片"
-	_ = chromedp.Run(ctx, chromedp.Click(`//button/span[contains(text(),'复制为图片')]`, chromedp.BySearch))
-	// 优先：剪贴板读 PNG
-	if png, err := readClipboardPNG(ctx); err == nil && len(png) > 0 {
+	cancelSubmit()
+	if submitRes != "ok" {
+		debugProductCard(ctx, "submit-click-failed")
+		return fmt.Errorf("产品卡提交按钮点击失败: %s", submitRes)
+	}
+	debugProductCard(ctx, "after-submit-click")
+	if err := waitProductCardResult(ctx, cardName); err != nil {
+		debugProductCard(ctx, "submit-failed")
+		return err
+	}
+	debugProductCard(ctx, "after-submit")
+
+	var buf []byte
+	shotCtx, cancelShot := context.WithTimeout(ctx, 12*time.Second)
+	defer cancelShot()
+	markJS := fmt.Sprintf(`(function(){
+		var cardName = %q;
+		var candidates = Array.from(document.querySelectorAll('div')).filter(function(el){
+			var t = el.textContent || '';
+			return t.indexOf(cardName) >= 0 && t.indexOf('结构解析') >= 0 && t.indexOf('敲出参考图') >= 0;
+		}).filter(function(el){
+			var r = el.getBoundingClientRect();
+			return r.width > 300 && r.height > 300;
+		});
+		candidates.sort(function(a,b){
+			var ar = a.getBoundingClientRect(), br = b.getBoundingClientRect();
+			return (ar.width * ar.height) - (br.width * br.height);
+		});
+		if (!candidates.length) return 'not-found';
+		document.querySelectorAll('[data-capture-product-card]').forEach(function(el){ el.removeAttribute('data-capture-product-card'); });
+		candidates[0].setAttribute('data-capture-product-card', 'true');
+		candidates[0].scrollIntoView({block:'center'});
+		return 'ok';
+	})()`, cardName)
+	var markRes string
+	if err := chromedp.Run(shotCtx, chromedp.Evaluate(markJS, &markRes)); err == nil && markRes == "ok" {
+		_ = chromedp.Run(shotCtx, chromedp.Screenshot(`[data-capture-product-card="true"]`, &buf, chromedp.ByQuery))
+	}
+	if len(buf) > 0 {
+		return os.WriteFile(outPath, buf, 0o644)
+	}
+
+	copyCtx, cancelCopy := context.WithTimeout(ctx, 8*time.Second)
+	defer cancelCopy()
+	_ = chromedp.Run(copyCtx, chromedp.Click(`//button[contains(.,'复制为图片') or .//span[contains(.,'复制为图片')]]`, chromedp.BySearch))
+	if png, err := readClipboardPNGWithTimeout(ctx, 5*time.Second); err == nil && len(png) > 0 {
 		return os.WriteFile(outPath, png, 0o644)
 	}
-	// 兜底：结果卡元素截图
-	var buf []byte
-	shotCtx, cancelShot := context.WithTimeout(ctx, 10*time.Second)
-	defer cancelShot()
-	if err := chromedp.Run(shotCtx, chromedp.Screenshot(`//*[contains(@class,'product-result')]`, &buf, chromedp.BySearch)); err != nil {
-		return fmt.Errorf("剪贴板与元素截图均失败: %w", err)
+	debugProductCard(ctx, "capture-failed")
+	return fmt.Errorf("产品卡结果区域截图失败")
+}
+
+func productCardName(params map[string]any) string {
+	for _, key := range []string{"产品名称", "product_name", "name"} {
+		if v := strings.TrimSpace(stringArg(params, key)); v != "" {
+			return v
+		}
 	}
-	return os.WriteFile(outPath, buf, 0o644)
+	if u := strings.TrimSpace(stringArg(params, "标的")); u != "" {
+		return u + "产品点位卡"
+	}
+	return "产品点位卡"
+}
+
+func waitProductCardResult(ctx context.Context, cardName string) error {
+	deadline := time.Now().Add(12 * time.Second)
+	var body string
+	for time.Now().Before(deadline) {
+		body = ""
+		readCtx, cancel := context.WithTimeout(ctx, time.Second)
+		_ = chromedp.Run(readCtx, chromedp.Evaluate(`document.body ? document.body.innerText : ''`, &body))
+		cancel()
+		if strings.Contains(body, cardName) && strings.Contains(body, "结构解析") && strings.Contains(body, "敲出参考图") {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if strings.Contains(body, "Please fill out this field") || strings.Contains(body, "请填写") {
+		return fmt.Errorf("产品卡提交失败，表单仍有必填项未通过")
+	}
+	return fmt.Errorf("产品卡提交后未看到新结果: %s", cardName)
+}
+
+func debugProductCard(ctx context.Context, stage string) {
+	_ = os.MkdirAll("public/poster-artifacts", 0o755)
+	var url string
+	_ = chromedp.Run(ctx, chromedp.Location(&url))
+	var body string
+	_ = chromedp.Run(ctx, chromedp.Text("body", &body, chromedp.ByQuery))
+	if len(body) > 4000 {
+		body = body[:4000]
+	}
+	var shot []byte
+	_ = chromedp.Run(ctx, chromedp.FullScreenshot(&shot, 70))
+	_ = os.WriteFile("public/poster-artifacts/product-card-debug-"+stage+".txt", []byte("URL: "+url+"\n\nBODY:\n"+body), 0o644)
+	if len(shot) > 0 {
+		_ = os.WriteFile("public/poster-artifacts/product-card-debug-"+stage+".png", shot, 0o644)
+	}
 }
 
 // selectProductType 把 structure_type 映射成通毓产品点位页 select 的值（DCN/锁盈）。
@@ -483,22 +598,22 @@ func selectProductType(structure string) string {
 }
 
 // productCardFields 把产品参数映射成产品点位页表单字段标签+值（references/product-position-card.md 表）。
-func productCardFields(params map[string]any) []formField {
+func productCardFields(params map[string]any, cardName string) []formField {
 	get := func(k string) string { return stringArg(params, k) }
-	var out []formField
+	out := []formField{{Label: "产品名称", Value: cardName}}
 	add := func(label, key string) {
 		if v := get(key); v != "" {
 			out = append(out, formField{Label: label, Value: v})
 		}
 	}
-	add("期限(月)", "期限")
-	add("锁定期(月)", "锁定期")
-	add("保证金(%)", "保证金")
-	add("敲出线(%)", "期初敲出线")
-	add("降敲(每月)", "降敲")
-	add("降落伞(%)", "降落伞")
-	add("每月或有派息(%)", "费后派息")
-	add("派息线(%)", "派息线")
+	add("期限", "期限")
+	add("锁定期", "锁定期")
+	add("保证金", "保证金")
+	add("敲出线", "期初敲出线")
+	add("降敲", "降敲")
+	add("降落伞", "降落伞")
+	add("每月或有派息", "费后派息")
+	add("派息线", "派息线")
 	add("入场点位", "current_price")
 	return out
 }
@@ -527,4 +642,10 @@ func readClipboardPNG(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("clipboard 无 image/png")
 	}
 	return base64.StdEncoding.DecodeString(b64)
+}
+
+func readClipboardPNGWithTimeout(ctx context.Context, timeout time.Duration) ([]byte, error) {
+	clipCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return readClipboardPNG(clipCtx)
 }
