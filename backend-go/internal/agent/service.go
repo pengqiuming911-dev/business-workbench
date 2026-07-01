@@ -619,14 +619,38 @@ func (s *Service) buildDocxTool(args map[string]any) map[string]any {
 			return map[string]any{"error": "创建飞书文件夹失败：" + err.Error()}
 		}
 	}
-	// 4. 上传
+	// 4. 上传（可选 title 作为文件名，缺省回退带时间戳的默认名）
 	fileName := fmt.Sprintf("推介材料_%s.docx", time.Now().Format("20060102_150405"))
+	if t := stringArg(args, "title"); t != "" {
+		fileName = sanitizeFileName(t) + ".docx"
+	}
 	fileToken, err := fc.UploadDocx(ctx, subToken, fileName, data)
 	if err != nil {
 		return map[string]any{"error": "上传飞书失败：" + err.Error()}
 	}
 	url := "https://" + s.cfg.FeishuDriveDomain + "/file/" + fileToken
 	return map[string]any{"url": url, "file_token": fileToken, "folder": folderName}
+}
+
+// BuildAndUploadDocx 是 HTTP 入口（POST /api/drive/build-docx）的公开封装：
+// 装配 .docx 并上传到飞书 Drive 当年当月子文件夹，返回 {url, file_token, folder}。
+// 供 openclaw 等外部 agent 复用 business-workbench 的飞书 OAuth token 与上传逻辑，
+// 避免每个 agent 各自配 token / 分享 folder。args 与 build_docx 工具一致：
+// {title?, sections:[{type,text,path?,caption?,items?}]}。
+func (s *Service) BuildAndUploadDocx(args map[string]any) map[string]any {
+	return s.buildDocxTool(args)
+}
+
+// sanitizeFileName 把任意字符串清成安全的文件名（去掉路径分隔符与 Windows/飞书非法字符）。
+func sanitizeFileName(s string) string {
+	repl := strings.NewReplacer(
+		"/", "_", "\\", "_", ":", "_", "*", "_", "?", "_",
+		"\"", "_", "|", "_", "<", "_", ">", "_", "\n", "_", "\r", "_")
+	out := strings.TrimSpace(repl.Replace(s))
+	if out == "" {
+		out = "推介材料"
+	}
+	return out
 }
 
 func nextPublicID() string {

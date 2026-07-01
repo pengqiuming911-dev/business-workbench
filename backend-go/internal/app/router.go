@@ -139,6 +139,7 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.GET("/api/drive/product-docs", server.productDocs)
 	router.GET("/api/drive/product-docs/sync-status", server.productDocsSyncStatus)
 	router.POST("/api/drive/sync-product-docs", server.syncProductDocs)
+	router.POST("/api/drive/build-docx", server.driveBuildDocx)
 	router.POST("/api/db/sync-all", server.syncAll)
 	router.POST("/api/db/sync-rebate-detail", server.syncRebateDetail)
 	router.GET("/api/db/rebate-detail-status", server.rebateDetailStatus)
@@ -606,6 +607,33 @@ func (s *Server) driveFiles(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, data)
+}
+
+// driveBuildDocx 装配 .docx 推介材料并上传到飞书 Drive「某年某月产品」子文件夹，返回飞书链接。
+// 供 openclaw 等外部 agent 复用 business-workbench 的飞书 OAuth token，免去各自配 token / 分享 folder。
+// 鉴权：X-Internal-Token 头须匹配 INTERNAL_DOCX_TOKEN（防止公网被乱用），且飞书 user token 须已授权。
+// 请求体：{title?:string, sections:[{type,text,path?,caption?,items?[{label,url}]}]}。
+func (s *Server) driveBuildDocx(c *gin.Context) {
+	if s.cfg.InternalDocxToken != "" {
+		if c.GetHeader("X-Internal-Token") != s.cfg.InternalDocxToken {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
+			return
+		}
+	}
+	if !s.requireFeishuAccess(c) {
+		return
+	}
+	var args map[string]any
+	if err := c.BindJSON(&args); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+	res := s.agentSvc.BuildAndUploadDocx(args)
+	if _, ok := res["error"]; ok {
+		c.JSON(http.StatusInternalServerError, res)
+		return
+	}
+	c.JSON(http.StatusOK, res)
 }
 
 func (s *Server) driveDownload(c *gin.Context) {

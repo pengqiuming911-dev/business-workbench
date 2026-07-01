@@ -31,6 +31,7 @@ type Config struct {
 	ChromePath             string
 	FeishuPitchFolderToken string
 	FeishuDriveDomain      string
+	InternalDocxToken      string
 }
 
 func Load() Config {
@@ -61,6 +62,7 @@ func Load() Config {
 		ChromePath:             os.Getenv("CHROME_PATH"),
 		FeishuPitchFolderToken: getEnv("FEISHU_PITCH_FOLDER_TOKEN", "W9OGfnjzQl8dOOdqPFwcL6gEnkf"),
 		FeishuDriveDomain:      getEnv("FEISHU_DRIVE_DOMAIN", "kcngap16uccc.feishu.cn"),
+		InternalDocxToken:      os.Getenv("INTERNAL_DOCX_TOKEN"),
 	}
 }
 
