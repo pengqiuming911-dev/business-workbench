@@ -97,6 +97,13 @@ jobs:
           if [ -z "$CURRENT_FRONTEND_URL" ]; then
             CURRENT_FRONTEND_URL='${{ secrets.FRONTEND_URL }}'
           fi
+          CURRENT_INTERNAL_DOCX_TOKEN=""
+          if [ -f ${{ env.APP_DIR }}/shared/.env ]; then
+            CURRENT_INTERNAL_DOCX_TOKEN="$(grep '^INTERNAL_DOCX_TOKEN=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+          fi
+          if [ -z "$CURRENT_INTERNAL_DOCX_TOKEN" ]; then
+            CURRENT_INTERNAL_DOCX_TOKEN='${{ secrets.INTERNAL_DOCX_TOKEN }}'
+          fi
           cat > ${{ env.APP_DIR }}/shared/.env << 'EOF'
           FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}
@@ -118,9 +125,11 @@ jobs:
           SMTP_PASS=${{ secrets.SMTP_PASS }}
           SMTP_FROM=${{ secrets.SMTP_FROM }}
           CRON_TIMEZONE=Asia/Shanghai
+          INTERNAL_DOCX_TOKEN=__INTERNAL_DOCX_TOKEN__
           EOF
           sed -i "s|__FEISHU_REDIRECT_URI__|$CURRENT_FEISHU_REDIRECT_URI|g" ${{ env.APP_DIR }}/shared/.env
           sed -i "s|__FRONTEND_URL__|$CURRENT_FRONTEND_URL|g" ${{ env.APP_DIR }}/shared/.env
+          sed -i "s|__INTERNAL_DOCX_TOKEN__|$CURRENT_INTERNAL_DOCX_TOKEN|g" ${{ env.APP_DIR }}/shared/.env
           chmod 600 ${{ env.APP_DIR }}/shared/.env
           if [ ! -f ${{ env.APP_DIR }}/shared/data.sqlite ] && [ -f ${{ env.APP_DIR }}/backend-go/data.sqlite ]; then
             cp ${{ env.APP_DIR }}/backend-go/data.sqlite ${{ env.APP_DIR }}/shared/data.sqlite
