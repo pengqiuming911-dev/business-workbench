@@ -133,3 +133,74 @@ func TestUploadDocx(t *testing.T) {
 		t.Errorf("file_token = %q, want filNew", ft)
 	}
 }
+
+func TestCreateDocx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/open-apis/docx/v1/documents" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("auth = %q", got)
+		}
+		b, _ := io.ReadAll(r.Body)
+		body := string(b)
+		if !strings.Contains(body, `"title":"Pitch"`) || !strings.Contains(body, `"folder_token":"fldMonth"`) {
+			t.Errorf("body = %s, want title+folder_token", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"code":0,"data":{"document":{"document_id":"docNew","title":"Pitch"}}}`))
+	}))
+	t.Cleanup(srv.Close)
+	orig := feishuBase
+	feishuBase = srv.URL
+	t.Cleanup(func() { feishuBase = orig })
+
+	c := newAuthedClient(t, srv)
+	doc, err := c.CreateDocx(context.Background(), "Pitch", "fldMonth", "kcngap16uccc.feishu.cn")
+	if err != nil {
+		t.Fatalf("CreateDocx: %v", err)
+	}
+	if doc.DocumentID != "docNew" || doc.URL != "https://kcngap16uccc.feishu.cn/docx/docNew" {
+		t.Errorf("doc = %+v", doc)
+	}
+}
+
+func TestWriteDocxMarkdown(t *testing.T) {
+	seenConvert := false
+	seenInsert := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/open-apis/docx/v1/documents/blocks/convert":
+			seenConvert = true
+			b, _ := io.ReadAll(r.Body)
+			if !strings.Contains(string(b), `"content_type":"markdown"`) || !strings.Contains(string(b), `# Title`) {
+				t.Errorf("convert body = %s", b)
+			}
+			w.Write([]byte(`{"code":0,"data":{"blocks":[{"block_type":2,"text":{"elements":[{"text_run":{"content":"Title"}}]}}]}}`))
+		case "/open-apis/docx/v1/documents/docNew/blocks/docNew/children":
+			seenInsert = true
+			b, _ := io.ReadAll(r.Body)
+			if !strings.Contains(string(b), `"children"`) || !strings.Contains(string(b), `"block_type":2`) {
+				t.Errorf("insert body = %s", b)
+			}
+			w.Write([]byte(`{"code":0,"data":{"children":[{"block_id":"blk1"}]}}`))
+		default:
+			t.Errorf("unexpected path = %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	orig := feishuBase
+	feishuBase = srv.URL
+	t.Cleanup(func() { feishuBase = orig })
+
+	c := newAuthedClient(t, srv)
+	added, err := c.WriteDocxMarkdown(context.Background(), "docNew", "# Title")
+	if err != nil {
+		t.Fatalf("WriteDocxMarkdown: %v", err)
+	}
+	if added != 1 || !seenConvert || !seenInsert {
+		t.Fatalf("added=%d seenConvert=%v seenInsert=%v", added, seenConvert, seenInsert)
+	}
+}

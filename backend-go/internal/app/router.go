@@ -140,6 +140,8 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.GET("/api/drive/product-docs/sync-status", server.productDocsSyncStatus)
 	router.POST("/api/drive/sync-product-docs", server.syncProductDocs)
 	router.POST("/api/drive/build-docx", server.driveBuildDocx)
+	router.POST("/api/drive/create-docx", server.driveCreateDocx)
+	router.POST("/api/drive/create-docs", server.driveCreateDocx)
 	router.POST("/api/db/sync-all", server.syncAll)
 	router.POST("/api/db/sync-rebate-detail", server.syncRebateDetail)
 	router.GET("/api/db/rebate-detail-status", server.rebateDetailStatus)
@@ -232,7 +234,7 @@ func (s *Server) authLogin(c *gin.Context) {
 		c.JSON(http.StatusNotImplemented, gin.H{"error": "Feishu OAuth is not configured in Go backend"})
 		return
 	}
-	scope := "drive:drive drive:file drive:export:readonly space:document:retrieve bitable:app:readonly bitable:app docx:document docx:document:readonly"
+	scope := "drive:drive drive:file drive:export:readonly space:document:retrieve bitable:app:readonly bitable:app docx:document docx:document:readonly docx:document.block:convert"
 	url := "https://open.feishu.cn/open-apis/authen/v1/authorize" +
 		"?app_id=" + s.cfg.FeishuAppID +
 		"&redirect_uri=" + urlQueryEscape(s.cfg.FeishuRedirectURI) +
@@ -634,6 +636,82 @@ func (s *Server) driveBuildDocx(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, res)
+}
+
+type createDocxRequest struct {
+	Title       string `json:"title"`
+	Content     string `json:"content"`
+	FolderToken string `json:"folder_token"`
+	FolderName  string `json:"folder_name"`
+}
+
+// driveCreateDocx creates a Feishu native docx document and optionally writes markdown content.
+// This returns a /docx/ link, not an uploaded Word file link.
+func (s *Server) driveCreateDocx(c *gin.Context) {
+	if s.cfg.InternalDocxToken != "" {
+		if c.GetHeader("X-Internal-Token") != s.cfg.InternalDocxToken {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
+			return
+		}
+	}
+	if !s.requireFeishuAccess(c) {
+		return
+	}
+	var req createDocxRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.FolderToken = strings.TrimSpace(req.FolderToken)
+	req.FolderName = strings.TrimSpace(req.FolderName)
+	if req.Title == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing title"})
+		return
+	}
+
+	folderToken := req.FolderToken
+	folderName := req.FolderName
+	if folderToken == "" {
+		if folderName == "" {
+			folderName = time.Now().Format("2006年1月产品")
+		}
+		subToken, found, err := s.feishu.FindSubfolder(c.Request.Context(), s.cfg.FeishuPitchFolderToken, folderName)
+		if err != nil {
+			writeDriveError(c, fmt.Errorf("查找飞书文件夹失败: %w", err))
+			return
+		}
+		if !found {
+			subToken, err = s.feishu.CreateFolder(c.Request.Context(), s.cfg.FeishuPitchFolderToken, folderName)
+			if err != nil {
+				writeDriveError(c, fmt.Errorf("创建飞书文件夹失败: %w", err))
+				return
+			}
+		}
+		folderToken = subToken
+	}
+
+	doc, err := s.feishu.CreateDocx(c.Request.Context(), req.Title, folderToken, s.cfg.FeishuDriveDomain)
+	if err != nil {
+		writeDriveError(c, err)
+		return
+	}
+	blocksAdded := 0
+	if strings.TrimSpace(req.Content) != "" {
+		blocksAdded, err = s.feishu.WriteDocxMarkdown(c.Request.Context(), doc.DocumentID, req.Content)
+		if err != nil {
+			writeDriveError(c, fmt.Errorf("写入飞书云文档失败: %w", err))
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"url":          doc.URL,
+		"doc_token":    doc.DocumentID,
+		"title":        doc.Title,
+		"folder":       folderName,
+		"folder_token": folderToken,
+		"blocks_added": blocksAdded,
+	})
 }
 
 func (s *Server) driveDownload(c *gin.Context) {

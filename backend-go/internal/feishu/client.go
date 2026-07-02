@@ -61,6 +61,12 @@ type CurrentUser struct {
 	UserID    string `json:"user_id"`
 }
 
+type CreatedDocx struct {
+	DocumentID string `json:"document_id"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+}
+
 func New(appID, appSecret, redirectURI string) *Client {
 	return &Client{
 		AppID:       appID,
@@ -616,9 +622,9 @@ func (c *Client) GetSheetMetaData(ctx context.Context, spreadsheetToken string) 
 }
 
 type SheetMeta struct {
-	SheetID    string `json:"sheet_id"`
-	Title      string `json:"title"`
-	GridProps  struct {
+	SheetID   string `json:"sheet_id"`
+	Title     string `json:"title"`
+	GridProps struct {
 		ColumnCount int `json:"column_count"`
 		RowCount    int `json:"row_count"`
 	} `json:"grid_properties"`
@@ -940,6 +946,114 @@ func (c *Client) UploadDocx(ctx context.Context, parentFolderToken, fileName str
 		return "", fmt.Errorf("upload_all returned empty file_token")
 	}
 	return resp.Data.FileToken, nil
+}
+
+// CreateDocx creates a Feishu native docx document, optionally under a folder.
+func (c *Client) CreateDocx(ctx context.Context, title, folderToken, driveDomain string) (*CreatedDocx, error) {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]any{"title": title}
+	if folderToken != "" {
+		payload["folder_token"] = folderToken
+	}
+	body, err := c.post(ctx, feishuBase+"/open-apis/docx/v1/documents", payload, token)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			Document struct {
+				DocumentID string `json:"document_id"`
+				Title      string `json:"title"`
+			} `json:"document"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("create docx parse: %w", err)
+	}
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("create docx code %d: %s", resp.Code, resp.Msg)
+	}
+	doc := resp.Data.Document
+	if doc.DocumentID == "" {
+		return nil, fmt.Errorf("create docx returned empty document_id")
+	}
+	if driveDomain == "" {
+		driveDomain = "feishu.cn"
+	}
+	return &CreatedDocx{
+		DocumentID: doc.DocumentID,
+		Title:      doc.Title,
+		URL:        "https://" + driveDomain + "/docx/" + doc.DocumentID,
+	}, nil
+}
+
+// WriteDocxMarkdown converts markdown to Feishu docx blocks and inserts them.
+// It is intended for newly created blank documents.
+func (c *Client) WriteDocxMarkdown(ctx context.Context, documentID, markdown string) (int, error) {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return 0, err
+	}
+	blocks, err := c.convertMarkdown(ctx, token, markdown)
+	if err != nil {
+		return 0, err
+	}
+	added := 0
+	for _, block := range blocks {
+		body, err := c.post(ctx,
+			feishuBase+"/open-apis/docx/v1/documents/"+url.PathEscape(documentID)+"/blocks/"+url.PathEscape(documentID)+"/children",
+			map[string]any{"children": []any{block}},
+			token,
+		)
+		if err != nil {
+			return added, err
+		}
+		var resp struct {
+			Code int    `json:"code"`
+			Msg  string `json:"msg"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return added, fmt.Errorf("insert docx block parse: %w", err)
+		}
+		if resp.Code != 0 {
+			return added, fmt.Errorf("insert docx block code %d: %s", resp.Code, resp.Msg)
+		}
+		added++
+	}
+	return added, nil
+}
+
+func (c *Client) convertMarkdown(ctx context.Context, token, markdown string) ([]any, error) {
+	markdown = strings.TrimSpace(markdown)
+	if markdown == "" {
+		return nil, nil
+	}
+	body, err := c.post(ctx, feishuBase+"/open-apis/docx/v1/documents/blocks/convert", map[string]any{
+		"content_type": "markdown",
+		"content":      markdown,
+	}, token)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			Blocks []any `json:"blocks"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("convert markdown parse: %w", err)
+	}
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("convert markdown code %d: %s", resp.Code, resp.Msg)
+	}
+	return resp.Data.Blocks, nil
 }
 
 // postMultipart 发 multipart/form-data 请求。fields 为普通字段，fileName+data 为文件字段。
