@@ -32,6 +32,7 @@ type Config struct {
 	FeishuPitchFolderToken string
 	FeishuDriveDomain      string
 	InternalDocxToken      string
+	InternalDocxAllowIPs   string
 }
 
 func Load() Config {
@@ -63,6 +64,7 @@ func Load() Config {
 		FeishuPitchFolderToken: getEnv("FEISHU_PITCH_FOLDER_TOKEN", "W9OGfnjzQl8dOOdqPFwcL6gEnkf"),
 		FeishuDriveDomain:      getEnv("FEISHU_DRIVE_DOMAIN", "kcngap16uccc.feishu.cn"),
 		InternalDocxToken:      os.Getenv("INTERNAL_DOCX_TOKEN"),
+		InternalDocxAllowIPs:   os.Getenv("INTERNAL_DOCX_ALLOW_IPS"),
 	}
 }
 
