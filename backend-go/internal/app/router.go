@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -142,6 +143,7 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.POST("/api/drive/build-docx", server.driveBuildDocx)
 	router.POST("/api/drive/create-docx", server.driveCreateDocx)
 	router.POST("/api/drive/create-docs", server.driveCreateDocx)
+	router.POST("/api/drive/upload-docx", server.driveUploadDocx)
 	router.POST("/api/db/sync-all", server.syncAll)
 	router.POST("/api/db/sync-rebate-detail", server.syncRebateDetail)
 	router.GET("/api/db/rebate-detail-status", server.rebateDetailStatus)
@@ -673,10 +675,16 @@ func (s *Server) driveCreateDocx(c *gin.Context) {
 	folderToken := req.FolderToken
 	folderName := req.FolderName
 	if folderToken == "" {
+		yearMonth := time.Now().Format("2006年1月")
 		if folderName == "" {
-			folderName = time.Now().Format("2006年1月产品")
+			folderName = yearMonth + "产品"
 		}
-		subToken, found, err := s.feishu.FindSubfolder(c.Request.Context(), s.cfg.FeishuPitchFolderToken, folderName)
+		// 模糊匹配：默认用 yearMonth（命中"2026年7月产品"等带后缀的既有文件夹）；用户指定 folder_name 时按指定名匹配。
+		substr := folderName
+		if req.FolderName == "" {
+			substr = yearMonth
+		}
+		subToken, found, err := s.feishu.FindSubfolderFuzzy(c.Request.Context(), s.cfg.FeishuPitchFolderToken, substr)
 		if err != nil {
 			writeDriveError(c, fmt.Errorf("查找飞书文件夹失败: %w", err))
 			return
@@ -711,6 +719,68 @@ func (s *Server) driveCreateDocx(c *gin.Context) {
 		"folder":       folderName,
 		"folder_token": folderToken,
 		"blocks_added": blocksAdded,
+	})
+}
+
+// driveUploadDocx 接收已装配好的 .docx 二进制，上传到飞书云空间当年当月子文件夹，
+// 返回 {url, file_token, folder}。与 build-docx 的区别：不接收 sections、不在服务端装配，
+// 图片已由调用方在本地嵌入 .docx，规避"服务端读不到本地图"的约束。
+// 请求体 multipart/form-data: file(必填, .docx 二进制), title(可选, 文件名)。
+func (s *Server) driveUploadDocx(c *gin.Context) {
+	if s.cfg.InternalDocxToken != "" {
+		if c.GetHeader("X-Internal-Token") != s.cfg.InternalDocxToken {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
+			return
+		}
+	}
+	if !s.requireFeishuAccess(c) {
+		return
+	}
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing file: " + err.Error()})
+		return
+	}
+	f, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "open file failed: " + err.Error()})
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read file failed: " + err.Error()})
+		return
+	}
+	title := strings.TrimSpace(c.PostForm("title"))
+	fileName := fmt.Sprintf("推介材料_%s.docx", time.Now().Format("20060102_150405"))
+	if title != "" {
+		fileName = agent.SanitizeFileName(title) + ".docx"
+	}
+	yearMonth := time.Now().Format("2006年1月")
+	folderName := yearMonth + "产品"
+	subToken, found, err := s.feishu.FindSubfolderFuzzy(c.Request.Context(), s.cfg.FeishuPitchFolderToken, yearMonth)
+	if err != nil {
+		writeDriveError(c, fmt.Errorf("查找飞书文件夹失败: %w", err))
+		return
+	}
+	if !found {
+		subToken, err = s.feishu.CreateFolder(c.Request.Context(), s.cfg.FeishuPitchFolderToken, folderName)
+		if err != nil {
+			writeDriveError(c, fmt.Errorf("创建飞书文件夹失败: %w", err))
+			return
+		}
+	}
+	fileToken, err := s.feishu.UploadDocx(c.Request.Context(), subToken, fileName, data)
+	if err != nil {
+		writeDriveError(c, fmt.Errorf("上传飞书失败: %w", err))
+		return
+	}
+	url := "https://" + s.cfg.FeishuDriveDomain + "/file/" + fileToken
+	c.JSON(http.StatusOK, gin.H{
+		"url":        url,
+		"file_token": fileToken,
+		"folder":     folderName,
 	})
 }
 
