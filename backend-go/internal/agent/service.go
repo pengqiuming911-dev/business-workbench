@@ -606,10 +606,12 @@ func (s *Service) buildDocxTool(args map[string]any) map[string]any {
 	// 2. 飞书 client（复用持久化 user token）
 	fc := feishu.New(s.cfg.FeishuAppID, s.cfg.FeishuAppSecret, s.cfg.FeishuRedirectURI)
 	fc.SetTokenPersistPath(".feishu-user-token")
-	// 3. find-or-create 当年当月子文件夹（命名「某年某月产品」对齐既有产品材料文件夹约定）
-	folderName := time.Now().Format("2006年1月产品")
+	// 3. find-or-create 当年当月子文件夹：模糊匹配含"某年某月"的既有文件夹（兼容"2026年7月产品"等带后缀名），
+	//    都不命中则新建，命名「某年某月产品」对齐既有产品材料文件夹约定。
+	yearMonth := time.Now().Format("2006年1月")
+	folderName := yearMonth + "产品"
 	ctx := context.Background()
-	subToken, found, err := fc.FindSubfolder(ctx, s.cfg.FeishuPitchFolderToken, folderName)
+	subToken, found, err := fc.FindSubfolderFuzzy(ctx, s.cfg.FeishuPitchFolderToken, yearMonth)
 	if err != nil {
 		return map[string]any{"error": "查找飞书文件夹失败：" + err.Error()}
 	}
@@ -622,7 +624,7 @@ func (s *Service) buildDocxTool(args map[string]any) map[string]any {
 	// 4. 上传（可选 title 作为文件名，缺省回退带时间戳的默认名）
 	fileName := fmt.Sprintf("推介材料_%s.docx", time.Now().Format("20060102_150405"))
 	if t := stringArg(args, "title"); t != "" {
-		fileName = sanitizeFileName(t) + ".docx"
+		fileName = SanitizeFileName(t) + ".docx"
 	}
 	fileToken, err := fc.UploadDocx(ctx, subToken, fileName, data)
 	if err != nil {
@@ -641,8 +643,8 @@ func (s *Service) BuildAndUploadDocx(args map[string]any) map[string]any {
 	return s.buildDocxTool(args)
 }
 
-// sanitizeFileName 把任意字符串清成安全的文件名（去掉路径分隔符与 Windows/飞书非法字符）。
-func sanitizeFileName(s string) string {
+// SanitizeFileName 把任意字符串清成安全的文件名（去掉路径分隔符与 Windows/飞书非法字符）。
+func SanitizeFileName(s string) string {
 	repl := strings.NewReplacer(
 		"/", "_", "\\", "_", ":", "_", "*", "_", "?", "_",
 		"\"", "_", "|", "_", "<", "_", ">", "_", "\n", "_", "\r", "_")

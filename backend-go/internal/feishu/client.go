@@ -911,6 +911,31 @@ func (c *Client) FindSubfolder(ctx context.Context, parentToken, name string) (s
 	return "", false, nil
 }
 
+// FindSubfolderFuzzy 在 parentToken 下找 name 包含 substr 的子文件夹（模糊匹配，
+// 兼容"2026年7月"命中"2026年7月产品"等带后缀的既有文件夹）。多个命中取第一个；
+// 都不命中返回 ("", false, nil)。
+func (c *Client) FindSubfolderFuzzy(ctx context.Context, parentToken, substr string) (string, bool, error) {
+	raw, err := c.DriveFiles(ctx, parentToken, "", "")
+	if err != nil {
+		return "", false, err
+	}
+	files, _ := raw["files"].([]any)
+	for _, f := range files {
+		m, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		n, _ := m["name"].(string)
+		ty, _ := m["type"].(string)
+		if strings.Contains(n, substr) && (ty == "folder" || ty == "") {
+			if tok, _ := m["token"].(string); tok != "" {
+				return tok, true, nil
+			}
+		}
+	}
+	return "", false, nil
+}
+
 // UploadDocx 把 data 作为 fileName 上传到 parentFolderToken，返回 file_token。
 // URL 由调用方（buildDocxTool）用 config.FeishuDriveDomain 构造，避免 feishu 包依赖 config。
 // 用 upload_all（单次，< 20MB）。
