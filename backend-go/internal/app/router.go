@@ -107,6 +107,8 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	server.feishu.SetTokenPersistPath(".feishu-user-token")
 
 	router := gin.Default()
+	// 只信任本机 Nginx 的 X-Forwarded-For，配合 isLocalhost 判断同机调用、防外网伪造绕过
+	router.SetTrustedProxies([]string{"127.0.0.1", "::1"})
 	router.Static("/public", "public")
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{cfg.FrontendURL},
@@ -260,6 +262,14 @@ func (s *Server) authCallback(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusFound, target+"/data-preparation?auth=success")
+}
+
+// isLocalhost 判断请求是否来自本机（同机服务间调用，如小龙虾→workbench）。
+// 配合 SetTrustedProxies(["127.0.0.1","::1"])，ClientIP 取自可信 Nginx 的 X-Forwarded-For，
+// 外网无法靠伪造 X-Forwarded-For: 127.0.0.1 绕过 INTERNAL_DOCX_TOKEN 鉴权。
+func isLocalhost(c *gin.Context) bool {
+	ip := c.ClientIP()
+	return ip == "127.0.0.1" || ip == "::1" || ip == "::"
 }
 
 func (s *Server) requireFeishuAccess(c *gin.Context) bool {
@@ -618,7 +628,7 @@ func (s *Server) driveFiles(c *gin.Context) {
 // 鉴权：X-Internal-Token 头须匹配 INTERNAL_DOCX_TOKEN（防止公网被乱用），且飞书 user token 须已授权。
 // 请求体：{title?:string, sections:[{type,text,path?,caption?,items?[{label,url}]}]}。
 func (s *Server) driveBuildDocx(c *gin.Context) {
-	if s.cfg.InternalDocxToken != "" {
+	if !isLocalhost(c) && s.cfg.InternalDocxToken != "" {
 		if c.GetHeader("X-Internal-Token") != s.cfg.InternalDocxToken {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
 			return
@@ -650,7 +660,7 @@ type createDocxRequest struct {
 // driveCreateDocx creates a Feishu native docx document and optionally writes markdown content.
 // This returns a /docx/ link, not an uploaded Word file link.
 func (s *Server) driveCreateDocx(c *gin.Context) {
-	if s.cfg.InternalDocxToken != "" {
+	if !isLocalhost(c) && s.cfg.InternalDocxToken != "" {
 		if c.GetHeader("X-Internal-Token") != s.cfg.InternalDocxToken {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
 			return
@@ -727,7 +737,7 @@ func (s *Server) driveCreateDocx(c *gin.Context) {
 // 图片已由调用方在本地嵌入 .docx，规避"服务端读不到本地图"的约束。
 // 请求体 multipart/form-data: file(必填, .docx 二进制), title(可选, 文件名)。
 func (s *Server) driveUploadDocx(c *gin.Context) {
-	if s.cfg.InternalDocxToken != "" {
+	if !isLocalhost(c) && s.cfg.InternalDocxToken != "" {
 		if c.GetHeader("X-Internal-Token") != s.cfg.InternalDocxToken {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
 			return
