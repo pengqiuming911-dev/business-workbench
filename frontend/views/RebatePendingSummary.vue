@@ -228,10 +228,12 @@ const filters = ref({
   productName: '',
 })
 
+const EMPTY_REBATE_TARGET = '未填写返还人'
+
 const groupedRows = computed(() => {
   const groups = new Map()
   for (const item of items.value) {
-    const key = item.rebate_target || '未填写返还人'
+    const key = targetKey(item)
     if (!groups.has(key)) {
       groups.set(key, {
         rebate_target: key,
@@ -378,7 +380,7 @@ async function fetchData() {
     if (!res.ok) throw new Error('加载失败')
     const data = await res.json()
     items.value = (data.items || []).map(normalizeItem)
-    selectedTargets.value = new Set()
+    restoreSelectedTargetsFromFlow()
   } catch {
     items.value = []
     selectedTargets.value = new Set()
@@ -423,7 +425,7 @@ function isGroupPlanned(group) {
 }
 
 function isGroupSelected(group) {
-  return selectedTargets.value.has(group.rebate_target)
+  return selectedTargets.value.has(targetKey(group))
 }
 
 function isItemReviewed(item) {
@@ -448,7 +450,7 @@ function isGroupPaymentSent(group) {
 
 function selectedPlannedItems() {
   const selected = selectedTargets.value
-  return items.value.filter(item => selected.has(item.rebate_target || '鏈～鍐欒繑杩樹汉'))
+  return items.value.filter(item => selected.has(targetKey(item)))
 }
 
 function selectedReviewedItems() {
@@ -535,9 +537,9 @@ async function toggleGroupPlan(group, event) {
   const checked = event.target.checked
   const next = new Set(selectedTargets.value)
   if (checked) {
-    next.add(group.rebate_target)
+    next.add(targetKey(group))
   } else {
-    next.delete(group.rebate_target)
+    next.delete(targetKey(group))
   }
   selectedTargets.value = next
   for (const item of group.items) {
@@ -566,6 +568,26 @@ async function toggleGroupPlan(group, event) {
   }
 }
 
+function targetKey(item) {
+  return item.rebate_target || EMPTY_REBATE_TARGET
+}
+
+function restoreSelectedTargetsFromFlow() {
+  const groups = new Map()
+  for (const item of items.value) {
+    const key = targetKey(item)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(item)
+  }
+  const active = new Set()
+  for (const [key, groupItems] of groups.entries()) {
+    const inActiveFlow = groupItems.length > 0 && groupItems.every(item => {
+      return isItemPlanned(item) && (isItemReviewed(item) || isItemPaymentSent(item))
+    })
+    if (inActiveFlow) active.add(key)
+  }
+  selectedTargets.value = active
+}
 async function downloadSelectedWorkbook() {
   const targets = selectedPlannedItems()
   if (targets.length === 0 || busyAction.value) return
@@ -889,3 +911,4 @@ thead .sticky-col {
   }
 }
 </style>
+
