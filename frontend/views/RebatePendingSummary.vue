@@ -137,13 +137,23 @@
                   </label>
                 </td>
                 <td class="plan-cell">
-                  <label class="state-check">
-                    <input type="checkbox" :checked="isGroupReviewed(group)" disabled />
+                  <label class="state-check" :class="{ selectable: isGroupReviewed(group) }">
+                    <input
+                      type="checkbox"
+                      :disabled="!isGroupReviewed(group)"
+                      :checked="isGroupReviewSelected(group)"
+                      @change="toggleGroupReviewSelection(group, $event)"
+                    />
                   </label>
                 </td>
                 <td class="plan-cell">
-                  <label class="state-check">
-                    <input type="checkbox" :checked="isGroupPaymentSent(group)" disabled />
+                  <label class="state-check" :class="{ selectable: isGroupPaymentSent(group) }">
+                    <input
+                      type="checkbox"
+                      :disabled="!isGroupPaymentSent(group)"
+                      :checked="isGroupPaymentSelected(group)"
+                      @change="toggleGroupPaymentSelection(group, $event)"
+                    />
                   </label>
                 </td>
               </tr>
@@ -217,6 +227,8 @@ const busyAction = ref('')
 const items = ref([])
 const expanded = ref({})
 const selectedTargets = ref(new Set())
+const reviewSelectedTargets = ref(new Set())
+const paymentSelectedTargets = ref(new Set())
 const page = ref(1)
 const pageSize = ref(20)
 
@@ -384,6 +396,8 @@ async function fetchData() {
   } catch {
     items.value = []
     selectedTargets.value = new Set()
+    reviewSelectedTargets.value = new Set()
+    paymentSelectedTargets.value = new Set()
   } finally {
     loading.value = false
     loaded.value = true
@@ -436,6 +450,10 @@ function isGroupReviewed(group) {
   return group.items.length > 0 && group.items.every(isItemReviewed)
 }
 
+function isGroupReviewSelected(group) {
+  return reviewSelectedTargets.value.has(targetKey(group))
+}
+
 function isItemPaymentSent(item) {
   return isEnabledFlag(item.payment_sent)
 }
@@ -448,17 +466,23 @@ function isGroupPaymentSent(group) {
   return group.items.length > 0 && group.items.every(isItemPaymentSent)
 }
 
+function isGroupPaymentSelected(group) {
+  return paymentSelectedTargets.value.has(targetKey(group))
+}
+
 function selectedPlannedItems() {
   const selected = selectedTargets.value
   return items.value.filter(item => selected.has(targetKey(item)))
 }
 
 function selectedReviewedItems() {
-  return selectedPlannedItems().filter(isItemReviewed)
+  const selected = reviewSelectedTargets.value
+  return items.value.filter(item => selected.has(targetKey(item)) && isItemPlanned(item) && isItemReviewed(item))
 }
 
 function selectedPaymentItems() {
-  return selectedPlannedItems().filter(item => isItemReviewed(item) && isItemPaymentSent(item))
+  const selected = paymentSelectedTargets.value
+  return items.value.filter(item => selected.has(targetKey(item)) && isItemPlanned(item) && isItemReviewed(item) && isItemPaymentSent(item))
 }
 
 function sumFlowItems(sourceItems) {
@@ -506,6 +530,7 @@ async function sendReview() {
   try {
     await postFlow('/api/rebate/pending/send-review', targets, 'review')
     for (const item of targets) item.review_sent = 1
+    reviewSelectedTargets.value = new Set()
   } catch (e) {
     alert(e.message || '发送审核失败')
   }
@@ -517,6 +542,8 @@ async function sendPayment() {
   try {
     await postFlow('/api/rebate/pending/send-payment', targets, 'payment')
     for (const item of targets) item.payment_sent = 1
+    reviewSelectedTargets.value = new Set()
+    paymentSelectedTargets.value = new Set()
   } catch (e) {
     alert(e.message || '发送打款失败')
   }
@@ -568,6 +595,26 @@ async function toggleGroupPlan(group, event) {
   }
 }
 
+function toggleGroupReviewSelection(group, event) {
+  const next = new Set(reviewSelectedTargets.value)
+  if (event.target.checked) {
+    next.add(targetKey(group))
+  } else {
+    next.delete(targetKey(group))
+  }
+  reviewSelectedTargets.value = next
+}
+
+function toggleGroupPaymentSelection(group, event) {
+  const next = new Set(paymentSelectedTargets.value)
+  if (event.target.checked) {
+    next.add(targetKey(group))
+  } else {
+    next.delete(targetKey(group))
+  }
+  paymentSelectedTargets.value = next
+}
+
 function targetKey(item) {
   return item.rebate_target || EMPTY_REBATE_TARGET
 }
@@ -587,6 +634,8 @@ function restoreSelectedTargetsFromFlow() {
     if (inActiveFlow) active.add(key)
   }
   selectedTargets.value = active
+  reviewSelectedTargets.value = new Set()
+  paymentSelectedTargets.value = new Set()
 }
 async function downloadSelectedWorkbook() {
   const targets = selectedPlannedItems()
@@ -837,7 +886,17 @@ thead .sticky-col {
 .state-check input {
   width: 16px;
   height: 16px;
-  accent-color: var(--brand);
+  accent-color: #16a34a;
+}
+
+.state-check input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.state-check.selectable input {
+  cursor: pointer;
+  opacity: 1;
 }
 
 .flow-btn {
