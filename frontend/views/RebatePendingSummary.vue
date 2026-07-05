@@ -87,17 +87,17 @@
               <th class="num sub-unreturned">管理费</th>
               <th class="num sub-unreturned">业绩报酬</th>
               <th class="sub-plan">
-                <button class="flow-btn" type="button" :disabled="flowLoading" @click="sendReview">
+                <button class="flow-btn" type="button" :disabled="busyAction === 'review' || selectedPlannedItems().length === 0" @click="sendReview">
                   发送审核
                 </button>
               </th>
               <th class="sub-review">
-                <button class="flow-btn" type="button" :disabled="flowLoading" @click="sendPayment">
+                <button class="flow-btn" type="button" :disabled="busyAction === 'payment' || selectedReviewedItems().length === 0" @click="sendPayment">
                   发送打款
                 </button>
               </th>
               <th class="sub-payment">
-                <button class="flow-btn" type="button" :disabled="flowLoading" @click="completePayment">
+                <button class="flow-btn" type="button" :disabled="busyAction === 'complete' || selectedPaymentItems().length === 0" @click="completePayment">
                   支付完成
                 </button>
               </th>
@@ -179,6 +179,15 @@
               </tr>
             </template>
           </tbody>
+          <tfoot>
+            <tr class="summary-total-row">
+              <td class="sticky-col">合计</td>
+              <td colspan="12"></td>
+              <td>{{ fmtNum(selectedPlannedTotal) }}</td>
+              <td>{{ fmtNum(selectedReviewedTotal) }}</td>
+              <td>{{ fmtNum(selectedPaymentTotal) }}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
@@ -204,7 +213,7 @@ defineProps({
 
 const loading = ref(false)
 const loaded = ref(false)
-const flowLoading = ref(false)
+const busyAction = ref('')
 const items = ref([])
 const expanded = ref({})
 const page = ref(1)
@@ -265,6 +274,10 @@ const pagedGroups = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return groupedRows.value.slice(start, start + pageSize.value)
 })
+
+const selectedPlannedTotal = computed(() => sumFlowItems(selectedPlannedItems()))
+const selectedReviewedTotal = computed(() => sumFlowItems(selectedReviewedItems()))
+const selectedPaymentTotal = computed(() => sumFlowItems(selectedPaymentItems()))
 
 onMounted(fetchData)
 
@@ -434,6 +447,12 @@ function selectedPaymentItems() {
   return items.value.filter(item => isItemPlanned(item) && isItemReviewed(item) && isItemPaymentSent(item))
 }
 
+function sumFlowItems(sourceItems) {
+  return sourceItems.reduce((sum, item) => {
+    return sum + Math.max(0, outstanding(item, 'subscribe')) + Math.max(0, outstanding(item, 'management')) + Math.max(0, outstanding(item, 'performance'))
+  }, 0)
+}
+
 function flowPayload(sourceItems) {
   return {
     rebate_target: sourceItems.length === 1 ? sourceItems[0].rebate_target : '',
@@ -450,9 +469,9 @@ function flowPayload(sourceItems) {
   }
 }
 
-async function postFlow(url, sourceItems) {
-  if (sourceItems.length === 0 || flowLoading.value) return null
-  flowLoading.value = true
+async function postFlow(url, sourceItems, action) {
+  if (sourceItems.length === 0 || busyAction.value) return null
+  busyAction.value = action
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -463,7 +482,7 @@ async function postFlow(url, sourceItems) {
     if (!res.ok) throw new Error(data.error || '操作失败')
     return data
   } finally {
-    flowLoading.value = false
+    busyAction.value = ''
   }
 }
 
@@ -471,7 +490,7 @@ async function sendReview() {
   const targets = selectedPlannedItems()
   if (targets.length === 0) return
   try {
-    await postFlow('/api/rebate/pending/send-review', targets)
+    await postFlow('/api/rebate/pending/send-review', targets, 'review')
     for (const item of targets) item.review_sent = 1
   } catch (e) {
     alert(e.message || '发送审核失败')
@@ -482,7 +501,7 @@ async function sendPayment() {
   const targets = selectedReviewedItems()
   if (targets.length === 0) return
   try {
-    await postFlow('/api/rebate/pending/send-payment', targets)
+    await postFlow('/api/rebate/pending/send-payment', targets, 'payment')
     for (const item of targets) item.payment_sent = 1
   } catch (e) {
     alert(e.message || '发送打款失败')
@@ -493,7 +512,7 @@ async function completePayment() {
   const targets = selectedPaymentItems()
   if (targets.length === 0) return
   try {
-    await postFlow('/api/rebate/pending/complete-payment', targets)
+    await postFlow('/api/rebate/pending/complete-payment', targets, 'complete')
     await fetchData()
   } catch (e) {
     alert(e.message || '支付完成失败')
@@ -525,8 +544,8 @@ async function toggleGroupPlan(group, event) {
 
 async function downloadSelectedWorkbook() {
   const targets = selectedPlannedItems()
-  if (targets.length === 0 || flowLoading.value) return
-  flowLoading.value = true
+  if (targets.length === 0 || busyAction.value) return
+  busyAction.value = 'download'
   try {
     const res = await fetch('/api/rebate/pending/selected-workbook', {
       method: 'POST',
@@ -547,7 +566,7 @@ async function downloadSelectedWorkbook() {
   } catch (e) {
     alert(e.message || '下载失败')
   } finally {
-    flowLoading.value = false
+    busyAction.value = ''
   }
 }
 </script>
@@ -679,6 +698,23 @@ async function downloadSelectedWorkbook() {
   border-bottom: 1px solid var(--border-soft);
   color: var(--ink-strong);
   background: var(--bg-card);
+}
+
+.pending-summary-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  background: #f8fafc !important;
+  color: var(--ink-strong);
+  font-weight: 800;
+}
+
+.pending-summary-table tfoot .sticky-col {
+  z-index: 12 !important;
+  background: #f8fafc !important;
 }
 
 .summary-row td {
