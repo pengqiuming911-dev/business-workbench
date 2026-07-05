@@ -1,7 +1,7 @@
 <template>
   <div class="rebate-completed-page">
     <div v-if="!embedded" class="page-header">
-      <h1 class="text-page-title">已返费分析</h1>
+      <h1 class="text-page-title">已返费明细</h1>
       <p class="text-body">查看和管理已完成返费的订单记录</p>
     </div>
 
@@ -1297,7 +1297,7 @@ function downloadCSV() {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `已返费分析_${new Date().toISOString().slice(0, 10)}.csv`
+  link.download = `已返费明细_${new Date().toISOString().slice(0, 10)}.csv`
   link.click()
   URL.revokeObjectURL(url)
 }

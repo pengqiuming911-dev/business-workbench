@@ -1,37 +1,30 @@
-# AMAC 管理人/产品公示信息抓取
+# AMAC 管理人/产品公示图
 
-本文档说明如何从中国证券投资基金业协会(AMAC,amac.org.cn)抓取**私募管理人**和**基金产品**的公示信息(登记编号、成立时间、法定代表人、托管人、运作状态等),用于推介材料的"管理人公示""产品公示"两节,通常配截图作为官方来源凭证。
+用于飞书原生云文档第 8 节和第 9 节。
 
-## 何时用
+必须截图 AMAC 详情页，不要截图搜索结果页。
 
-用户要出 Word 推介材料时,材料模板里有"管理人-基金业协会公示图""产品-基金业协会公示图"两节,走本流程抓数据 + 截图。用户没要出材料时不跑。
+URL 规则：
 
-## URL 规则
+- 管理人详情页：`https://www.amac.org.cn/index/qzss/details/?type=1&name=<管理人全称>&code=<登记编号>`
+- 产品详情页：`https://www.amac.org.cn/index/qzss/details/?type=2&code=<产品编码>&ctype=P`
 
-AMAC 全站搜索详情页,同一个 URL 模板,`type` 区分管理人/产品:
+调用 `screenshot_amac`：
 
-- **管理人**:`https://www.amac.org.cn/index/qzss/details/?type=1&name=<管理人全称>&code=<登记编号,如 101000008864>`
-- **产品**:`https://www.amac.org.cn/index/qzss/details/?type=2&code=<产品编码,如 2105110905109934>&ctype=P`
+```json
+{"url":"https://www.amac.org.cn/index/qzss/details/?type=1&name=...&code=..."}
+```
 
-管理人 URL 带 `name`(可省,有 `code` 即可);产品 URL 带 `code` + `ctype=P`。
+截图要求：
+- 等待 JS 异步数据加载完成后再截。
+- 定位详情页实际内容容器，只截有文字、表格、图片的有效区域。
+- 不按浏览器视口整页截图。
+- 截图后 trim/crop，裁掉底部和四周空白，底部距离最后一行内容不超过 20px。
 
-## 关键坑:数据是 JS 异步加载的
+飞书章节写法：
 
-AMAC 详情页的初始 HTML **只有字段名**(登记编号/成立时间等),**值**(P1006143/上官永强等)是 JS 异步加载的。所以**纯 HTTP GET 抓不到值**,必须用浏览器渲染后取。agent 的 `screenshot_amac` 工具(chromedp)会导航到 URL、等 JS 填值、整页截图——你只需把 AMAC URL 传给工具,无需自己驱动浏览器。
-
-## 取数(两种输出)
-
-1. **整页截图**(做公示凭证图,放 Word 里):调 `screenshot_amac` 工具,传 AMAC 详情页 URL。工具用 chromedp 渲染页面(等 JS 填值)、整页截图,返回 PNG 的 `/public/...` path + URL。
-   fullPage 截图带 AMAC 官网头 + 详情,做公示凭证最合适。图偏高,`build_docx` 已做高度上限(20cm)防撑爆页。
-
-2. **结构化字段**(做文字表格,可选):目前 `screenshot_amac` 工具只做整页截图,不提取结构化字段。若需要管理人/产品的字段值(登记编号、成立时间、法定代表人、托管人、运作状态等)做文字表格,从截图人工读取,或后续扩展工具支持 DOM 解析。
-
-## 管理人 vs 产品 字段
-
-管理人页(type=1):登记编号(P 开头)、机构类型、成立时间、登记时间、注册资本、实缴资本、法定代表人、实际控制人、注册/办公地址、会员类型、高管、正在运作/提前清算产品数等。
-
-产品页(type=2):产品名称、产品编码(S 开头)、产品类型、基金类型、成立时间、备案时间、到期日、币种、基金管理人名称、托管人名称、管理类型、运作状态等。
-
-## 字段会变怎么办
-
-AMAC 页结构稳定(不像通毓是动态表单),但字段值 JS 加载。执行时导航后等够时间(1~2 秒)再取;截图前确认值已出现(如 `page.waitForFunction(() => document.body.innerText.includes('P1006143'))` 或直接等 2 秒)。字段定位用文本,不记死 ref。
+```json
+{"type":"heading","text":"管理人-基金业协会公示图"},
+{"type":"body","text":"北京泰创投资管理有限公司\nhttps://www.amac.org.cn/index/qzss/details/?type=1&name=...&code=..."},
+{"type":"image","path":"public/poster-artifacts/amac-manager.png","caption":"管理人基金业协会公示图"}
+```

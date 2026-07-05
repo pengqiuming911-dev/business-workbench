@@ -5,7 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -65,6 +69,11 @@ type CreatedDocx struct {
 	DocumentID string `json:"document_id"`
 	Title      string `json:"title"`
 	URL        string `json:"url"`
+}
+
+type DocxBlock struct {
+	BlockID   string `json:"block_id"`
+	BlockType int    `json:"block_type"`
 }
 
 func New(appID, appSecret, redirectURI string) *Client {
@@ -711,27 +720,82 @@ func (c *Client) walkDriveFolder(ctx context.Context, bearer string, folderToken
 
 func (c *Client) post(ctx context.Context, endpoint string, payload map[string]any, bearer string) ([]byte, error) {
 	data, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
+	var lastStatus int
+	var lastBody string
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			if err := sleepWithContext(ctx, time.Duration(attempt)*1500*time.Millisecond); err != nil {
+				return nil, err
+			}
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		var out bytes.Buffer
+		if _, err := out.ReadFrom(resp.Body); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return out.Bytes(), nil
+		}
+		lastStatus = resp.StatusCode
+		lastBody = out.String()
+		if resp.StatusCode != http.StatusTooManyRequests {
+			break
+		}
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
+	return nil, fmt.Errorf("feishu API status %d: %s", lastStatus, lastBody)
+}
+
+func (c *Client) patch(ctx context.Context, endpoint string, payload map[string]any, bearer string) ([]byte, error) {
+	data, _ := json.Marshal(payload)
+	var lastStatus int
+	var lastBody string
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			if err := sleepWithContext(ctx, time.Duration(attempt)*1500*time.Millisecond); err != nil {
+				return nil, err
+			}
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		var out bytes.Buffer
+		if _, err := out.ReadFrom(resp.Body); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return out.Bytes(), nil
+		}
+		lastStatus = resp.StatusCode
+		lastBody = out.String()
+		if resp.StatusCode != http.StatusTooManyRequests {
+			break
+		}
 	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var out bytes.Buffer
-	if _, err := out.ReadFrom(resp.Body); err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("feishu API status %d: %s", resp.StatusCode, out.String())
-	}
-	return out.Bytes(), nil
+	return nil, fmt.Errorf("feishu API status %d: %s", lastStatus, lastBody)
 }
 
 func (c *Client) get(ctx context.Context, endpoint string, bearer string) ([]byte, error) {
@@ -973,6 +1037,44 @@ func (c *Client) UploadDocx(ctx context.Context, parentFolderToken, fileName str
 	return resp.Data.FileToken, nil
 }
 
+// UploadDocxImage uploads image data as a docx-scoped media resource.
+// parentNode must match the target relation expected by Feishu: use the
+// document ID for initially creating an image block, and the image block ID
+// before calling replace_image.
+func (c *Client) UploadDocxImage(ctx context.Context, parentNode, fileName string, data []byte) (string, error) {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	body, err := c.postMultipart(ctx, feishuBase+"/open-apis/drive/v1/medias/upload_all",
+		map[string]string{
+			"file_name":   fileName,
+			"parent_type": "docx_image",
+			"parent_node": parentNode,
+			"size":        fmt.Sprintf("%d", len(data)),
+		}, fileName, data, token)
+	if err != nil {
+		return "", err
+	}
+	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			FileToken string `json:"file_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("upload docx image parse: %w", err)
+	}
+	if resp.Code != 0 {
+		return "", fmt.Errorf("upload docx image code %d: %s", resp.Code, resp.Msg)
+	}
+	if resp.Data.FileToken == "" {
+		return "", fmt.Errorf("upload docx image returned empty file_token")
+	}
+	return resp.Data.FileToken, nil
+}
+
 // CreateDocx creates a Feishu native docx document, optionally under a folder.
 func (c *Client) CreateDocx(ctx context.Context, title, folderToken, driveDomain string) (*CreatedDocx, error) {
 	token, err := c.ensureValidToken(ctx)
@@ -1017,6 +1119,138 @@ func (c *Client) CreateDocx(ctx context.Context, title, folderToken, driveDomain
 	}, nil
 }
 
+// AddDocxImage appends an image block under the document root and binds image
+// media to it. Feishu requires the media used by replace_image to belong to the
+// image block itself, so this intentionally uploads twice.
+func (c *Client) AddDocxImage(ctx context.Context, documentID, fileName string, data []byte) error {
+	initialToken, err := c.UploadDocxImage(ctx, documentID, fileName, data)
+	if err != nil {
+		return err
+	}
+	blockID, err := c.InsertDocxImage(ctx, documentID, initialToken)
+	if err != nil {
+		return err
+	}
+	blockToken, err := c.UploadDocxImage(ctx, blockID, fileName, data)
+	if err != nil {
+		return err
+	}
+	width, height := DocxImageDisplaySize(data, 600)
+	return c.ReplaceDocxImage(ctx, documentID, blockID, blockToken, width, height)
+}
+
+// InsertDocxImage appends an image block under the document root and returns
+// the created image block ID.
+func (c *Client) InsertDocxImage(ctx context.Context, documentID, imageToken string) (string, error) {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	image := map[string]any{
+		"file_token": imageToken,
+	}
+	block := map[string]any{
+		"block_type": 27,
+		"image":      image,
+	}
+	body, err := c.post(ctx,
+		feishuBase+"/open-apis/docx/v1/documents/"+url.PathEscape(documentID)+"/blocks/"+url.PathEscape(documentID)+"/children",
+		map[string]any{"children": []any{block}},
+		token,
+	)
+	if err != nil {
+		return "", err
+	}
+	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			Children []struct {
+				BlockID string `json:"block_id"`
+			} `json:"children"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("insert docx image parse: %w", err)
+	}
+	if resp.Code != 0 {
+		return "", fmt.Errorf("insert docx image code %d: %s", resp.Code, resp.Msg)
+	}
+	if len(resp.Data.Children) == 0 || resp.Data.Children[0].BlockID == "" {
+		return "", fmt.Errorf("insert docx image returned empty block_id")
+	}
+	return resp.Data.Children[0].BlockID, nil
+}
+
+// DocxImageDisplaySize returns a proportional display size for Feishu docx
+// image blocks. Feishu may preserve the uploaded image's pixel height when only
+// width is replaced, leaving a large blank area under tall images.
+func DocxImageDisplaySize(data []byte, maxWidth int) (int, int) {
+	if maxWidth <= 0 {
+		maxWidth = 600
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+		return maxWidth, 0
+	}
+	width := maxWidth
+	if cfg.Width < width {
+		width = cfg.Width
+	}
+	height := int(math.Round(float64(cfg.Height) * float64(width) / float64(cfg.Width)))
+	if height <= 0 {
+		height = 1
+	}
+	return width, height
+}
+
+// ReplaceDocxImage binds a docx image media token to an existing image block.
+func (c *Client) ReplaceDocxImage(ctx context.Context, documentID, blockID, imageToken string, width, height int) error {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return err
+	}
+	if width <= 0 {
+		width = 600
+	}
+	replaceImage := map[string]any{
+		"token": imageToken,
+		"width": width,
+		"align": 2,
+		"scale": 1,
+	}
+	if height > 0 {
+		replaceImage["height"] = height
+	}
+	payload := map[string]any{
+		"requests": []any{
+			map[string]any{
+				"block_id":      blockID,
+				"replace_image": replaceImage,
+			},
+		},
+	}
+	body, err := c.patch(ctx,
+		feishuBase+"/open-apis/docx/v1/documents/"+url.PathEscape(documentID)+"/blocks/batch_update",
+		payload,
+		token,
+	)
+	if err != nil {
+		return err
+	}
+	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return fmt.Errorf("replace docx image parse: %w", err)
+	}
+	if resp.Code != 0 {
+		return fmt.Errorf("replace docx image code %d: %s", resp.Code, resp.Msg)
+	}
+	return nil
+}
+
 // WriteDocxMarkdown converts markdown to Feishu docx blocks and inserts them.
 // It is intended for newly created blank documents.
 func (c *Client) WriteDocxMarkdown(ctx context.Context, documentID, markdown string) (int, error) {
@@ -1028,29 +1262,57 @@ func (c *Client) WriteDocxMarkdown(ctx context.Context, documentID, markdown str
 	if err != nil {
 		return 0, err
 	}
-	added := 0
-	for _, block := range blocks {
-		body, err := c.post(ctx,
-			feishuBase+"/open-apis/docx/v1/documents/"+url.PathEscape(documentID)+"/blocks/"+url.PathEscape(documentID)+"/children",
-			map[string]any{"children": []any{block}},
-			token,
-		)
-		if err != nil {
-			return added, err
-		}
-		var resp struct {
-			Code int    `json:"code"`
-			Msg  string `json:"msg"`
-		}
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return added, fmt.Errorf("insert docx block parse: %w", err)
-		}
-		if resp.Code != 0 {
-			return added, fmt.Errorf("insert docx block code %d: %s", resp.Code, resp.Msg)
-		}
-		added++
+	if len(blocks) == 0 {
+		return 0, nil
 	}
-	return added, nil
+	inserted, err := c.InsertDocxBlocks(ctx, documentID, blocks)
+	if err != nil {
+		return 0, err
+	}
+	return len(inserted), nil
+}
+
+func (c *Client) MarkdownBlocks(ctx context.Context, markdown string) ([]any, error) {
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return c.convertMarkdown(ctx, token, markdown)
+}
+
+func (c *Client) InsertDocxBlocks(ctx context.Context, documentID string, blocks []any) ([]DocxBlock, error) {
+	if len(blocks) == 0 {
+		return nil, nil
+	}
+	token, err := c.ensureValidToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	body, err := c.post(ctx,
+		feishuBase+"/open-apis/docx/v1/documents/"+url.PathEscape(documentID)+"/blocks/"+url.PathEscape(documentID)+"/children",
+		map[string]any{"children": blocks},
+		token,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			Children []DocxBlock `json:"children"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("insert docx blocks parse: %w", err)
+	}
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("insert docx blocks code %d: %s", resp.Code, resp.Msg)
+	}
+	if len(resp.Data.Children) != len(blocks) {
+		return nil, fmt.Errorf("insert docx blocks returned %d children, want %d", len(resp.Data.Children), len(blocks))
+	}
+	return resp.Data.Children, nil
 }
 
 func (c *Client) convertMarkdown(ctx context.Context, token, markdown string) ([]any, error) {
@@ -1083,42 +1345,68 @@ func (c *Client) convertMarkdown(ctx context.Context, token, markdown string) ([
 
 // postMultipart 发 multipart/form-data 请求。fields 为普通字段，fileName+data 为文件字段。
 func (c *Client) postMultipart(ctx context.Context, endpoint string, fields map[string]string, fileName string, data []byte, bearer string) ([]byte, error) {
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	for k, v := range fields {
-		if err := mw.WriteField(k, v); err != nil {
+	var lastStatus int
+	var lastBody string
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			if err := sleepWithContext(ctx, time.Duration(attempt)*1500*time.Millisecond); err != nil {
+				return nil, err
+			}
+		}
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		for k, v := range fields {
+			if err := mw.WriteField(k, v); err != nil {
+				return nil, err
+			}
+		}
+		fw, err := mw.CreateFormFile("file", fileName)
+		if err != nil {
 			return nil, err
 		}
+		if _, err := fw.Write(data); err != nil {
+			return nil, err
+		}
+		if err := mw.Close(); err != nil {
+			return nil, err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, &buf)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		var out bytes.Buffer
+		if _, err := out.ReadFrom(resp.Body); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return out.Bytes(), nil
+		}
+		lastStatus = resp.StatusCode
+		lastBody = out.String()
+		if resp.StatusCode != http.StatusTooManyRequests {
+			break
+		}
 	}
-	fw, err := mw.CreateFormFile("file", fileName)
-	if err != nil {
-		return nil, err
+	return nil, fmt.Errorf("feishu API status %d: %s", lastStatus, lastBody)
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
-	if _, err := fw.Write(data); err != nil {
-		return nil, err
-	}
-	if err := mw.Close(); err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, &buf)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	if bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
-	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var out bytes.Buffer
-	if _, err := out.ReadFrom(resp.Body); err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("feishu API status %d: %s", resp.StatusCode, out.String())
-	}
-	return out.Bytes(), nil
 }

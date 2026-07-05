@@ -1,8 +1,8 @@
 <template>
   <div class="rebate-pending-page">
     <div v-if="!embedded" class="page-header">
-      <h1 class="text-page-title">待返费分析</h1>
-      <p class="text-body">分析待返费订单，管理返费状态</p>
+      <h1 class="text-page-title">未返费明细</h1>
+      <p class="text-body">查看订单维度的未返费明细</p>
     </div>
 
     <!-- Filters -->
@@ -33,28 +33,6 @@
           class="input input-sm input-compact"
           placeholder="返还人"
         />
-      </div>
-      <div class="filter-group">
-        <label>本次拟返</label>
-        <div class="multi-select" ref="planDropdownRef">
-          <button
-            class="multi-select-trigger input input-sm input-select-compact"
-            @click="toggleDropdown('plan')"
-          >
-            {{ planLabel }}
-            <span class="caret">&#9662;</span>
-          </button>
-          <div v-show="openDropdown === 'plan'" class="multi-select-dropdown">
-            <label class="multi-option" @click.prevent="toggleAllMulti(filters.planCategories, feeCategories)">
-              <input type="checkbox" :checked="allChecked(filters.planCategories, feeCategories)" readonly />
-              全选
-            </label>
-            <label v-for="cat in feeCategories" :key="'pl-' + cat" class="multi-option">
-              <input type="checkbox" :value="cat" v-model="filters.planCategories" />
-              {{ cat }}
-            </label>
-          </div>
-        </div>
       </div>
       <div class="filter-group">
         <label>是否可返</label>
@@ -178,35 +156,7 @@
           <Download :size="14" />
           筛选导出
         </button>
-        <button class="btn btn-secondary btn-sm" @click="downloadCSV('selected')">
-          <Download :size="14" />
-          勾选导出
-        </button>
-        <button class="btn btn-secondary btn-sm" :disabled="selectedPlanCount === 0" @click="clearAllSelectedPlans">
-          清空勾选
-        </button>
-        <button class="btn btn-secondary btn-sm" @click="showBatchPanel = !showBatchPanel">
-          <CheckSquare :size="14" />
-          批选
-        </button>
       </div>
-    </div>
-
-    <!-- Batch panel -->
-    <div v-if="showBatchPanel" class="batch-panel">
-      <span class="batch-label">批量勾选本次拟返：</span>
-      <button
-        v-for="cat in feeCategories"
-        :key="'batch-' + cat"
-        class="btn btn-sm"
-        :class="batchChecked[cat] ? 'btn-primary' : 'btn-secondary'"
-        @click="toggleBatchCategory(cat)"
-      >
-        {{ cat }}
-      </button>
-      <button class="btn btn-sm btn-primary" style="margin-left: 12px;" @click="applyBatch">
-        应用
-      </button>
     </div>
 
     <!-- Loading -->
@@ -237,7 +187,6 @@
           <col span="3" style="min-width: 100px" /><!-- 未返 x3 -->
           <col style="min-width: 80px" /><!-- 是否可返 -->
           <col span="3" style="min-width: 74px" /><!-- 校验 x3 -->
-          <col span="4" style="min-width: 72px" /><!-- 本次拟返 x3 + 合计 -->
           <col v-if="showReferrerColumn" style="min-width: 100px" /><!-- 返还人 -->
           <col style="min-width: 120px" /><!-- 操作 -->
         </colgroup>
@@ -259,7 +208,6 @@
             <th rowspan="2">是否可返</th>
             <th v-if="showReferrerColumn" rowspan="2">返还人</th>
             <th colspan="3" class="group-header group-check">校验</th>
-            <th colspan="4" class="group-header group-plan">本次拟返</th>
             <th rowspan="2">操作</th>
           </tr>
           <tr class="header-sub-row">
@@ -291,11 +239,6 @@
             <th class="sub-check">申购费</th>
             <th class="sub-check">管理费</th>
             <th class="sub-check">业绩报酬</th>
-            <!-- 本次拟返 -->
-            <th class="sub-plan">申购费</th>
-            <th class="sub-plan">管理费</th>
-            <th class="sub-plan">业绩报酬</th>
-            <th class="num sub-plan">合计</th>
           </tr>
         </thead>
         <tbody>
@@ -351,35 +294,6 @@
             <td class="check-cell">
               <span class="check-pill" :class="checkClass(item.check_performance)">{{ item.check_performance || '--' }}</span>
             </td>
-            <!-- 本次拟返 checkboxes -->
-            <td class="plan-cell">
-              <label class="plan-check">
-                <input
-                  type="checkbox"
-                  :checked="!!item.plan_subscribe"
-                  @change="togglePlan(item, 'plan_subscribe', $event)"
-                />
-              </label>
-            </td>
-            <td class="plan-cell">
-              <label class="plan-check">
-                <input
-                  type="checkbox"
-                  :checked="!!item.plan_management"
-                  @change="togglePlan(item, 'plan_management', $event)"
-                />
-              </label>
-            </td>
-            <td class="plan-cell">
-              <label class="plan-check">
-                <input
-                  type="checkbox"
-                  :checked="!!item.plan_performance"
-                  @change="togglePlan(item, 'plan_performance', $event)"
-                />
-              </label>
-            </td>
-            <td class="plan-total">{{ fmtNum(calcPlanTotal(item)) }}</td>
             <td class="action-cell">
               <button
                 v-if="(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) > 0"
@@ -430,7 +344,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { Search, Download, CheckSquare } from '@lucide/vue'
+import { Search, Download } from '@lucide/vue'
 import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 defineProps({
@@ -875,7 +789,6 @@ function downloadCSV(mode = 'filtered') {
     '未返-申购费', '未返-管理费', '未返-业绩报酬',
     '是否可返',
     '校验-申购费', '校验-管理费', '校验-业绩报酬',
-    '本次拟返-申购费', '本次拟返-管理费', '本次拟返-业绩报酬', '本次拟返-合计',
   ]
 
   const rows = sourceItems.map(item => [
@@ -908,10 +821,6 @@ function downloadCSV(mode = 'filtered') {
     item.check_subscribe || '--',
     item.check_management || '--',
     item.check_performance || '--',
-    item.plan_subscribe ? fmtNum(item.outstanding_subscribe ?? calcUnreturned(item, 'subscribe')) : '0.00',
-    item.plan_management ? fmtNum(item.outstanding_management ?? calcUnreturned(item, 'management')) : '0.00',
-    item.plan_performance ? fmtNum(item.outstanding_performance ?? calcUnreturned(item, 'performance')) : '0.00',
-    fmtNum(calcPlanTotal(item)),
   ])
 
   const BOM = '﻿'
@@ -924,7 +833,7 @@ function downloadCSV(mode = 'filtered') {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `待返费分析_${new Date().toISOString().slice(0, 10)}.csv`
+  link.download = `未返费明细_${new Date().toISOString().slice(0, 10)}.csv`
   link.click()
   URL.revokeObjectURL(url)
 }

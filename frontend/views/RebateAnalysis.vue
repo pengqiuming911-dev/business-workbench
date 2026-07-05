@@ -3,17 +3,23 @@
     <div class="tab-bar">
       <button
         class="tab-btn"
+        :class="{ active: activeTab === 'pendingSummary' }"
+        @click="activeTab = 'pendingSummary'"
+      >待返费明细</button>
+      <button
+        class="tab-btn"
         :class="{ active: activeTab === 'pending' }"
         @click="activeTab = 'pending'"
-      >待返费分析</button>
+      >未返费明细</button>
       <button
         class="tab-btn"
         :class="{ active: activeTab === 'completed' }"
         @click="activeTab = 'completed'"
-      >已返费分析</button>
+      >已返费明细</button>
     </div>
 
-    <RebatePending v-if="activeTab === 'pending'" embedded />
+    <RebatePendingSummary v-if="activeTab === 'pendingSummary'" embedded />
+    <RebatePending v-else-if="activeTab === 'pending'" embedded />
     <RebateCompleted v-else embedded />
   </div>
 </template>
@@ -21,6 +27,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import RebatePendingSummary from './RebatePendingSummary.vue'
 import RebatePending from './RebatePending.vue'
 import RebateCompleted from './RebateCompleted.vue'
 
@@ -28,7 +35,9 @@ const route = useRoute()
 const router = useRouter()
 
 function normalizeTab(value) {
-  return value === 'completed' ? 'completed' : 'pending'
+  if (value === 'completed') return 'completed'
+  if (value === 'pending') return 'pending'
+  return 'pendingSummary'
 }
 
 const activeTab = ref(normalizeTab(route.query.tab))
@@ -73,6 +82,7 @@ watch(activeTab, (value) => {
 }
 
 :deep(.rebate-pending-page),
+:deep(.rebate-pending-summary-page),
 :deep(.rebate-completed-page) {
   flex: 1;
   min-height: 0;

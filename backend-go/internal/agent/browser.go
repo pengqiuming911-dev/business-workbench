@@ -397,19 +397,41 @@ func firstPercent(s string) string {
 	return ""
 }
 
-// screenshotAMAC 打开 AMAC 详情页（JS 异步加载值），等值出现后整页截图存 outPath。
+// screenshotAMAC 打开 AMAC 详情页（JS 异步加载值），等值出现后截 .content 内容卡存 outPath。
 // url 用 references/amac-manager.md 的模板（type=1 管理人 / type=2 产品）。
+// 截 .content 内容卡（非整页 FullScreenshot），匹配管理人公示模板：无 AMAC 官网头/页脚的下方留白。
+// .content 取不到或截图空才回退整页（保旧行为兜底）。
 func screenshotAMAC(url, outPath string) error {
 	ctx, cancel := newBrowserContext(context.Background(), "")
 	defer cancel()
 	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(1280, 900), // 让 .content 排到模板宽度，截图与管理人公示模板一致
 		chromedp.Navigate(url),
-		chromedp.Sleep(2*time.Second), // 等 JS 填值
+		chromedp.Sleep(2*time.Second), // 等 JS 初载填值
 	); err != nil {
 		return err
 	}
+	// 等 .content 值加载完：轮询直到文本出现连续数字（登记编号/日期）且 "--" 占位消失；超时 10s 放行不阻塞。
+	waitDeadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(waitDeadline) {
+		var ready bool
+		_ = chromedp.Run(ctx, chromedp.Evaluate(`(function(){
+			var el = document.querySelector('.content');
+			if (!el) return false;
+			var txt = el.innerText || '';
+			return /\d{4,}/.test(txt) && txt.indexOf('--') < 0;
+		})()`, &ready))
+		if ready {
+			break
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
 	var buf []byte
-	// FullScreenshot（整页）而非 CaptureScreenshot（视口）：AMAC 公示页要整页截图作官方来源凭证（references/amac-manager.md 要求 fullPage）。
+	// 截 .content 内容卡：无下方留白，对齐管理人公示模板
+	if err := chromedp.Run(ctx, chromedp.Screenshot(`.content`, &buf, chromedp.ByQuery)); err == nil && len(buf) > 0 {
+		return os.WriteFile(outPath, buf, 0o644)
+	}
+	// 兜底：.content 取不到或截图空 → 整页截图
 	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 100)); err != nil {
 		return err
 	}

@@ -25,7 +25,19 @@ import (
 
 const maxToolRounds = 25
 
-const systemPrompt = "你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。\n\n搜索产品时请注意：产品名称（name）通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在标的代码（code）字段中。如果按产品名称搜索未果，请尝试用标的关键词搜索，例如用「中证1000」「沪深300」「恒科」「中证500」等关键词。也可以先调用 get_product_analytics 查看有哪些不同的标的和结构类型，再针对性搜索。\n\n当用户想要生成、制作、下载「喜报」「分红喜报」「分红观察喜报」时：先调用 search_products 找到目标产品的 product_id，再调用 generate_poster(product_id, observation_date) 生成。喜报里的所有数字（年化收益、本月分红、累计分红率、累计分红次数、派息界限、止盈界限、末月降至、挂钩标的、入场时间）都由系统从真实数据计算，你绝不可在对话中编造、估算或改写这些数字，也不可在 generate_poster 参数里传任何数字。若系统返回错误（如无该观察日记录），如实告知用户，不要自行补数。\n\n当用户给出一组完整的结构化产品参数（含结构类型如 DCN/雪球/降敲雪球 + 标的 + 期限 + 保证金 + 敲出/降落伞/派息等，常带产品名/管理人/打款日/入场时间），默认就是要生成推介文案与 Word 材料——直接调 load_skill('structured-product-copywriter') 加载工作流并按步骤执行（核对参数、取当前点位、做点位换算、产出长版+短版文案、调 build_docx 上传飞书），不要先列选项问用户是否要生成。仅在用户明确说「只查询/核对/先不生成」时才不生成。文案里的「当前点位」必须调 fetch_quote 取真实值，绝对点位（降落伞/敲出/派息触发）必须调 calc_points 工具获取——禁止你自己在对话里做乘法或点位换算（哪怕看起来很简单），必须调用工具。胜率：用户给了就直接用，不要用文档里其他胜率数字要求确认；否则调 fetch_winrate，返回 [胜率待补] 就用该占位继续生成，绝不编一个胜率数字、也绝不因此停下问用户。历史参考底部：用户给了就用；没给就用 [历史底部待补] 占位继续生成，不要停下问用户。若 fetch_quote 失败，如实告知并让用户手动提供点位。走到通毓胜率/AMAC/Word 等重步骤时，可调 get_skill_reference 取对应参考文档。\n\n当用户要出 Word 推介材料/材料时：按 references/docx-template.md 的 10 章顺序组装 manifest 调 build_docx（上传飞书 Drive，返回飞书链接，不落本地）。文案用 fetch_quote/calc_points/fetch_winrate 已算的真实数字，build_docx 只装配不改数字。管理人/产品公示图调 screenshot_amac（传 AMAC URL），产品点位卡调 screenshot_product_card。一页通/托管募集账户/胜率结果截图等用户手动贴或 v1 未取的，留 image 占位（缺图自动红字 [图片待补]，不报错）。"
+const systemPrompt = `你是一个专业的金融结构化产品业务助手，服务于业务工作台系统。请使用中文回答，优先基于系统内已有业务数据和用户问题给出简洁、准确的回复。需要查询产品、客户、交易、观察日历、投顾材料或业务统计时，主动调用可用工具。
+
+搜索产品时请注意：产品名称通常是「航班服务XX号」这样的格式，标的指数或挂钩标的可能在 code 字段中。如果按产品名称搜索未果，请尝试用「中证1000」「沪深300」「恒科」「中证500」等标的关键词搜索。
+
+当用户想生成「喜报」「分红喜报」「分红观察喜报」时：先调用 search_products 找到 product_id，再调用 generate_poster(product_id, observation_date)。喜报里的数字全部由系统计算，绝不可编造、估算或改写，也不可在 generate_poster 参数里传任何数字。
+
+当用户给出完整结构化产品参数（如 DCN/雪球/降敲雪球 + 标的 + 期限 + 保证金 + 敲出/降落伞/派息等，常带产品名/管理人/打款日/入场时间），默认就是要生成推介文案与飞书原生云文档材料：先调 load_skill("structured-product-copywriter")，再核对参数、取当前点位、做点位换算、产出长版+短版文案，最后调 create_docx_material 创建飞书 /docx/ 原生云文档。不要先问用户是否要生成。仅在用户明确说「只查询/核对/先不生成」时才不生成。
+
+文案里的当前点位必须调 fetch_quote 取真实值；绝对点位（降落伞/敲出/派息触发）必须调 calc_points，禁止自己手算。胜率：用户给了就直接用；否则调 fetch_winrate，返回 [胜率待补] 就用占位继续生成，绝不编胜率，也不要因此停下问用户。历史参考底部：用户给了就用；没给就用 [历史底部待补] 占位继续生成。
+
+当用户要出推介材料/销售物料/飞书文档时：按 references/docx-template.md 的 11 个 H2 章节顺序组装 manifest，调用 create_docx_material。该工具创建飞书原生 /docx/ 云文档，不是 Word 附件。文案用 fetch_quote/calc_points/fetch_winrate 已算的真实数字，create_docx_material 只装配不改数字。管理人/产品公示图调 screenshot_amac，产品点位卡调 screenshot_product_card。一页通/托管募集账户/暂未取得的截图留 image 占位，缺图不报错。
+
+只有用户明确要求 Word、.docx 附件、下载 Word 文件时，才调用旧版 build_docx。普通飞书机器人场景一律不要默认调用 build_docx。`
 
 type Service struct {
 	cfg    config.Config
@@ -225,8 +237,8 @@ func (r *streamResult) mergeToolCall(delta toolCallDelta) {
 	}
 }
 
-// extractArtifact 从工具返回结果里安全取出 poster_artifact 载荷。
-// 返回 false 表示该工具结果不含喜报 artifact(普通工具调用)。
+// extractArtifact 浠庡伐鍏疯繑鍥炵粨鏋滈噷瀹夊叏鍙栧嚭 poster_artifact 杞借嵎銆?
+// 杩斿洖 false 琛ㄧず璇ュ伐鍏风粨鏋滀笉鍚枩鎶?artifact(鏅€氬伐鍏疯皟鐢?銆?
 func extractArtifact(toolResult map[string]any) (map[string]any, bool) {
 	raw, ok := toolResult["poster_artifact"]
 	if !ok {
@@ -289,6 +301,8 @@ func (s *Service) executeTool(name string, rawArgs string) map[string]any {
 		return s.screenshotAMACTool(args)
 	case "screenshot_product_card":
 		return s.screenshotProductCardTool(args)
+	case "create_docx_material":
+		return s.createDocxMaterialTool(args)
 	case "build_docx":
 		return s.buildDocxTool(args)
 	case "get_activity_logs":
@@ -460,9 +474,9 @@ func (s *Service) getPosters(args map[string]any) map[string]any {
 	return map[string]any{"count": len(posters), "posters": posters}
 }
 
-// generatePoster 是 agent 的喜报生成工具：按产品 ID + 观察日从 DB 拉真实数据，
-// 经 posters.GenerateData / BuildArtifact 组装成展示字段，以 poster_artifact 返回。
-// 数字全部来自 DB，本函数不产生、不接受任何数字入参。
+// generatePoster 鏄?agent 鐨勫枩鎶ョ敓鎴愬伐鍏凤細鎸変骇鍝?ID + 瑙傚療鏃ヤ粠 DB 鎷夌湡瀹炴暟鎹紝
+// 缁?posters.GenerateData / BuildArtifact 缁勮鎴愬睍绀哄瓧娈碉紝浠?poster_artifact 杩斿洖銆?
+// 鏁板瓧鍏ㄩ儴鏉ヨ嚜 DB锛屾湰鍑芥暟涓嶄骇鐢熴€佷笉鎺ュ彈浠讳綍鏁板瓧鍏ュ弬銆?
 func (s *Service) generatePoster(args map[string]any) map[string]any {
 	productID := stringArg(args, "product_id")
 	observationDate := stringArg(args, "observation_date")
@@ -511,7 +525,7 @@ func (s *Service) generatePoster(args map[string]any) map[string]any {
 		"poster_artifact":  artifact,
 		"product_id":       productID,
 		"observation_date": observationDate,
-		"message":          "已生成「" + product.Name + "」(" + observationDate + ")的分红观察喜报，请在下方查看并下载。",
+		"message":          fmt.Sprintf("已生成 %s（%s）的分红观察喜报，请在下方查看并下载。", product.Name, observationDate),
 	}
 }
 
@@ -554,7 +568,7 @@ func (s *Service) getActivityLogs(args map[string]any) map[string]any {
 	return map[string]any{"count": len(rows), "logs": rows}
 }
 
-// screenshotAMACTool 是 agent 工具入口：按 AMAC URL 截图，返回 /public URL + path。
+// screenshotAMACTool 鏄?agent 宸ュ叿鍏ュ彛锛氭寜 AMAC URL 鎴浘锛岃繑鍥?/public URL + path銆?
 func (s *Service) screenshotAMACTool(args map[string]any) map[string]any {
 	url := stringArg(args, "url")
 	if url == "" {
@@ -569,10 +583,10 @@ func (s *Service) screenshotAMACTool(args map[string]any) map[string]any {
 	return map[string]any{"url": "/public/poster-artifacts/" + id + ".png", "path": outPath}
 }
 
-// screenshotProductCardTool 是 agent 工具入口：按产品参数生成通毓产品点位卡图。
+// screenshotProductCardTool 鏄?agent 宸ュ叿鍏ュ彛锛氭寜浜у搧鍙傛暟鐢熸垚閫氭瘬浜у搧鐐逛綅鍗″浘銆?
 func (s *Service) screenshotProductCardTool(args map[string]any) map[string]any {
 	if s.cfg.TongyuUser == "" || s.cfg.TongyuPass == "" {
-		return map[string]any{"error": "未配置 TONGYU_USER/TONGYU_PASS，无法取产品卡图"}
+		return map[string]any{"error": "鏈厤缃?TONGYU_USER/TONGYU_PASS锛屾棤娉曞彇浜у搧鍗″浘"}
 	}
 	id := nextPublicID()
 	outPath := fmt.Sprintf("public/poster-artifacts/%s.png", id)
@@ -583,19 +597,19 @@ func (s *Service) screenshotProductCardTool(args map[string]any) map[string]any 
 	return map[string]any{"url": "/public/poster-artifacts/" + id + ".png", "path": outPath}
 }
 
-// buildDocxTool 是 agent 工具入口：装配 .docx 并上传到飞书 Drive 当年当月子文件夹，返回飞书 URL。
+// buildDocxTool 鏄?agent 宸ュ叿鍏ュ彛锛氳閰?.docx 骞朵笂浼犲埌椋炰功 Drive 褰撳勾褰撴湀瀛愭枃浠跺す锛岃繑鍥為涔?URL銆?
 func (s *Service) buildDocxTool(args map[string]any) map[string]any {
 	sections, err := parseManifest(args)
 	if err != nil {
 		return map[string]any{"error": err.Error()}
 	}
-	// 1. 写临时文件
+	// 1. 鍐欎复鏃舵枃浠?
 	tmpDir, err := os.MkdirTemp("", "docx-")
 	if err != nil {
 		return map[string]any{"error": err.Error()}
 	}
 	defer os.RemoveAll(tmpDir)
-	tmpPath := filepath.Join(tmpDir, "推介材料.docx")
+	tmpPath := filepath.Join(tmpDir, "鎺ㄤ粙鏉愭枡.docx")
 	if err := BuildDocx(sections, tmpPath); err != nil {
 		return map[string]any{"error": err.Error()}
 	}
@@ -603,11 +617,48 @@ func (s *Service) buildDocxTool(args map[string]any) map[string]any {
 	if err != nil {
 		return map[string]any{"error": err.Error()}
 	}
-	// 2. 飞书 client（复用持久化 user token）
+	// 2. 椋炰功 client锛堝鐢ㄦ寔涔呭寲 user token锛?
 	fc := feishu.New(s.cfg.FeishuAppID, s.cfg.FeishuAppSecret, s.cfg.FeishuRedirectURI)
 	fc.SetTokenPersistPath(".feishu-user-token")
-	// 3. find-or-create 当年当月子文件夹：模糊匹配含"某年某月"的既有文件夹（兼容"2026年7月产品"等带后缀名），
-	//    都不命中则新建，命名「某年某月产品」对齐既有产品材料文件夹约定。
+	// 3. find-or-create 褰撳勾褰撴湀瀛愭枃浠跺す锛氭ā绯婂尮閰嶅惈"鏌愬勾鏌愭湀"鐨勬棦鏈夋枃浠跺す锛堝吋瀹?2026骞?鏈堜骇鍝?绛夊甫鍚庣紑鍚嶏級锛?
+	//    閮戒笉鍛戒腑鍒欐柊寤猴紝鍛藉悕銆屾煇骞存煇鏈堜骇鍝併€嶅榻愭棦鏈変骇鍝佹潗鏂欐枃浠跺す绾﹀畾銆?
+	yearMonth := time.Now().Format("2006年1月")
+	folderName := yearMonth + "产品"
+	ctx := context.Background()
+	subToken, found, err := fc.FindSubfolderFuzzy(ctx, s.cfg.FeishuPitchFolderToken, yearMonth)
+	if err != nil {
+		return map[string]any{"error": "鏌ユ壘椋炰功鏂囦欢澶瑰け璐ワ細" + err.Error()}
+	}
+	if !found {
+		subToken, err = fc.CreateFolder(ctx, s.cfg.FeishuPitchFolderToken, folderName)
+		if err != nil {
+			return map[string]any{"error": "鍒涘缓椋炰功鏂囦欢澶瑰け璐ワ細" + err.Error()}
+		}
+	}
+	// 4. 涓婁紶锛堝彲閫?title 浣滀负鏂囦欢鍚嶏紝缂虹渷鍥為€€甯︽椂闂存埑鐨勯粯璁ゅ悕锛?
+	fileName := fmt.Sprintf("鎺ㄤ粙鏉愭枡_%s.docx", time.Now().Format("20060102_150405"))
+	if t := stringArg(args, "title"); t != "" {
+		fileName = SanitizeFileName(t) + ".docx"
+	}
+	fileToken, err := fc.UploadDocx(ctx, subToken, fileName, data)
+	if err != nil {
+		return map[string]any{"error": "上传飞书失败：" + err.Error()}
+	}
+	url := "https://" + s.cfg.FeishuDriveDomain + "/file/" + fileToken
+	return map[string]any{"url": url, "file_token": fileToken, "folder": folderName}
+}
+
+// createDocxMaterialTool creates a Feishu native /docx/ material document.
+// It accepts the same manifest shape as build_docx, but inserts image sections
+// as native Feishu image blocks instead of packaging a Word file.
+func (s *Service) createDocxMaterialTool(args map[string]any) map[string]any {
+	sections, err := parseManifest(args)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	fc := feishu.New(s.cfg.FeishuAppID, s.cfg.FeishuAppSecret, s.cfg.FeishuRedirectURI)
+	fc.SetTokenPersistPath(".feishu-user-token")
+
 	yearMonth := time.Now().Format("2006年1月")
 	folderName := yearMonth + "产品"
 	ctx := context.Background()
@@ -621,36 +672,175 @@ func (s *Service) buildDocxTool(args map[string]any) map[string]any {
 			return map[string]any{"error": "创建飞书文件夹失败：" + err.Error()}
 		}
 	}
-	// 4. 上传（可选 title 作为文件名，缺省回退带时间戳的默认名）
-	fileName := fmt.Sprintf("推介材料_%s.docx", time.Now().Format("20060102_150405"))
-	if t := stringArg(args, "title"); t != "" {
-		fileName = SanitizeFileName(t) + ".docx"
+
+	title := strings.TrimSpace(stringArg(args, "title"))
+	if title == "" {
+		title = "推介材料_" + time.Now().Format("20060102_150405")
 	}
-	fileToken, err := fc.UploadDocx(ctx, subToken, fileName, data)
+	doc, err := fc.CreateDocx(ctx, title, subToken, s.cfg.FeishuDriveDomain)
 	if err != nil {
-		return map[string]any{"error": "上传飞书失败：" + err.Error()}
+		return map[string]any{"error": "创建飞书云文档失败：" + err.Error()}
 	}
-	url := "https://" + s.cfg.FeishuDriveDomain + "/file/" + fileToken
-	return map[string]any{"url": url, "file_token": fileToken, "folder": folderName}
+
+	blocks := []any{}
+	type pendingImage struct {
+		BlockIndex int
+		FileName   string
+		Data       []byte
+	}
+	pendingImages := []pendingImage{}
+	missingImages := []string{}
+	appendMarkdown := func(content string) error {
+		content = strings.TrimSpace(content)
+		if content == "" {
+			return nil
+		}
+		converted, err := fc.MarkdownBlocks(ctx, content)
+		if err != nil {
+			return err
+		}
+		blocks = append(blocks, converted...)
+		return nil
+	}
+
+	for _, section := range sections {
+		switch strings.ToLower(strings.TrimSpace(section.Type)) {
+		case "heading", "subheading":
+			if err := appendMarkdown("## " + strings.TrimSpace(section.Text)); err != nil {
+				return map[string]any{"error": "转换标题失败：" + err.Error()}
+			}
+		case "body", "copy_file":
+			if err := appendMarkdown(strings.TrimSpace(section.Text)); err != nil {
+				return map[string]any{"error": "转换正文失败：" + err.Error()}
+			}
+		case "params":
+			if strings.TrimSpace(section.Text) != "" {
+				if err := appendMarkdown("```\n" + strings.TrimSpace(section.Text) + "\n```"); err != nil {
+					return map[string]any{"error": "转换参数块失败：" + err.Error()}
+				}
+			}
+		case "separator":
+			// Keep the native material compact; visible separators are not required.
+		case "link_list":
+			lines := []string{}
+			for _, item := range section.Items {
+				label := strings.TrimSpace(item.Label)
+				if label == "" {
+					label = "链接"
+				}
+				if strings.TrimSpace(item.URL) != "" {
+					lines = append(lines, fmt.Sprintf("- [%s](%s)", label, strings.TrimSpace(item.URL)))
+				} else {
+					lines = append(lines, "- "+label)
+				}
+			}
+			if err := appendMarkdown(strings.Join(lines, "\n")); err != nil {
+				return map[string]any{"error": "转换链接列表失败：" + err.Error()}
+			}
+		case "image":
+			path := strings.TrimSpace(section.Path)
+			data, fileName, ok := materialImageData(path)
+			if !ok {
+				missingImages = append(missingImages, path)
+				caption := strings.TrimSpace(section.Caption)
+				if caption == "" {
+					caption = path
+				}
+				if err := appendMarkdown("[图片待补: " + caption + "]"); err != nil {
+					return map[string]any{"error": "转换图片占位失败：" + err.Error()}
+				}
+				continue
+			}
+			imageToken, err := fc.UploadDocxImage(ctx, doc.DocumentID, fileName, data)
+			if err != nil {
+				return map[string]any{"error": "上传飞书图片失败：" + err.Error()}
+			}
+			blocks = append(blocks, map[string]any{
+				"block_type": 27,
+				"image": map[string]any{
+					"file_token": imageToken,
+				},
+			})
+			pendingImages = append(pendingImages, pendingImage{
+				BlockIndex: len(blocks) - 1,
+				FileName:   fileName,
+				Data:       data,
+			})
+		}
+	}
+
+	inserted, err := fc.InsertDocxBlocks(ctx, doc.DocumentID, blocks)
+	if err != nil {
+		return map[string]any{"error": "写入飞书云文档失败：" + err.Error()}
+	}
+	imagesAdded := 0
+	for _, image := range pendingImages {
+		if image.BlockIndex < 0 || image.BlockIndex >= len(inserted) || strings.TrimSpace(inserted[image.BlockIndex].BlockID) == "" {
+			return map[string]any{"error": "飞书图片块返回缺少 block_id"}
+		}
+		blockID := inserted[image.BlockIndex].BlockID
+		blockToken, err := fc.UploadDocxImage(ctx, blockID, image.FileName, image.Data)
+		if err != nil {
+			return map[string]any{"error": "绑定飞书图片失败：" + err.Error()}
+		}
+		width, height := feishu.DocxImageDisplaySize(image.Data, 600)
+		if err := fc.ReplaceDocxImage(ctx, doc.DocumentID, blockID, blockToken, width, height); err != nil {
+			return map[string]any{"error": "替换飞书图片失败：" + err.Error()}
+		}
+		imagesAdded++
+	}
+
+	return map[string]any{
+		"url":            doc.URL,
+		"doc_token":      doc.DocumentID,
+		"folder":         folderName,
+		"blocks_added":   len(inserted),
+		"images_added":   imagesAdded,
+		"missing_images": missingImages,
+	}
 }
 
-// BuildAndUploadDocx 是 HTTP 入口（POST /api/drive/build-docx）的公开封装：
-// 装配 .docx 并上传到飞书 Drive 当年当月子文件夹，返回 {url, file_token, folder}。
-// 供 openclaw 等外部 agent 复用 business-workbench 的飞书 OAuth token 与上传逻辑，
-// 避免每个 agent 各自配 token / 分享 folder。args 与 build_docx 工具一致：
-// {title?, sections:[{type,text,path?,caption?,items?}]}。
+func materialImageData(path string) ([]byte, string, bool) {
+	if path == "" {
+		return nil, "", false
+	}
+	candidates := []string{path}
+	if strings.HasPrefix(path, "/") {
+		candidates = append(candidates, strings.TrimPrefix(path, "/"))
+	}
+	if strings.HasPrefix(path, "/public/") {
+		candidates = append(candidates, strings.TrimPrefix(path, "/"))
+	}
+	for _, candidate := range candidates {
+		p := filepath.Clean(candidate)
+		data, err := os.ReadFile(p)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		name := filepath.Base(p)
+		if name == "." || name == "" {
+			name = "image.png"
+		}
+		return data, name, true
+	}
+	return nil, "", false
+}
+
+// BuildAndUploadDocx 鏄?HTTP 鍏ュ彛锛圥OST /api/drive/build-docx锛夌殑鍏紑灏佽锛?// 瑁呴厤 .docx 骞朵笂浼犲埌椋炰功 Drive 褰撳勾褰撴湀瀛愭枃浠跺す锛岃繑鍥?{url, file_token, folder}銆?// 渚?openclaw 绛夊閮?agent 澶嶇敤 business-workbench 鐨勯涔?OAuth token 涓庝笂浼犻€昏緫锛?
+// 閬垮厤姣忎釜 agent 鍚勮嚜閰?token / 鍒嗕韩 folder銆俛rgs 涓?build_docx 宸ュ叿涓€鑷达細
+// {title?, sections:[{type,text,path?,caption?,items?}]}銆?
 func (s *Service) BuildAndUploadDocx(args map[string]any) map[string]any {
 	return s.buildDocxTool(args)
 }
 
-// SanitizeFileName 把任意字符串清成安全的文件名（去掉路径分隔符与 Windows/飞书非法字符）。
+// SanitizeFileName 鎶婁换鎰忓瓧绗︿覆娓呮垚瀹夊叏鐨勬枃浠跺悕锛堝幓鎺夎矾寰勫垎闅旂涓?Windows/椋炰功闈炴硶瀛楃锛夈€?
 func SanitizeFileName(s string) string {
 	repl := strings.NewReplacer(
 		"/", "_", "\\", "_", ":", "_", "*", "_", "?", "_",
 		"\"", "_", "|", "_", "<", "_", ">", "_", "\n", "_", "\r", "_")
 	out := strings.TrimSpace(repl.Replace(s))
 	if out == "" {
-		out = "推介材料"
+		out = "鎺ㄤ粙鏉愭枡"
 	}
 	return out
 }
@@ -659,8 +849,8 @@ func nextPublicID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-// parseManifest 把 agent 传入的 manifest（args["sections"] 数组）解析成 docxSection 切片。
-// 每个 section: {type, text, path, caption, items:[{label,url}]}。
+// parseManifest 鎶?agent 浼犲叆鐨?manifest锛坅rgs["sections"] 鏁扮粍锛夎В鏋愭垚 docxSection 鍒囩墖銆?
+// 姣忎釜 section: {type, text, path, caption, items:[{label,url}]}銆?
 func parseManifest(args map[string]any) ([]docxSection, error) {
 	raw, ok := args["sections"]
 	if !ok {
@@ -901,7 +1091,7 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "search_products",
-				"description": "根据关键词搜索产品，同时匹配产品名称（name）和标的代码（code），返回匹配产品的 id、名称、存续状态和标的代码。标的关键词如「恒科」「中证1000」「沪深300」等应在此搜索。",
+				"description": "根据关键词搜索产品，同时匹配产品名称和标的代码，返回匹配产品的 id、名称、存续状态和标的代码。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -1078,11 +1268,11 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "generate_poster",
-				"description": "为指定产品在指定观察日生成分红观察喜报（可下载的 PNG）。所有数字（年化、本月分红、累计分红率、界限、标的等）均由系统从该产品的真实观察数据计算，不要在参数里提供任何数字。先调用 search_products 拿到 product_id，再调用本工具。",
+				"description": "为指定产品在指定观察日生成分红观察喜报 PNG。所有数字均由系统从真实观察数据计算；先用 search_products 拿 product_id。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"product_id":       map[string]any{"type": "string", "description": "产品 ID（由 search_products 返回）"},
+						"product_id":       map[string]any{"type": "string", "description": "产品 ID，由 search_products 返回"},
 						"observation_date": map[string]any{"type": "string", "description": "观察日 YYYY-MM-DD，默认今天"},
 					},
 					"required": []string{"product_id"},
@@ -1138,7 +1328,7 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "load_skill",
-				"description": "加载结构化产品推介文案生成 skill 的完整工作流（SKILL.md 原文）。当用户想要生成结构化产品推介文案/材料（雪球/降敲雪球/DCN/FCN/限亏雪球等）时，先调用本工具，再严格按返回的工作流步骤执行。",
+				"description": "加载结构化产品推介文案生成 skill 的完整工作流。生成雪球、降敲雪球、DCN、FCN 等推介文案或材料时先调用本工具。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -1151,12 +1341,12 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "get_skill_reference",
-				"description": "按需获取 skill 的某份重步骤参考文档（如 tongyu-winrate 通毓胜率流程、amac-manager AMAC 公示、product-position-card 产品点位卡、docx-template Word 模板）。走到该步骤时再调。",
+				"description": "按需获取 skill 的参考文档，例如 tongyu-winrate、amac-manager、product-position-card、docx-template。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"skill": map[string]any{"type": "string", "description": "skill 名，默认 structured-product-copywriter"},
-						"name":  map[string]any{"type": "string", "description": "参考文档名（不带 .md），如 tongyu-winrate"},
+						"name":  map[string]any{"type": "string", "description": "参考文档名，不带 .md，例如 tongyu-winrate"},
 					},
 					"required": []string{"name"},
 				},
@@ -1166,11 +1356,11 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "fetch_quote",
-				"description": "获取指数/个股当前实时点位（腾讯→新浪→东财三源兜底）。文案里所有「当前点位」必须来自本工具，绝不编造。失败时如实告知并让用户手动提供，不要补数。",
+				"description": "获取指数或个股当前实时点位。文案里的当前点位必须来自本工具，失败时如实告知，不要编造。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"标的":   map[string]any{"type": "string", "description": "标的名（如 中证1000/沪深300/创业板指）或代码（如 sh000852）"},
+						"标的":   map[string]any{"type": "string", "description": "标的名，如 中证1000/沪深300/创业板指，或代码如 sh000852"},
 						"code": map[string]any{"type": "string", "description": "可选，直接给代码 sh000852/sz399006"},
 					},
 					"required": []string{"标的"},
@@ -1181,7 +1371,7 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "calc_points",
-				"description": "按当前点位 + 降落伞/期初敲出线/派息线百分比，机械换算绝对点位（降落伞点位、期初敲出点位、派息触发点位）+ 口语化约点。文案里的绝对点位必须来自本工具，绝不自己算小数。current_price 先用 fetch_quote 拿到。",
+				"description": "按当前点位和百分比换算降落伞、期初敲出线、派息线的绝对点位。文案里的绝对点位必须来自本工具。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -1198,12 +1388,12 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "fetch_winrate",
-				"description": "通过通毓终端结构化产品回测算真实胜率。需要 TONGYU 凭证（服务端配置）；遇验证码/登录失败/站点不可达会返回 [胜率待补] 占位，届时请用户手动提供，绝不编造胜率。structure_type 由你从对话判断（如 DCN/雪球+降敲+降落伞）。标的用中文名或代码。",
+				"description": "通过通毓终端结构化产品回测计算真实胜率。失败时返回占位并如实告知，不要编造胜率。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"structure_type": map[string]any{"type": "string", "description": "结构类型，如 DCN、雪球；含叠加条款用 + 连，如 DCN+降敲+降落伞"},
-						"标的":             map[string]any{"type": "string", "description": "标的名（如 中证1000）或代码"},
+						"structure_type": map[string]any{"type": "string", "description": "结构类型，如 DCN、雪球；可含附加条款，如 DCN+降敲+降落伞"},
+						"标的":             map[string]any{"type": "string", "description": "标的名如 中证1000，或代码"},
 						"期限":             map[string]any{"type": "string", "description": "如 36"},
 						"锁定期":            map[string]any{"type": "string", "description": "如 3；无则不传"},
 						"期初敲出线":          map[string]any{"type": "string", "description": "如 101"},
@@ -1222,7 +1412,7 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "screenshot_amac",
-				"description": "截 AMAC（amac.org.cn）管理人/产品公示页整页图。URL 形如 https://www.amac.org.cn/index/qzss/details/?type=1&code=<管理人登记编号> 或 type=2&code=<产品编码>&ctype=P。用于推介材料的管理人/产品公示图。",
+				"description": "截取 AMAC 管理人或产品公示详情页图片。URL 应为 amac.org.cn 的 details 页面，用于推介材料公示图。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -1236,21 +1426,21 @@ func toolDefinitions() []toolDefinition {
 			Type: "function",
 			Function: map[string]any{
 				"name":        "screenshot_product_card",
-				"description": "用通毓终端产品点位小工具按产品参数生成产品结构解析卡图。用于推介材料的派息敲出观察点位表图。需 TONGYU 凭证。structure_type/参数同 fetch_winrate。",
+				"description": "用通毓终端产品点位小工具按产品参数生成产品结构解析卡图，用于推介材料的派息与敲出观察点位表图片。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"structure_type": map[string]any{"type": "string"},
-						"标的":           map[string]any{"type": "string"},
-						"期限":           map[string]any{"type": "string"},
-						"锁定期":          map[string]any{"type": "string"},
-						"期初敲出线":        map[string]any{"type": "string"},
-						"降敲":           map[string]any{"type": "string"},
-						"降落伞":          map[string]any{"type": "string"},
-						"派息线":          map[string]any{"type": "string"},
-						"费后派息":         map[string]any{"type": "string"},
-						"保证金":          map[string]any{"type": "string"},
-						"current_price": map[string]any{"type": "string"},
+						"标的":             map[string]any{"type": "string"},
+						"期限":             map[string]any{"type": "string"},
+						"锁定期":            map[string]any{"type": "string"},
+						"期初敲出线":          map[string]any{"type": "string"},
+						"降敲":             map[string]any{"type": "string"},
+						"降落伞":            map[string]any{"type": "string"},
+						"派息线":            map[string]any{"type": "string"},
+						"费后派息":           map[string]any{"type": "string"},
+						"保证金":            map[string]any{"type": "string"},
+						"current_price":  map[string]any{"type": "string"},
 					},
 					"required": []string{"structure_type", "标的", "期限", "期初敲出线", "降落伞", "费后派息", "保证金", "current_price"},
 				},
@@ -1259,12 +1449,27 @@ func toolDefinitions() []toolDefinition {
 		{
 			Type: "function",
 			Function: map[string]any{
-				"name":        "build_docx",
-				"description": "按 manifest 装配 Word 推介材料 .docx。sections 数组每项 {type,text,path,caption,items}。type: heading/subheading/body/params/image/separator/link_list。image 的 path 用 screenshot_amac/screenshot_product_card 返回的 path；缺图自动插红字占位，不报错。用户要出 Word 材料时调本工具。",
+				"name":        "create_docx_material",
+				"description": "按 manifest 创建飞书原生 /docx/ 云文档，不是 Word 附件。用户要出推介材料、销售物料或飞书文档时优先调用本工具。sections 每项支持 type,text,path,caption,items；image 的 path 使用截图工具返回的本地 path。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"sections": map[string]any{"type": "array", "description": "章节数组，按 docx-template.md 顺序：长版/短版文案→公告群通知→派息敲出观察点位表图→胜率数据→一页通→管理人公示图→产品公示图→托管募集账户→销售常见问题"},
+						"title":    map[string]any{"type": "string", "description": "飞书云文档标题，如 产品简称-结构名称"},
+						"sections": map[string]any{"type": "array", "description": "章节数组，严格按 docx-template.md 的 11 个 H2 顺序。"},
+					},
+					"required": []string{"sections"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: map[string]any{
+				"name":        "build_docx",
+				"description": "旧版 Word 附件工具，仅当用户明确要求 Word 或 .docx 附件时使用。普通推介材料和飞书机器人场景必须优先使用 create_docx_material。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"sections": map[string]any{"type": "array", "description": "章节数组。"},
 					},
 					"required": []string{"sections"},
 				},

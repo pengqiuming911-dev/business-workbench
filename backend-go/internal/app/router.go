@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -145,6 +147,7 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.POST("/api/drive/build-docx", server.driveBuildDocx)
 	router.POST("/api/drive/create-docx", server.driveCreateDocx)
 	router.POST("/api/drive/create-docs", server.driveCreateDocx)
+	router.POST("/api/drive/create-rich-docx", server.driveCreateRichDocx)
 	router.POST("/api/drive/upload-docx", server.driveUploadDocx)
 	router.POST("/api/db/sync-all", server.syncAll)
 	router.POST("/api/db/sync-rebate-detail", server.syncRebateDetail)
@@ -666,6 +669,26 @@ type createDocxRequest struct {
 	FolderName  string `json:"folder_name"`
 }
 
+type richDocxManifest struct {
+	Title       string            `json:"title"`
+	FolderToken string            `json:"folder_token"`
+	FolderName  string            `json:"folder_name"`
+	Sections    []richDocxSection `json:"sections"`
+}
+
+type richDocxSection struct {
+	Type    string             `json:"type"`
+	Text    string             `json:"text"`
+	Path    string             `json:"path"`
+	Caption string             `json:"caption"`
+	Items   []richDocxLinkItem `json:"items"`
+}
+
+type richDocxLinkItem struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+}
+
 // driveCreateDocx creates a Feishu native docx document and optionally writes markdown content.
 // This returns a /docx/ link, not an uploaded Word file link.
 func (s *Server) driveCreateDocx(c *gin.Context) {
@@ -739,6 +762,277 @@ func (s *Server) driveCreateDocx(c *gin.Context) {
 		"folder_token": folderToken,
 		"blocks_added": blocksAdded,
 	})
+}
+
+// driveCreateRichDocx creates a Feishu native docx document from a manifest and
+// embeds uploaded PNG/JPG files as native image blocks.
+//
+// Request: multipart/form-data
+//   - manifest: JSON richDocxManifest
+//   - title/folder_name/folder_token: optional overrides
+//   - image files: field name or filename should match each image section path or basename
+func (s *Server) driveCreateRichDocx(c *gin.Context) {
+	if !s.isLocalhost(c) && s.cfg.InternalDocxToken != "" {
+		if c.GetHeader("X-Internal-Token") != s.cfg.InternalDocxToken {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
+			return
+		}
+	}
+	if !s.requireFeishuAccess(c) {
+		return
+	}
+	if err := c.Request.ParseMultipartForm(64 << 20); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart body: " + err.Error()})
+		return
+	}
+	manifestText := strings.TrimSpace(c.PostForm("manifest"))
+	if manifestText == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing manifest"})
+		return
+	}
+	var manifest richDocxManifest
+	if err := json.Unmarshal([]byte(manifestText), &manifest); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid manifest JSON: " + err.Error()})
+		return
+	}
+	title := strings.TrimSpace(c.PostForm("title"))
+	if title == "" {
+		title = strings.TrimSpace(manifest.Title)
+	}
+	if title == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing title"})
+		return
+	}
+	folderToken := strings.TrimSpace(c.PostForm("folder_token"))
+	if folderToken == "" {
+		folderToken = strings.TrimSpace(manifest.FolderToken)
+	}
+	folderName := strings.TrimSpace(c.PostForm("folder_name"))
+	if folderName == "" {
+		folderName = strings.TrimSpace(manifest.FolderName)
+	}
+	if folderToken == "" {
+		yearMonth := time.Now().Format("2006年1月")
+		if folderName == "" {
+			folderName = yearMonth + "产品"
+		}
+		substr := folderName
+		if strings.TrimSpace(c.PostForm("folder_name")) == "" && strings.TrimSpace(manifest.FolderName) == "" {
+			substr = yearMonth
+		}
+		subToken, found, err := s.feishu.FindSubfolderFuzzy(c.Request.Context(), s.cfg.FeishuPitchFolderToken, substr)
+		if err != nil {
+			writeDriveError(c, fmt.Errorf("查找飞书文件夹失败: %w", err))
+			return
+		}
+		if !found {
+			subToken, err = s.feishu.CreateFolder(c.Request.Context(), s.cfg.FeishuPitchFolderToken, folderName)
+			if err != nil {
+				writeDriveError(c, fmt.Errorf("创建飞书文件夹失败: %w", err))
+				return
+			}
+		}
+		folderToken = subToken
+	}
+	doc, err := s.feishu.CreateDocx(c.Request.Context(), title, folderToken, s.cfg.FeishuDriveDomain)
+	if err != nil {
+		writeDriveError(c, err)
+		return
+	}
+
+	files := richDocxFiles(c.Request.MultipartForm)
+	blocksAdded := 0
+	imagesAdded := 0
+	missingImages := []string{}
+	type pendingImage struct {
+		BlockIndex int
+		FileName   string
+		Data       []byte
+	}
+	blocks := []any{}
+	pendingImages := []pendingImage{}
+	appendMarkdownBlocks := func(content string) bool {
+		content = strings.TrimSpace(content)
+		if content == "" {
+			return true
+		}
+		converted, err := s.feishu.MarkdownBlocks(c.Request.Context(), content)
+		if err != nil {
+			writeDriveError(c, fmt.Errorf("转换飞书云文档内容失败: %w", err))
+			return false
+		}
+		blocks = append(blocks, converted...)
+		return true
+	}
+
+	for _, section := range manifest.Sections {
+		switch strings.ToLower(strings.TrimSpace(section.Type)) {
+		case "heading":
+			if !appendMarkdownBlocks("## " + strings.TrimSpace(section.Text)) {
+				return
+			}
+		case "subheading":
+			if !appendMarkdownBlocks("## " + strings.TrimSpace(section.Text)) {
+				return
+			}
+		case "body", "copy_file":
+			if !appendMarkdownBlocks(strings.TrimSpace(section.Text)) {
+				return
+			}
+		case "params":
+			if strings.TrimSpace(section.Text) != "" {
+				if !appendMarkdownBlocks("```\n" + strings.TrimSpace(section.Text) + "\n```") {
+					return
+				}
+			}
+		case "separator":
+			// The current material template does not require visible separators.
+		case "link_list":
+			lines := []string{}
+			for _, item := range section.Items {
+				label := strings.TrimSpace(item.Label)
+				if label == "" {
+					label = "链接"
+				}
+				if strings.TrimSpace(item.URL) != "" {
+					lines = append(lines, fmt.Sprintf("- [%s](%s)", label, strings.TrimSpace(item.URL)))
+				} else {
+					lines = append(lines, "- "+label)
+				}
+			}
+			if !appendMarkdownBlocks(strings.Join(lines, "\n")) {
+				return
+			}
+		case "image":
+			imageData, fileName, ok := richDocxImageData(files, section.Path)
+			if !ok {
+				missingImages = append(missingImages, section.Path)
+				caption := strings.TrimSpace(section.Caption)
+				if caption == "" {
+					caption = section.Path
+				}
+				if !appendMarkdownBlocks("[图片待补: " + caption + "]") {
+					return
+				}
+				continue
+			}
+			imageToken, err := s.feishu.UploadDocxImage(c.Request.Context(), doc.DocumentID, fileName, imageData)
+			if err != nil {
+				writeDriveError(c, fmt.Errorf("上传飞书图片失败: %w", err))
+				return
+			}
+			blocks = append(blocks, map[string]any{
+				"block_type": 27,
+				"image": map[string]any{
+					"file_token": imageToken,
+				},
+			})
+			pendingImages = append(pendingImages, pendingImage{
+				BlockIndex: len(blocks) - 1,
+				FileName:   fileName,
+				Data:       imageData,
+			})
+		}
+	}
+	inserted, err := s.feishu.InsertDocxBlocks(c.Request.Context(), doc.DocumentID, blocks)
+	if err != nil {
+		writeDriveError(c, fmt.Errorf("写入飞书云文档失败: %w", err))
+		return
+	}
+	blocksAdded = len(inserted)
+	for _, image := range pendingImages {
+		if image.BlockIndex < 0 || image.BlockIndex >= len(inserted) || strings.TrimSpace(inserted[image.BlockIndex].BlockID) == "" {
+			writeDriveError(c, fmt.Errorf("飞书图片块返回缺少 block_id"))
+			return
+		}
+		blockID := inserted[image.BlockIndex].BlockID
+		blockToken, err := s.feishu.UploadDocxImage(c.Request.Context(), blockID, image.FileName, image.Data)
+		if err != nil {
+			writeDriveError(c, fmt.Errorf("绑定飞书图片失败: %w", err))
+			return
+		}
+		width, height := feishu.DocxImageDisplaySize(image.Data, 600)
+		if err := s.feishu.ReplaceDocxImage(c.Request.Context(), doc.DocumentID, blockID, blockToken, width, height); err != nil {
+			writeDriveError(c, fmt.Errorf("替换飞书图片失败: %w", err))
+			return
+		}
+		imagesAdded++
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"url":            doc.URL,
+		"doc_token":      doc.DocumentID,
+		"title":          doc.Title,
+		"folder":         folderName,
+		"folder_token":   folderToken,
+		"blocks_added":   blocksAdded,
+		"images_added":   imagesAdded,
+		"missing_images": missingImages,
+	})
+}
+
+type richDocxUpload struct {
+	FileName string
+	Data     []byte
+}
+
+func richDocxFiles(form *multipart.Form) map[string]richDocxUpload {
+	out := map[string]richDocxUpload{}
+	if form == nil {
+		return out
+	}
+	for fieldName, headers := range form.File {
+		for _, header := range headers {
+			f, err := header.Open()
+			if err != nil {
+				continue
+			}
+			data, err := io.ReadAll(f)
+			_ = f.Close()
+			if err != nil || len(data) == 0 {
+				continue
+			}
+			upload := richDocxUpload{FileName: header.Filename, Data: data}
+			for _, key := range []string{fieldName, header.Filename, filepath.Base(header.Filename)} {
+				key = strings.TrimSpace(key)
+				if key != "" {
+					out[key] = upload
+				}
+			}
+		}
+	}
+	return out
+}
+
+func richDocxImageData(files map[string]richDocxUpload, sectionPath string) ([]byte, string, bool) {
+	candidates := []string{
+		strings.TrimSpace(sectionPath),
+		filepath.Base(strings.TrimSpace(sectionPath)),
+	}
+	for _, key := range candidates {
+		if upload, ok := files[key]; ok {
+			fileName := upload.FileName
+			if strings.TrimSpace(fileName) == "" {
+				fileName = filepath.Base(sectionPath)
+			}
+			if strings.TrimSpace(fileName) == "" || fileName == "." {
+				fileName = "image.png"
+			}
+			return upload.Data, fileName, true
+		}
+	}
+	return nil, "", false
+}
+
+func appendRichMarkdown(b *strings.Builder, text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	if b.Len() > 0 {
+		b.WriteString("\n\n")
+	}
+	b.WriteString(text)
 }
 
 // driveUploadDocx 接收已装配好的 .docx 二进制，上传到飞书云空间当年当月子文件夹，
@@ -3085,7 +3379,9 @@ func (s *Server) rebatePending(c *gin.Context) {
 			row["tax_performance_ratio"] = taxPerfVal
 		}
 
+		hasManualOverride := false
 		if manualID, manualExists := row["manual_order_id"]; manualExists && manualID != nil {
+			hasManualOverride = true
 			applyManualNumber := func(target string) {
 				manualKey := "manual_" + target
 				if v, ok := row[manualKey]; ok && v != nil {
@@ -3126,13 +3422,13 @@ func (s *Server) rebatePending(c *gin.Context) {
 		finalExpectedSub := numberValue(row["expected_subscribe"])
 		finalExpectedMgmt := numberValue(row["expected_management"])
 		finalExpectedPerf := numberValue(row["expected_performance"])
-		if finalReturnedSub > 0 {
+		if !hasManualOverride && finalReturnedSub > 0 {
 			finalExpectedSub = finalReturnedSub
 		}
-		if finalReturnedMgmt > 0 {
+		if !hasManualOverride && finalReturnedMgmt > 0 {
 			finalExpectedMgmt = finalReturnedMgmt
 		}
-		if finalReturnedPerf > 0 {
+		if !hasManualOverride && finalReturnedPerf > 0 {
 			finalExpectedPerf = finalReturnedPerf
 		}
 		row["expected_subscribe"] = finalExpectedSub
@@ -3142,19 +3438,20 @@ func (s *Server) rebatePending(c *gin.Context) {
 		row["outstanding_management"] = finalExpectedMgmt - finalReturnedMgmt
 		row["outstanding_performance"] = finalExpectedPerf - finalReturnedPerf
 		decision := computeRebateDecision(rebateDecisionInput{
-			OrderID:         oid,
-			SubRatio:        numberValue(row["subscribe_fee_ratio"]),
-			MgmtRatio:       numberValue(row["management_fee_ratio"]),
-			PerfRatio:       numberValue(row["performance_fee_ratio"]),
-			SubReturnable:   subReturnable,
-			MgmtReturnable:  mgmtReturnable,
-			OutstandingSub:  numberValue(row["outstanding_subscribe"]),
-			OutstandingMgmt: numberValue(row["outstanding_management"]),
-			OutstandingPerf: numberValue(row["outstanding_performance"]),
-			DetailSub:       rebateDetailOutstanding(taxLookup, oid, "subscribe"),
-			DetailMgmt:      rebateDetailOutstanding(taxLookup, oid, "management"),
-			DetailPerf:      rebateDetailOutstanding(taxLookup, oid, "performance"),
-			RebateTarget:    cellString(row["rebate_target"]),
+			OrderID:             oid,
+			SubRatio:            numberValue(row["subscribe_fee_ratio"]),
+			MgmtRatio:           numberValue(row["management_fee_ratio"]),
+			PerfRatio:           numberValue(row["performance_fee_ratio"]),
+			SubReturnable:       subReturnable,
+			MgmtReturnable:      mgmtReturnable,
+			OutstandingSub:      numberValue(row["outstanding_subscribe"]),
+			OutstandingMgmt:     numberValue(row["outstanding_management"]),
+			OutstandingPerf:     numberValue(row["outstanding_performance"]),
+			DetailSub:           rebateDetailOutstanding(taxLookup, oid, "subscribe"),
+			DetailMgmt:          rebateDetailOutstanding(taxLookup, oid, "management"),
+			DetailPerf:          rebateDetailOutstanding(taxLookup, oid, "performance"),
+			RebateTarget:        cellString(row["rebate_target"]),
+			ForceIncludeSettled: hasManualOverride,
 		})
 		if decision.Exclude {
 			continue

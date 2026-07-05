@@ -12,6 +12,7 @@ type rebateDecisionInput struct {
 	OutstandingSub, OutstandingMgmt, OutstandingPerf float64
 	DetailSub, DetailMgmt, DetailPerf                *float64
 	RebateTarget                                     string
+	ForceIncludeSettled                              bool
 }
 
 type rebateDecision struct {
@@ -29,7 +30,7 @@ func computeRebateDecision(p rebateDecisionInput) rebateDecision {
 	}
 
 	returnable := p.SubReturnable || p.MgmtReturnable
-	if returnable && p.OutstandingSub <= 0 && p.OutstandingMgmt <= 0 && p.OutstandingPerf <= 0 {
+	if returnable && !p.ForceIncludeSettled && p.OutstandingSub <= 0 && p.OutstandingMgmt <= 0 && p.OutstandingPerf <= 0 {
 		return rebateDecision{Exclude: true}
 	}
 

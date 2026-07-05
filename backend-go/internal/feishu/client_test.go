@@ -1,14 +1,36 @@
 package feishu
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestDocxImageDisplaySizeScalesHeight(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 875, 1280))
+	for y := 0; y < 1280; y++ {
+		for x := 0; x < 875; x++ {
+			img.Set(x, y, color.White)
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode png: %v", err)
+	}
+	width, height := DocxImageDisplaySize(buf.Bytes(), 600)
+	if width != 600 || height != 878 {
+		t.Fatalf("size = %dx%d, want 600x878", width, height)
+	}
+}
 
 // getTimeFuture 返回一个远未来时间，用于让 ensureValidToken 跳过刷新。
 func getTimeFuture() time.Time { return time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC) }
@@ -162,6 +184,138 @@ func TestCreateDocx(t *testing.T) {
 	}
 	if doc.DocumentID != "docNew" || doc.URL != "https://kcngap16uccc.feishu.cn/docx/docNew" {
 		t.Errorf("doc = %+v", doc)
+	}
+}
+
+func TestUploadDocxImage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/open-apis/drive/v1/medias/upload_all" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("auth = %q", got)
+		}
+		ct := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "multipart/form-data") {
+			t.Errorf("content-type = %q, want multipart", ct)
+		}
+		b, _ := io.ReadAll(r.Body)
+		body := string(b)
+		for _, want := range []string{`name="file_name"`, "chart.png", `name="parent_type"`, "docx_image", `name="parent_node"`, "docNew", `name="size"`, `filename="chart.png"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("multipart body missing %q", want)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"code":0,"data":{"file_token":"imgTok"}}`))
+	}))
+	t.Cleanup(srv.Close)
+	orig := feishuBase
+	feishuBase = srv.URL
+	t.Cleanup(func() { feishuBase = orig })
+
+	c := newAuthedClient(t, srv)
+	tok, err := c.UploadDocxImage(context.Background(), "docNew", "chart.png", []byte("png"))
+	if err != nil {
+		t.Fatalf("UploadDocxImage: %v", err)
+	}
+	if tok != "imgTok" {
+		t.Errorf("token = %q, want imgTok", tok)
+	}
+}
+
+func TestInsertDocxImage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/open-apis/docx/v1/documents/docNew/blocks/docNew/children" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("auth = %q", got)
+		}
+		b, _ := io.ReadAll(r.Body)
+		body := string(b)
+		for _, want := range []string{`"block_type":27`, `"image"`, `"file_token":"imgTok"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("body missing %q: %s", want, body)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"code":0,"data":{"children":[{"block_id":"imgBlk"}]}}`))
+	}))
+	t.Cleanup(srv.Close)
+	orig := feishuBase
+	feishuBase = srv.URL
+	t.Cleanup(func() { feishuBase = orig })
+
+	c := newAuthedClient(t, srv)
+	blockID, err := c.InsertDocxImage(context.Background(), "docNew", "imgTok")
+	if err != nil {
+		t.Fatalf("InsertDocxImage: %v", err)
+	}
+	if blockID != "imgBlk" {
+		t.Fatalf("blockID = %q, want imgBlk", blockID)
+	}
+}
+
+func TestAddDocxImage(t *testing.T) {
+	var uploads []string
+	seenInsert := false
+	seenReplace := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/open-apis/drive/v1/medias/upload_all":
+			b, _ := io.ReadAll(r.Body)
+			body := string(b)
+			if strings.Contains(body, `name="parent_node"`) && strings.Contains(body, "docNew") {
+				uploads = append(uploads, "docNew")
+				w.Write([]byte(`{"code":0,"data":{"file_token":"seedTok"}}`))
+				return
+			}
+			if strings.Contains(body, `name="parent_node"`) && strings.Contains(body, "imgBlk") {
+				uploads = append(uploads, "imgBlk")
+				w.Write([]byte(`{"code":0,"data":{"file_token":"blockTok"}}`))
+				return
+			}
+			t.Errorf("unexpected upload body = %s", body)
+			w.Write([]byte(`{"code":999,"msg":"bad upload"}`))
+		case "/open-apis/docx/v1/documents/docNew/blocks/docNew/children":
+			seenInsert = true
+			b, _ := io.ReadAll(r.Body)
+			body := string(b)
+			if !strings.Contains(body, `"file_token":"seedTok"`) {
+				t.Errorf("insert body = %s", body)
+			}
+			w.Write([]byte(`{"code":0,"data":{"children":[{"block_id":"imgBlk"}]}}`))
+		case "/open-apis/docx/v1/documents/docNew/blocks/batch_update":
+			seenReplace = true
+			if r.Method != http.MethodPatch {
+				t.Errorf("method = %s, want PATCH", r.Method)
+			}
+			b, _ := io.ReadAll(r.Body)
+			body := string(b)
+			for _, want := range []string{`"block_id":"imgBlk"`, `"replace_image"`, `"token":"blockTok"`, `"width":600`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("replace body missing %q: %s", want, body)
+				}
+			}
+			w.Write([]byte(`{"code":0,"data":{"blocks":[{"block_id":"imgBlk"}]}}`))
+		default:
+			t.Errorf("unexpected path = %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	orig := feishuBase
+	feishuBase = srv.URL
+	t.Cleanup(func() { feishuBase = orig })
+
+	c := newAuthedClient(t, srv)
+	if err := c.AddDocxImage(context.Background(), "docNew", "chart.png", []byte("png")); err != nil {
+		t.Fatalf("AddDocxImage: %v", err)
+	}
+	if !reflect.DeepEqual(uploads, []string{"docNew", "imgBlk"}) || !seenInsert || !seenReplace {
+		t.Fatalf("uploads=%v seenInsert=%v seenReplace=%v", uploads, seenInsert, seenReplace)
 	}
 }
 

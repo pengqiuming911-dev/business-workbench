@@ -27,6 +27,18 @@ func TestExcludeReturnableAndFullyReturned(t *testing.T) {
 	}
 }
 
+func TestKeepManualSettledOverride(t *testing.T) {
+	d := computeRebateDecision(rebateDecisionInput{
+		SubRatio: 0.3, MgmtRatio: 0.3, PerfRatio: 0.3,
+		SubReturnable: true, MgmtReturnable: true,
+		OutstandingSub: 0, OutstandingMgmt: -427.78, OutstandingPerf: -789.78,
+		ForceIncludeSettled: true,
+	})
+	if d.Exclude {
+		t.Fatalf("expected keep for manual settled/over-returned override")
+	}
+}
+
 func TestKeepNotReturnableEvenIfNoOutstanding(t *testing.T) {
 	// 暂不可返（不在待返 sheet）即便未返为 0 仍保留展示
 	d := computeRebateDecision(rebateDecisionInput{
