@@ -3749,7 +3749,7 @@ func (s *Server) rebateSendReview(c *gin.Context) {
 		return
 	}
 	cfg := s.emailConfig()
-	subject := fmt.Sprintf("待返费审核申请 - %s - %d笔", firstNonEmptyString(req.RebateTarget, items[0].RebateTarget), len(items))
+	subject := rebateFlowEmailSubject()
 	workbook, err := s.buildRebateWorkbook(c.Request.Context(), items)
 	if err != nil {
 		writeDriveError(c, err)
@@ -3789,7 +3789,7 @@ func (s *Server) rebateSendPayment(c *gin.Context) {
 		return
 	}
 	cfg := s.emailConfig()
-	subject := fmt.Sprintf("待返费打款申请 - %s - %d笔", firstNonEmptyString(req.RebateTarget, items[0].RebateTarget), len(items))
+	subject := rebateFlowEmailSubject()
 	workbook, err := s.buildRebateWorkbook(c.Request.Context(), items)
 	if err != nil {
 		writeDriveError(c, err)
@@ -3895,6 +3895,10 @@ func (s *Server) emailConfig() email.Config {
 		SMTPPass:   s.cfg.SMTPPass,
 		SMTPFrom:   s.cfg.SMTPFrom,
 	}
+}
+
+func rebateFlowEmailSubject() string {
+	return "返费申请-" + time.Now().Format("20060102")
 }
 
 func (s *Server) updateRebateFlowStatus(items []rebateFlowItem, fields map[string]any) error {
