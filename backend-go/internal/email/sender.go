@@ -174,7 +174,7 @@ func SendMailWithAttachments(cfg Config, recipients []string, subject, text, htm
 }
 
 func sendSMTP(cfg Config, addr, from string, recipients []string, msg []byte) error {
-	auth := smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
+	auth := loginAuth{username: cfg.SMTPUser, password: cfg.SMTPPass}
 	timeout := 10 * time.Second
 	if cfg.SMTPSecure == "true" || strings.HasSuffix(addr, ":465") {
 		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: timeout}, "tcp", addr, &tls.Config{
@@ -248,6 +248,29 @@ func sendSMTP(cfg Config, addr, from string, recipients []string, msg []byte) er
 		return err
 	}
 	return writer.Close()
+}
+
+type loginAuth struct {
+	username string
+	password string
+}
+
+func (a loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	return "LOGIN", nil, nil
+}
+
+func (a loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if !more {
+		return nil, nil
+	}
+	switch strings.ToLower(string(fromServer)) {
+	case "username:":
+		return []byte(a.username), nil
+	case "password:":
+		return []byte(a.password), nil
+	default:
+		return nil, fmt.Errorf("unexpected LOGIN auth challenge: %s", string(fromServer))
+	}
 }
 
 func mimeHeader(value string) string {
