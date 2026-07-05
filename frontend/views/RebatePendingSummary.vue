@@ -412,7 +412,7 @@ function toggleExpanded(key) {
 }
 
 function isItemPlanned(item) {
-  return !!item.plan_subscribe && !!item.plan_management && !!item.plan_performance
+  return isEnabledFlag(item.plan_subscribe) && isEnabledFlag(item.plan_management) && isEnabledFlag(item.plan_performance)
 }
 
 function isGroupPlanned(group) {
@@ -420,7 +420,7 @@ function isGroupPlanned(group) {
 }
 
 function isItemReviewed(item) {
-  return !!item.review_sent
+  return isEnabledFlag(item.review_sent)
 }
 
 function isGroupReviewed(group) {
@@ -428,7 +428,11 @@ function isGroupReviewed(group) {
 }
 
 function isItemPaymentSent(item) {
-  return !!item.payment_sent
+  return isEnabledFlag(item.payment_sent)
+}
+
+function isEnabledFlag(value) {
+  return value === true || value === 1 || value === '1'
 }
 
 function isGroupPaymentSent(group) {

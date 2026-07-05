@@ -108,6 +108,26 @@ jobs:
           if [ -f ${{ env.APP_DIR }}/shared/.env ]; then
             CURRENT_INTERNAL_DOCX_ALLOW_IPS="$(grep '^INTERNAL_DOCX_ALLOW_IPS=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
           fi
+          CURRENT_SMTP_HOST=""
+          CURRENT_SMTP_PORT=""
+          CURRENT_SMTP_SECURE=""
+          CURRENT_SMTP_USER=""
+          CURRENT_SMTP_PASS=""
+          CURRENT_SMTP_FROM=""
+          if [ -f ${{ env.APP_DIR }}/shared/.env ]; then
+            CURRENT_SMTP_HOST="$(grep '^SMTP_HOST=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+            CURRENT_SMTP_PORT="$(grep '^SMTP_PORT=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+            CURRENT_SMTP_SECURE="$(grep '^SMTP_SECURE=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+            CURRENT_SMTP_USER="$(grep '^SMTP_USER=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+            CURRENT_SMTP_PASS="$(grep '^SMTP_PASS=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+            CURRENT_SMTP_FROM="$(grep '^SMTP_FROM=' ${{ env.APP_DIR }}/shared/.env | tail -n 1 | cut -d= -f2- || true)"
+          fi
+          if [ -z "$CURRENT_SMTP_HOST" ]; then CURRENT_SMTP_HOST='${{ secrets.SMTP_HOST }}'; fi
+          if [ -z "$CURRENT_SMTP_PORT" ]; then CURRENT_SMTP_PORT='${{ secrets.SMTP_PORT }}'; fi
+          if [ -z "$CURRENT_SMTP_SECURE" ]; then CURRENT_SMTP_SECURE='${{ secrets.SMTP_SECURE }}'; fi
+          if [ -z "$CURRENT_SMTP_USER" ]; then CURRENT_SMTP_USER='${{ secrets.SMTP_USER }}'; fi
+          if [ -z "$CURRENT_SMTP_PASS" ]; then CURRENT_SMTP_PASS='${{ secrets.SMTP_PASS }}'; fi
+          if [ -z "$CURRENT_SMTP_FROM" ]; then CURRENT_SMTP_FROM='${{ secrets.SMTP_FROM }}'; fi
           cat > ${{ env.APP_DIR }}/shared/.env << 'EOF'
           FEISHU_APP_ID=${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET=${{ secrets.FEISHU_APP_SECRET }}
@@ -122,18 +142,24 @@ jobs:
           TONGYU_PASS=${{ secrets.TONGYU_PASS }}
           CHROME_PATH=/snap/bin/chromium
           FEISHU_PUSH_WEBHOOK=${{ secrets.FEISHU_PUSH_WEBHOOK }}
-          SMTP_HOST=${{ secrets.SMTP_HOST }}
-          SMTP_PORT=${{ secrets.SMTP_PORT }}
-          SMTP_SECURE=${{ secrets.SMTP_SECURE }}
-          SMTP_USER=${{ secrets.SMTP_USER }}
-          SMTP_PASS=${{ secrets.SMTP_PASS }}
-          SMTP_FROM=${{ secrets.SMTP_FROM }}
+          SMTP_HOST=__SMTP_HOST__
+          SMTP_PORT=__SMTP_PORT__
+          SMTP_SECURE=__SMTP_SECURE__
+          SMTP_USER=__SMTP_USER__
+          SMTP_PASS=__SMTP_PASS__
+          SMTP_FROM=__SMTP_FROM__
           CRON_TIMEZONE=Asia/Shanghai
           INTERNAL_DOCX_TOKEN=__INTERNAL_DOCX_TOKEN__
           INTERNAL_DOCX_ALLOW_IPS=__INTERNAL_DOCX_ALLOW_IPS__
           EOF
           sed -i "s|__FEISHU_REDIRECT_URI__|$CURRENT_FEISHU_REDIRECT_URI|g" ${{ env.APP_DIR }}/shared/.env
           sed -i "s|__FRONTEND_URL__|$CURRENT_FRONTEND_URL|g" ${{ env.APP_DIR }}/shared/.env
+          sed -i "s|__SMTP_HOST__|$CURRENT_SMTP_HOST|g" ${{ env.APP_DIR }}/shared/.env
+          sed -i "s|__SMTP_PORT__|$CURRENT_SMTP_PORT|g" ${{ env.APP_DIR }}/shared/.env
+          sed -i "s|__SMTP_SECURE__|$CURRENT_SMTP_SECURE|g" ${{ env.APP_DIR }}/shared/.env
+          sed -i "s|__SMTP_USER__|$CURRENT_SMTP_USER|g" ${{ env.APP_DIR }}/shared/.env
+          sed -i "s|__SMTP_PASS__|$CURRENT_SMTP_PASS|g" ${{ env.APP_DIR }}/shared/.env
+          sed -i "s|__SMTP_FROM__|$CURRENT_SMTP_FROM|g" ${{ env.APP_DIR }}/shared/.env
           sed -i "s|__INTERNAL_DOCX_TOKEN__|$CURRENT_INTERNAL_DOCX_TOKEN|g" ${{ env.APP_DIR }}/shared/.env
           sed -i "s|__INTERNAL_DOCX_ALLOW_IPS__|$CURRENT_INTERNAL_DOCX_ALLOW_IPS|g" ${{ env.APP_DIR }}/shared/.env
           chmod 600 ${{ env.APP_DIR }}/shared/.env
