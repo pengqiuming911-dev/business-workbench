@@ -130,10 +130,10 @@
                   <label class="plan-check">
                     <input
                       type="checkbox"
-                      :checked="isGroupPlanned(group)"
+                      :checked="isGroupSelected(group)"
                       @change="toggleGroupPlan(group, $event)"
                     />
-                    <span>{{ isGroupPlanned(group) ? fmtNum(group.plan_total) : '0.00' }}</span>
+                    <span>{{ isGroupSelected(group) ? fmtNum(group.plan_total) : '0.00' }}</span>
                   </label>
                 </td>
                 <td class="plan-cell">
@@ -216,6 +216,7 @@ const loaded = ref(false)
 const busyAction = ref('')
 const items = ref([])
 const expanded = ref({})
+const selectedTargets = ref(new Set())
 const page = ref(1)
 const pageSize = ref(20)
 
@@ -377,8 +378,10 @@ async function fetchData() {
     if (!res.ok) throw new Error('加载失败')
     const data = await res.json()
     items.value = (data.items || []).map(normalizeItem)
+    selectedTargets.value = new Set()
   } catch {
     items.value = []
+    selectedTargets.value = new Set()
   } finally {
     loading.value = false
     loaded.value = true
@@ -419,6 +422,10 @@ function isGroupPlanned(group) {
   return group.items.length > 0 && group.items.every(isItemPlanned)
 }
 
+function isGroupSelected(group) {
+  return selectedTargets.value.has(group.rebate_target)
+}
+
 function isItemReviewed(item) {
   return isEnabledFlag(item.review_sent)
 }
@@ -440,15 +447,16 @@ function isGroupPaymentSent(group) {
 }
 
 function selectedPlannedItems() {
-  return items.value.filter(isItemPlanned)
+  const selected = selectedTargets.value
+  return items.value.filter(item => selected.has(item.rebate_target || '鏈～鍐欒繑杩樹汉'))
 }
 
 function selectedReviewedItems() {
-  return items.value.filter(item => isItemPlanned(item) && isItemReviewed(item))
+  return selectedPlannedItems().filter(isItemReviewed)
 }
 
 function selectedPaymentItems() {
-  return items.value.filter(item => isItemPlanned(item) && isItemReviewed(item) && isItemPaymentSent(item))
+  return selectedPlannedItems().filter(item => isItemReviewed(item) && isItemPaymentSent(item))
 }
 
 function sumFlowItems(sourceItems) {
@@ -525,14 +533,21 @@ async function completePayment() {
 
 async function toggleGroupPlan(group, event) {
   const checked = event.target.checked
+  const next = new Set(selectedTargets.value)
+  if (checked) {
+    next.add(group.rebate_target)
+  } else {
+    next.delete(group.rebate_target)
+  }
+  selectedTargets.value = next
   for (const item of group.items) {
     item.plan_subscribe = checked ? 1 : 0
     item.plan_management = checked ? 1 : 0
     item.plan_performance = checked ? 1 : 0
   }
-  await Promise.all(
-    group.items.map(item =>
-      fetch('/api/rebate/pending/status', {
+  try {
+    for (const item of group.items) {
+      const res = await fetch('/api/rebate/pending/status', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -541,9 +556,14 @@ async function toggleGroupPlan(group, event) {
           plan_management: item.plan_management,
           plan_performance: item.plan_performance,
         }),
-      }).catch(() => {})
-    )
-  )
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || '更新勾选状态失败')
+    }
+  } catch (e) {
+    alert(e.message || '更新勾选状态失败')
+    await fetchData()
+  }
 }
 
 async function downloadSelectedWorkbook() {

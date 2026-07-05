@@ -1,11 +1,14 @@
 package email
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"mime"
+	"net"
 	"net/smtp"
 	"strings"
+	"time"
 
 	"business-workbench/backend-go/internal/model"
 	"business-workbench/backend-go/internal/observations"
@@ -135,10 +138,8 @@ func SendObservationEmail(cfg Config, n *Notification) (sent bool, reason string
 		port = "587"
 	}
 	addr := cfg.SMTPHost + ":" + port
-	auth := smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
 	body := buildMIMEBody(from, n.Recipient, n.Subject, n.Text, n.HTML)
-	err := smtp.SendMail(addr, auth, from, []string{n.Recipient}, []byte(body))
-	if err != nil {
+	if err := sendSMTP(cfg, addr, from, []string{n.Recipient}, []byte(body)); err != nil {
 		return false, "send-error: " + err.Error()
 	}
 	return true, ""
@@ -164,13 +165,89 @@ func SendMailWithAttachments(cfg Config, recipients []string, subject, text, htm
 		port = "587"
 	}
 	addr := cfg.SMTPHost + ":" + port
-	auth := smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
 	to := strings.Join(recipients, ", ")
 	body := buildMIMEBodyWithAttachments(from, to, mimeHeader(subject), text, html, attachments)
-	if err := smtp.SendMail(addr, auth, from, recipients, []byte(body)); err != nil {
+	if err := sendSMTP(cfg, addr, from, recipients, []byte(body)); err != nil {
 		return false, "send-error: " + err.Error()
 	}
 	return true, ""
+}
+
+func sendSMTP(cfg Config, addr, from string, recipients []string, msg []byte) error {
+	auth := smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
+	timeout := 10 * time.Second
+	if cfg.SMTPSecure == "true" || strings.HasSuffix(addr, ":465") {
+		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: timeout}, "tcp", addr, &tls.Config{
+			ServerName: cfg.SMTPHost,
+			MinVersion: tls.VersionTLS12,
+		})
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		_ = conn.SetDeadline(time.Now().Add(timeout))
+		client, err := smtp.NewClient(conn, cfg.SMTPHost)
+		if err != nil {
+			return err
+		}
+		defer client.Quit()
+		if err := client.Auth(auth); err != nil {
+			return err
+		}
+		if err := client.Mail(from); err != nil {
+			return err
+		}
+		for _, recipient := range recipients {
+			if err := client.Rcpt(recipient); err != nil {
+				return err
+			}
+		}
+		writer, err := client.Data()
+		if err != nil {
+			return err
+		}
+		if _, err := writer.Write(msg); err != nil {
+			_ = writer.Close()
+			return err
+		}
+		return writer.Close()
+	}
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	client, err := smtp.NewClient(conn, cfg.SMTPHost)
+	if err != nil {
+		return err
+	}
+	defer client.Quit()
+	if ok, _ := client.Extension("STARTTLS"); ok {
+		if err := client.StartTLS(&tls.Config{ServerName: cfg.SMTPHost, MinVersion: tls.VersionTLS12}); err != nil {
+			return err
+		}
+	}
+	if err := client.Auth(auth); err != nil {
+		return err
+	}
+	if err := client.Mail(from); err != nil {
+		return err
+	}
+	for _, recipient := range recipients {
+		if err := client.Rcpt(recipient); err != nil {
+			return err
+		}
+	}
+	writer, err := client.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := writer.Write(msg); err != nil {
+		_ = writer.Close()
+		return err
+	}
+	return writer.Close()
 }
 
 func mimeHeader(value string) string {
