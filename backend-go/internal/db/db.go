@@ -113,6 +113,16 @@ func (s *Store) MigrateRebateColumns() error {
 		}
 	}
 	if _, err := s.DB.Exec(`
+		ALTER TABLE rebate_status ADD COLUMN review_sent INTEGER DEFAULT 0
+	`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate rebate_status.review_sent: %w", err)
+	}
+	if _, err := s.DB.Exec(`
+		ALTER TABLE rebate_status ADD COLUMN payment_sent INTEGER DEFAULT 0
+	`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate rebate_status.payment_sent: %w", err)
+	}
+	if _, err := s.DB.Exec(`
 		CREATE TABLE IF NOT EXISTS rebate_pending_manual (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			order_id TEXT NOT NULL UNIQUE,

@@ -1640,6 +1640,7 @@ func (s *Store) QueryPendingRebates(filters map[string]string) ([]map[string]any
 		       t.tax_subscribe_ratio, t.tax_management_ratio, t.tax_performance_ratio,
 		       t.flight_date, t.holding_status, t.complete_date,
 		       rs.is_returnable, rs.plan_subscribe, rs.plan_management, rs.plan_performance,
+		       rs.review_sent, rs.payment_sent,
 		       rpm.order_id AS manual_order_id,
 		       rpm.principal AS manual_principal,
 		       rpm.subscribe_receivable AS manual_subscribe_receivable,
@@ -1895,6 +1896,20 @@ func (s *Store) UpsertRebateStatus(orderID string, fields map[string]any) error 
 		setClauses = append(setClauses, "plan_performance = ?")
 		args = append(args, v)
 		insertCols = append(insertCols, "plan_performance")
+		insertPlaceholders = append(insertPlaceholders, "?")
+		insertArgs = append(insertArgs, v)
+	}
+	if v, ok := fields["review_sent"]; ok {
+		setClauses = append(setClauses, "review_sent = ?")
+		args = append(args, v)
+		insertCols = append(insertCols, "review_sent")
+		insertPlaceholders = append(insertPlaceholders, "?")
+		insertArgs = append(insertArgs, v)
+	}
+	if v, ok := fields["payment_sent"]; ok {
+		setClauses = append(setClauses, "payment_sent = ?")
+		args = append(args, v)
+		insertCols = append(insertCols, "payment_sent")
 		insertPlaceholders = append(insertPlaceholders, "?")
 		insertArgs = append(insertArgs, v)
 	}

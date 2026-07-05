@@ -3,6 +3,7 @@ package email
 import (
 	"fmt"
 	"net/smtp"
+	"net/textproto"
 	"strings"
 
 	"business-workbench/backend-go/internal/model"
@@ -134,6 +135,35 @@ func SendObservationEmail(cfg Config, n *Notification) (sent bool, reason string
 		return false, "send-error: " + err.Error()
 	}
 	return true, ""
+}
+
+func SendMail(cfg Config, recipients []string, subject, text, html string) (sent bool, reason string) {
+	if len(recipients) == 0 {
+		return false, "no-recipient"
+	}
+	if cfg.SMTPHost == "" || cfg.SMTPUser == "" || cfg.SMTPPass == "" {
+		return false, "smtp-not-configured"
+	}
+	from := cfg.SMTPFrom
+	if from == "" {
+		from = cfg.SMTPUser
+	}
+	port := cfg.SMTPPort
+	if port == "" {
+		port = "587"
+	}
+	addr := cfg.SMTPHost + ":" + port
+	auth := smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
+	to := strings.Join(recipients, ", ")
+	body := buildMIMEBody(from, to, mimeHeader(subject), text, html)
+	if err := smtp.SendMail(addr, auth, from, recipients, []byte(body)); err != nil {
+		return false, "send-error: " + err.Error()
+	}
+	return true, ""
+}
+
+func mimeHeader(value string) string {
+	return textproto.MIMEHeader{"Subject": {value}}.Get("Subject")
 }
 
 func buildMIMEBody(from, to, subject, text, html string) string {

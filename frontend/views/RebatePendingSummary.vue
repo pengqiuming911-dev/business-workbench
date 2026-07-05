@@ -59,6 +59,8 @@
             <col span="3" style="min-width: 110px" />
             <col span="3" style="min-width: 110px" />
             <col style="min-width: 150px" />
+            <col style="min-width: 130px" />
+            <col style="min-width: 130px" />
           </colgroup>
           <thead>
             <tr class="header-group-row">
@@ -67,7 +69,9 @@
               <th colspan="3" class="group-header group-should">应返</th>
               <th colspan="3" class="group-header group-returned">已返</th>
               <th colspan="3" class="group-header group-unreturned">未返</th>
-              <th rowspan="2" class="group-header group-plan">本次拟返</th>
+              <th class="group-header group-plan">本次拟返</th>
+              <th class="group-header group-review">审核</th>
+              <th class="group-header group-payment">打款</th>
             </tr>
             <tr class="header-sub-row">
               <th class="num sub-receivable">申购费</th>
@@ -82,6 +86,21 @@
               <th class="num sub-unreturned">申购费</th>
               <th class="num sub-unreturned">管理费</th>
               <th class="num sub-unreturned">业绩报酬</th>
+              <th class="sub-plan">
+                <button class="flow-btn" type="button" :disabled="flowLoading" @click="sendReview">
+                  发送审核
+                </button>
+              </th>
+              <th class="sub-review">
+                <button class="flow-btn" type="button" :disabled="flowLoading" @click="sendPayment">
+                  发送打款
+                </button>
+              </th>
+              <th class="sub-payment">
+                <button class="flow-btn" type="button" :disabled="flowLoading" @click="completePayment">
+                  支付完成
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -117,9 +136,19 @@
                     <span>{{ isGroupPlanned(group) ? fmtNum(group.plan_total) : '0.00' }}</span>
                   </label>
                 </td>
+                <td class="plan-cell">
+                  <label class="state-check">
+                    <input type="checkbox" :checked="isGroupReviewed(group)" disabled />
+                  </label>
+                </td>
+                <td class="plan-cell">
+                  <label class="state-check">
+                    <input type="checkbox" :checked="isGroupPaymentSent(group)" disabled />
+                  </label>
+                </td>
               </tr>
               <tr v-if="expanded[group.rebate_target]" class="detail-holder-row">
-                <td colspan="14" class="detail-holder-cell">
+                <td colspan="16" class="detail-holder-cell">
                   <table class="detail-table">
                     <thead>
                       <tr>
@@ -175,6 +204,7 @@ defineProps({
 
 const loading = ref(false)
 const loaded = ref(false)
+const flowLoading = ref(false)
 const items = ref([])
 const expanded = ref({})
 const page = ref(1)
@@ -376,6 +406,100 @@ function isGroupPlanned(group) {
   return group.items.length > 0 && group.items.every(isItemPlanned)
 }
 
+function isItemReviewed(item) {
+  return !!item.review_sent
+}
+
+function isGroupReviewed(group) {
+  return group.items.length > 0 && group.items.every(isItemReviewed)
+}
+
+function isItemPaymentSent(item) {
+  return !!item.payment_sent
+}
+
+function isGroupPaymentSent(group) {
+  return group.items.length > 0 && group.items.every(isItemPaymentSent)
+}
+
+function selectedPlannedItems() {
+  return items.value.filter(isItemPlanned)
+}
+
+function selectedReviewedItems() {
+  return items.value.filter(item => isItemPlanned(item) && isItemReviewed(item))
+}
+
+function selectedPaymentItems() {
+  return items.value.filter(item => isItemPlanned(item) && isItemReviewed(item) && isItemPaymentSent(item))
+}
+
+function flowPayload(sourceItems) {
+  return {
+    rebate_target: sourceItems.length === 1 ? sourceItems[0].rebate_target : '',
+    items: sourceItems.map(item => ({
+      order_id: item.order_id,
+      flight_id: item.flight_id || '',
+      product_name: item.product_name || '',
+      customer_name: item.customer_name || '',
+      rebate_target: item.rebate_target || '',
+      outstanding_subscribe: Math.max(0, outstanding(item, 'subscribe')),
+      outstanding_management: Math.max(0, outstanding(item, 'management')),
+      outstanding_performance: Math.max(0, outstanding(item, 'performance')),
+    })),
+  }
+}
+
+async function postFlow(url, sourceItems) {
+  if (sourceItems.length === 0 || flowLoading.value) return null
+  flowLoading.value = true
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(flowPayload(sourceItems)),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || '操作失败')
+    return data
+  } finally {
+    flowLoading.value = false
+  }
+}
+
+async function sendReview() {
+  const targets = selectedPlannedItems()
+  if (targets.length === 0) return
+  try {
+    await postFlow('/api/rebate/pending/send-review', targets)
+    for (const item of targets) item.review_sent = 1
+  } catch (e) {
+    alert(e.message || '发送审核失败')
+  }
+}
+
+async function sendPayment() {
+  const targets = selectedReviewedItems()
+  if (targets.length === 0) return
+  try {
+    await postFlow('/api/rebate/pending/send-payment', targets)
+    for (const item of targets) item.payment_sent = 1
+  } catch (e) {
+    alert(e.message || '发送打款失败')
+  }
+}
+
+async function completePayment() {
+  const targets = selectedPaymentItems()
+  if (targets.length === 0) return
+  try {
+    await postFlow('/api/rebate/pending/complete-payment', targets)
+    await fetchData()
+  } catch (e) {
+    alert(e.message || '支付完成失败')
+  }
+}
+
 async function toggleGroupPlan(group, event) {
   const checked = event.target.checked
   for (const item of group.items) {
@@ -551,6 +675,18 @@ function downloadCSV() {
   color: #315599 !important;
 }
 
+.group-review,
+.sub-review {
+  background: #f4fbf7 !important;
+  color: #2f6b58 !important;
+}
+
+.group-payment,
+.sub-payment {
+  background: #fffaf4 !important;
+  color: #9a6340 !important;
+}
+
 .pending-summary-table td {
   padding: 6px 10px;
   white-space: nowrap;
@@ -621,6 +757,37 @@ thead .sticky-col {
   width: 16px;
   height: 16px;
   accent-color: var(--brand);
+}
+
+.state-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+}
+
+.state-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand);
+}
+
+.flow-btn {
+  min-width: 88px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(31, 58, 138, 0.16);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.flow-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .detail-holder-cell {

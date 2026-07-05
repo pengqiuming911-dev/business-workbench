@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS rebate_status (
   plan_subscribe INTEGER DEFAULT 0,
   plan_management INTEGER DEFAULT 0,
   plan_performance INTEGER DEFAULT 0,
+  review_sent INTEGER DEFAULT 0,
+  payment_sent INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT (datetime('now'))
 );
 

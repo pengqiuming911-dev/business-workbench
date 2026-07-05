@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"math"
 	"mime/multipart"
@@ -187,6 +188,9 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.POST("/api/rebate/pending/assist", server.rebatePendingAssist)
 	router.POST("/api/rebate/pending/manual-import", server.rebatePendingManualImport)
 	router.PUT("/api/rebate/pending/status", server.rebateUpdateStatus)
+	router.POST("/api/rebate/pending/send-review", server.rebateSendReview)
+	router.POST("/api/rebate/pending/send-payment", server.rebateSendPayment)
+	router.POST("/api/rebate/pending/complete-payment", server.rebateCompletePayment)
 	router.POST("/api/rebate/pending/mark-returned", server.rebateMarkReturned)
 	router.GET("/api/rebate/completed", server.rebateCompleted)
 	router.POST("/api/rebate/completed/assist", server.rebateCompletedAssist)
@@ -3714,6 +3718,260 @@ func (s *Server) rebateUpdateStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+type rebateFlowItem struct {
+	OrderID                string  `json:"order_id"`
+	FlightID               string  `json:"flight_id"`
+	ProductName            string  `json:"product_name"`
+	CustomerName           string  `json:"customer_name"`
+	RebateTarget           string  `json:"rebate_target"`
+	OutstandingSubscribe   float64 `json:"outstanding_subscribe"`
+	OutstandingManagement  float64 `json:"outstanding_management"`
+	OutstandingPerformance float64 `json:"outstanding_performance"`
+}
+
+type rebateFlowRequest struct {
+	RebateTarget string           `json:"rebate_target"`
+	Items        []rebateFlowItem `json:"items"`
+}
+
+func (s *Server) rebateSendReview(c *gin.Context) {
+	var req rebateFlowRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	items := validRebateFlowItems(req.Items)
+	if len(items) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "items are required"})
+		return
+	}
+	cfg := s.emailConfig()
+	subject := fmt.Sprintf("待返费审核申请 - %s - %d笔", firstNonEmptyString(req.RebateTarget, items[0].RebateTarget), len(items))
+	text, htmlBody := renderRebateFlowEmail("待返费审核申请", req.RebateTarget, items)
+	sent, reason := email.SendMail(cfg, []string{"fanweifeng@iyanxuan.cn", "lvjunliang@iyanxuan.cn"}, subject, text, htmlBody)
+	if !sent {
+		c.JSON(http.StatusBadGateway, gin.H{"error": reason})
+		return
+	}
+	if err := s.updateRebateFlowStatus(items, map[string]any{"review_sent": 1}); err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "count": len(items)})
+}
+
+func (s *Server) rebateSendPayment(c *gin.Context) {
+	var req rebateFlowRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	items := validRebateFlowItems(req.Items)
+	if len(items) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "items are required"})
+		return
+	}
+	cfg := s.emailConfig()
+	subject := fmt.Sprintf("待返费打款申请 - %s - %d笔", firstNonEmptyString(req.RebateTarget, items[0].RebateTarget), len(items))
+	text, htmlBody := renderRebateFlowEmail("待返费打款申请", req.RebateTarget, items)
+	sent, reason := email.SendMail(cfg, []string{"zhaohuan@iyanxuan.cn"}, subject, text, htmlBody)
+	if !sent {
+		c.JSON(http.StatusBadGateway, gin.H{"error": reason})
+		return
+	}
+	if err := s.updateRebateFlowStatus(items, map[string]any{"payment_sent": 1}); err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "count": len(items)})
+}
+
+func (s *Server) rebateCompletePayment(c *gin.Context) {
+	var req rebateFlowRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	items := validRebateFlowItems(req.Items)
+	if len(items) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "items are required"})
+		return
+	}
+	inserted := 0
+	for _, item := range items {
+		txRow, err := s.store.GetTransactionByOrderID(item.OrderID)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		for _, expense := range []struct {
+			category string
+			amount   float64
+		}{
+			{"申购费", item.OutstandingSubscribe},
+			{"管理费", item.OutstandingManagement},
+			{"业绩报酬", item.OutstandingPerformance},
+		} {
+			if expense.amount <= 0 {
+				continue
+			}
+			record := rebateCompletedFromPending(item, txRow, expense.category, expense.amount)
+			if _, err := s.store.InsertRebateCompleted(record); err != nil {
+				writeError(c, err)
+				return
+			}
+			inserted++
+		}
+	}
+	if err := s.updateRebateFlowStatus(items, map[string]any{
+		"plan_subscribe":   0,
+		"plan_management":  0,
+		"plan_performance": 0,
+	}); err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "count": len(items), "inserted": inserted})
+}
+
+func (s *Server) emailConfig() email.Config {
+	return email.Config{
+		SMTPHost:   s.cfg.SMTPHost,
+		SMTPPort:   s.cfg.SMTPPort,
+		SMTPSecure: s.cfg.SMTPSecure,
+		SMTPUser:   s.cfg.SMTPUser,
+		SMTPPass:   s.cfg.SMTPPass,
+		SMTPFrom:   s.cfg.SMTPFrom,
+	}
+}
+
+func (s *Server) updateRebateFlowStatus(items []rebateFlowItem, fields map[string]any) error {
+	for _, item := range items {
+		if err := s.store.UpsertRebateStatus(item.OrderID, fields); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validRebateFlowItems(items []rebateFlowItem) []rebateFlowItem {
+	out := []rebateFlowItem{}
+	seen := map[string]bool{}
+	for _, item := range items {
+		item.OrderID = strings.TrimSpace(item.OrderID)
+		if item.OrderID == "" || seen[item.OrderID] {
+			continue
+		}
+		seen[item.OrderID] = true
+		out = append(out, item)
+	}
+	return out
+}
+
+func rebateCompletedFromPending(item rebateFlowItem, txRow *model.TransactionRow, category string, amount float64) model.RebateCompleted {
+	now := time.Now()
+	paymentDate := now.Format("2006-01-02")
+	record := model.RebateCompleted{
+		OrderID:         item.OrderID,
+		FlightID:        item.FlightID,
+		ProductName:     item.ProductName,
+		CustomerName:    item.CustomerName,
+		RebateTarget:    item.RebateTarget,
+		PaymentTime:     paymentDate,
+		PaymentYear:     now.Format("2006"),
+		PaymentMonth:    now.Format("01"),
+		PaymentDay:      now.Format("02"),
+		ExpenseCategory: category,
+		ExpenseAmount:   &amount,
+		Source:          "auto_pending",
+	}
+	if txRow != nil {
+		record.FlightID = firstNonEmptyString(record.FlightID, txRow.FlightID)
+		record.ProductName = firstNonEmptyString(record.ProductName, txRow.ProductName)
+		record.CustomerName = firstNonEmptyString(record.CustomerName, txRow.CustomerName)
+		record.ChannelOrDirect = firstNonEmptyString(txRow.ChannelOrDirect, txRow.Counterparty)
+		record.Principal = txRow.SubscribeAmount
+		record.SubscribeDate = txRow.TransactionDate
+		record.OrderStatus = txRow.HoldingStatus
+		record.RebateTarget = firstNonEmptyString(record.RebateTarget, txRow.RebateTarget)
+		record.ChannelSubscribeRatio = txRow.SubscribeFeeRatio
+		record.ChannelManagementRatio = txRow.ManagementFeeRatio
+		record.ChannelPerformanceRatio = txRow.PerformanceFeeRatio
+	}
+	return record
+}
+
+func renderRebateFlowEmail(title, rebateTarget string, items []rebateFlowItem) (string, string) {
+	target := strings.TrimSpace(rebateTarget)
+	if target == "" && len(items) > 0 {
+		target = items[0].RebateTarget
+	}
+	totalSub, totalMgmt, totalPerf := 0.0, 0.0, 0.0
+	lines := []string{title, "返还人：" + firstNonEmptyString(target, "--"), ""}
+	var rows strings.Builder
+	for _, item := range items {
+		total := item.OutstandingSubscribe + item.OutstandingManagement + item.OutstandingPerformance
+		totalSub += item.OutstandingSubscribe
+		totalMgmt += item.OutstandingManagement
+		totalPerf += item.OutstandingPerformance
+		lines = append(lines,
+			"订单号："+item.OrderID,
+			"航班编号："+firstNonEmptyString(item.FlightID, "--"),
+			"航班名称："+firstNonEmptyString(item.ProductName, "--"),
+			"客户姓名："+firstNonEmptyString(item.CustomerName, "--"),
+			fmt.Sprintf("未返：申购费 %.2f，管理费 %.2f，业绩报酬 %.2f，合计 %.2f", item.OutstandingSubscribe, item.OutstandingManagement, item.OutstandingPerformance, total),
+			"",
+		)
+		rows.WriteString(fmt.Sprintf(`<tr>
+			<td>%s</td><td>%s</td><td>%s</td><td>%s</td>
+			<td style="text-align:right">%.2f</td>
+			<td style="text-align:right">%.2f</td>
+			<td style="text-align:right">%.2f</td>
+			<td style="text-align:right">%.2f</td>
+		</tr>`,
+			html.EscapeString(item.OrderID),
+			html.EscapeString(firstNonEmptyString(item.FlightID, "--")),
+			html.EscapeString(firstNonEmptyString(item.ProductName, "--")),
+			html.EscapeString(firstNonEmptyString(item.CustomerName, "--")),
+			item.OutstandingSubscribe,
+			item.OutstandingManagement,
+			item.OutstandingPerformance,
+			total,
+		))
+	}
+	total := totalSub + totalMgmt + totalPerf
+	lines = append(lines, fmt.Sprintf("合计：申购费 %.2f，管理费 %.2f，业绩报酬 %.2f，总计 %.2f", totalSub, totalMgmt, totalPerf, total))
+	htmlBody := fmt.Sprintf(`<div>
+		<h2>%s</h2>
+		<p>返还人：%s；订单数：%d；总计：%.2f</p>
+		<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+			<thead><tr>
+				<th>订单号</th><th>航班编号</th><th>航班名称</th><th>客户姓名</th>
+				<th>未返-申购费</th><th>未返-管理费</th><th>未返-业绩报酬</th><th>未返合计</th>
+			</tr></thead>
+			<tbody>%s</tbody>
+			<tfoot><tr>
+				<th colspan="4" style="text-align:right">合计</th>
+				<th style="text-align:right">%.2f</th>
+				<th style="text-align:right">%.2f</th>
+				<th style="text-align:right">%.2f</th>
+				<th style="text-align:right">%.2f</th>
+			</tr></tfoot>
+		</table>
+	</div>`,
+		html.EscapeString(title),
+		html.EscapeString(firstNonEmptyString(target, "--")),
+		len(items),
+		total,
+		rows.String(),
+		totalSub,
+		totalMgmt,
+		totalPerf,
+		total,
+	)
+	return strings.Join(lines, "\n"), htmlBody
 }
 
 func (s *Server) rebateMarkReturned(c *gin.Context) {
