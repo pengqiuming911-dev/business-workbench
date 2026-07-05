@@ -40,9 +40,9 @@
       <span class="text-label">
         汇总 {{ groupedRows.length }} 人 / 待返订单 {{ items.length }} 条
       </span>
-      <button class="btn btn-secondary btn-sm" @click="downloadCSV">
+      <button class="btn btn-secondary btn-sm" :disabled="selectedPlannedItems().length === 0" @click="downloadSelectedWorkbook">
         <Download :size="14" />
-        下载
+        下载勾选的明细
       </button>
     </div>
 
@@ -523,46 +523,32 @@ async function toggleGroupPlan(group, event) {
   )
 }
 
-function downloadCSV() {
-  if (groupedRows.value.length === 0) return
-  const headers = [
-    '返还人',
-    '应收-申购费', '应收-管理费实收', '应收-业绩报酬应收',
-    '应返-申购费', '应返-管理费', '应返-业绩报酬',
-    '已返-申购费', '已返-管理费', '已返-业绩报酬',
-    '未返-申购费', '未返-管理费', '未返-业绩报酬',
-    '本次拟返合计',
-    '订单数',
-  ]
-  const rows = groupedRows.value.map(group => [
-    group.rebate_target,
-    fmtNum(group.receivable_subscribe),
-    fmtNum(group.receivable_management),
-    fmtNum(group.receivable_performance),
-    fmtNum(group.expected_subscribe),
-    fmtNum(group.expected_management),
-    fmtNum(group.expected_performance),
-    fmtNum(group.returned_subscribe),
-    fmtNum(group.returned_management),
-    fmtNum(group.returned_performance),
-    fmtNum(group.outstanding_subscribe),
-    fmtNum(group.outstanding_management),
-    fmtNum(group.outstanding_performance),
-    isGroupPlanned(group) ? fmtNum(group.plan_total) : '0.00',
-    group.items.length,
-  ])
-  const BOM = '﻿'
-  const csvContent = BOM + [
-    headers.join(','),
-    ...rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')),
-  ].join('\n')
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `待返费明细_${new Date().toISOString().slice(0, 10)}.csv`
-  link.click()
-  URL.revokeObjectURL(url)
+async function downloadSelectedWorkbook() {
+  const targets = selectedPlannedItems()
+  if (targets.length === 0 || flowLoading.value) return
+  flowLoading.value = true
+  try {
+    const res = await fetch('/api/rebate/pending/selected-workbook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(flowPayload(targets)),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || '下载失败')
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `待返费明细_${new Date().toISOString().slice(0, 10)}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    alert(e.message || '下载失败')
+  } finally {
+    flowLoading.value = false
+  }
 }
 </script>
 

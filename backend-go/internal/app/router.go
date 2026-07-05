@@ -191,6 +191,7 @@ func NewRouter(cfg config.Config, store *db.Store) *gin.Engine {
 	router.POST("/api/rebate/pending/send-review", server.rebateSendReview)
 	router.POST("/api/rebate/pending/send-payment", server.rebateSendPayment)
 	router.POST("/api/rebate/pending/complete-payment", server.rebateCompletePayment)
+	router.POST("/api/rebate/pending/selected-workbook", server.rebateSelectedWorkbook)
 	router.POST("/api/rebate/pending/mark-returned", server.rebateMarkReturned)
 	router.GET("/api/rebate/completed", server.rebateCompleted)
 	router.POST("/api/rebate/completed/assist", server.rebateCompletedAssist)
@@ -3750,7 +3751,16 @@ func (s *Server) rebateSendReview(c *gin.Context) {
 	cfg := s.emailConfig()
 	subject := fmt.Sprintf("待返费审核申请 - %s - %d笔", firstNonEmptyString(req.RebateTarget, items[0].RebateTarget), len(items))
 	text, htmlBody := renderRebateFlowEmail("待返费审核申请", req.RebateTarget, items)
-	sent, reason := email.SendMail(cfg, []string{"fanweifeng@iyanxuan.cn", "lvjunliang@iyanxuan.cn"}, subject, text, htmlBody)
+	workbook, err := s.buildRebateWorkbook(c.Request.Context(), items)
+	if err != nil {
+		writeDriveError(c, err)
+		return
+	}
+	sent, reason := email.SendMailWithAttachments(cfg, []string{"fanweifeng@iyanxuan.cn"}, subject, text, htmlBody, []email.Attachment{{
+		FileName:    workbook.FileName,
+		ContentType: workbook.ContentType,
+		Data:        workbook.Data,
+	}})
 	if !sent {
 		c.JSON(http.StatusBadGateway, gin.H{"error": reason})
 		return
@@ -3776,7 +3786,16 @@ func (s *Server) rebateSendPayment(c *gin.Context) {
 	cfg := s.emailConfig()
 	subject := fmt.Sprintf("待返费打款申请 - %s - %d笔", firstNonEmptyString(req.RebateTarget, items[0].RebateTarget), len(items))
 	text, htmlBody := renderRebateFlowEmail("待返费打款申请", req.RebateTarget, items)
-	sent, reason := email.SendMail(cfg, []string{"zhaohuan@iyanxuan.cn"}, subject, text, htmlBody)
+	workbook, err := s.buildRebateWorkbook(c.Request.Context(), items)
+	if err != nil {
+		writeDriveError(c, err)
+		return
+	}
+	sent, reason := email.SendMailWithAttachments(cfg, []string{"zhaohuan@iyanxuan.cn"}, subject, text, htmlBody, []email.Attachment{{
+		FileName:    workbook.FileName,
+		ContentType: workbook.ContentType,
+		Data:        workbook.Data,
+	}})
 	if !sent {
 		c.JSON(http.StatusBadGateway, gin.H{"error": reason})
 		return
@@ -3834,6 +3853,27 @@ func (s *Server) rebateCompletePayment(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "count": len(items), "inserted": inserted})
+}
+
+func (s *Server) rebateSelectedWorkbook(c *gin.Context) {
+	var req rebateFlowRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	items := validRebateFlowItems(req.Items)
+	if len(items) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "items are required"})
+		return
+	}
+	workbook, err := s.buildRebateWorkbook(c.Request.Context(), items)
+	if err != nil {
+		writeDriveError(c, err)
+		return
+	}
+	c.Header("Content-Type", workbook.ContentType)
+	c.Header("Content-Disposition", `attachment; filename="`+url.QueryEscape(workbook.FileName)+`"`)
+	c.Data(http.StatusOK, workbook.ContentType, workbook.Data)
 }
 
 func (s *Server) emailConfig() email.Config {

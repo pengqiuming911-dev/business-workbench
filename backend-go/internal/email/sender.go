@@ -1,9 +1,10 @@
 package email
 
 import (
+	"encoding/base64"
 	"fmt"
+	"mime"
 	"net/smtp"
-	"net/textproto"
 	"strings"
 
 	"business-workbench/backend-go/internal/model"
@@ -39,6 +40,12 @@ type Notification struct {
 	Text      string
 	HTML      string
 	Products  []NotificationProduct
+}
+
+type Attachment struct {
+	FileName    string
+	ContentType string
+	Data        []byte
 }
 
 const defaultRecipient = "pengqiuming@iyanxuna.cn"
@@ -138,6 +145,10 @@ func SendObservationEmail(cfg Config, n *Notification) (sent bool, reason string
 }
 
 func SendMail(cfg Config, recipients []string, subject, text, html string) (sent bool, reason string) {
+	return SendMailWithAttachments(cfg, recipients, subject, text, html, nil)
+}
+
+func SendMailWithAttachments(cfg Config, recipients []string, subject, text, html string, attachments []Attachment) (sent bool, reason string) {
 	if len(recipients) == 0 {
 		return false, "no-recipient"
 	}
@@ -155,7 +166,7 @@ func SendMail(cfg Config, recipients []string, subject, text, html string) (sent
 	addr := cfg.SMTPHost + ":" + port
 	auth := smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
 	to := strings.Join(recipients, ", ")
-	body := buildMIMEBody(from, to, mimeHeader(subject), text, html)
+	body := buildMIMEBodyWithAttachments(from, to, mimeHeader(subject), text, html, attachments)
 	if err := smtp.SendMail(addr, auth, from, recipients, []byte(body)); err != nil {
 		return false, "send-error: " + err.Error()
 	}
@@ -163,16 +174,26 @@ func SendMail(cfg Config, recipients []string, subject, text, html string) (sent
 }
 
 func mimeHeader(value string) string {
-	return textproto.MIMEHeader{"Subject": {value}}.Get("Subject")
+	return mime.QEncoding.Encode("UTF-8", value)
 }
 
 func buildMIMEBody(from, to, subject, text, html string) string {
+	return buildMIMEBodyWithAttachments(from, to, subject, text, html, nil)
+}
+
+func buildMIMEBodyWithAttachments(from, to, subject, text, html string, attachments []Attachment) string {
 	boundary := "GoMailBoundary"
+	mixedBoundary := "GoMailMixedBoundary"
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
 	b.WriteString("To: " + to + "\r\n")
 	b.WriteString("Subject: " + subject + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
+	if len(attachments) > 0 {
+		b.WriteString("Content-Type: multipart/mixed; boundary=" + mixedBoundary + "\r\n")
+		b.WriteString("\r\n")
+		b.WriteString("--" + mixedBoundary + "\r\n")
+	}
 	b.WriteString("Content-Type: multipart/alternative; boundary=" + boundary + "\r\n")
 	b.WriteString("\r\n")
 	b.WriteString("--" + boundary + "\r\n")
@@ -182,6 +203,38 @@ func buildMIMEBody(from, to, subject, text, html string) string {
 	b.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
 	b.WriteString("\r\n" + html + "\r\n")
 	b.WriteString("--" + boundary + "--\r\n")
+	for _, attachment := range attachments {
+		contentType := attachment.ContentType
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		fileName := mimeHeader(attachment.FileName)
+		b.WriteString("--" + mixedBoundary + "\r\n")
+		b.WriteString("Content-Type: " + contentType + "; name=\"" + fileName + "\"\r\n")
+		b.WriteString("Content-Transfer-Encoding: base64\r\n")
+		b.WriteString("Content-Disposition: attachment; filename=\"" + fileName + "\"\r\n")
+		b.WriteString("\r\n")
+		b.WriteString(wrapBase64(attachment.Data))
+		b.WriteString("\r\n")
+	}
+	if len(attachments) > 0 {
+		b.WriteString("--" + mixedBoundary + "--\r\n")
+	}
+	return b.String()
+}
+
+func wrapBase64(data []byte) string {
+	encoded := base64.StdEncoding.EncodeToString(data)
+	if encoded == "" {
+		return ""
+	}
+	var b strings.Builder
+	for len(encoded) > 76 {
+		b.WriteString(encoded[:76])
+		b.WriteString("\r\n")
+		encoded = encoded[76:]
+	}
+	b.WriteString(encoded)
 	return b.String()
 }
 
