@@ -17,9 +17,9 @@ import (
 const rebateWorkbookContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 type rebateAccountInfo struct {
-	AccountName string
-	CardNumber  string
-	BankName    string
+	PayeeName string
+	BankName  string
+	AccountNo string
 }
 
 type rebateWorkbookResult struct {
@@ -78,7 +78,7 @@ func (s *Server) buildRebateWorkbook(ctx context.Context, items []rebateFlowItem
 	}
 	summaryRows := [][]string{{
 		"返还人", "本次拟返-申购费", "本次拟返-管理费", "本次拟返-业绩报酬", "本次拟返合计",
-		"收款账户", "卡号", "银行名称",
+		"收款人", "收款银行", "账号",
 	}}
 	keys := make([]string, 0, len(summaryMap))
 	for key := range summaryMap {
@@ -93,9 +93,9 @@ func (s *Server) buildRebateWorkbook(ctx context.Context, items []rebateFlowItem
 			moneyString(row.Mgmt),
 			moneyString(row.Perf),
 			moneyString(row.Total),
-			row.Account.AccountName,
-			row.Account.CardNumber,
+			row.Account.PayeeName,
 			row.Account.BankName,
+			row.Account.AccountNo,
 		})
 	}
 	data, err := xlsxBytes([]xlsxSheet{
@@ -140,9 +140,9 @@ func (s *Server) loadRebateAccounts(ctx context.Context) (map[string]rebateAccou
 			continue
 		}
 		out[name] = rebateAccountInfo{
-			AccountName: firstRowValue(row, "收款账户", "账户", "户名", "账户名称", "收款人"),
-			CardNumber:  firstRowValue(row, "卡号", "账号", "银行卡号", "银行账号", "收款账号"),
-			BankName:    firstRowValue(row, "银行名称", "银行", "开户行", "开户银行", "支行"),
+			PayeeName: firstRowValue(row, "收款人", "收款账户", "账户", "户名", "账户名称"),
+			BankName:  firstRowValue(row, "收款银行", "银行名称", "银行", "开户行", "开户银行", "支行"),
+			AccountNo: firstRowValue(row, "账号", "卡号", "银行卡号", "银行账号", "收款账号"),
 		}
 	}
 	return out, nil

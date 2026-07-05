@@ -3750,12 +3750,17 @@ func (s *Server) rebateSendReview(c *gin.Context) {
 	}
 	cfg := s.emailConfig()
 	subject := fmt.Sprintf("待返费审核申请 - %s - %d笔", firstNonEmptyString(req.RebateTarget, items[0].RebateTarget), len(items))
-	text, htmlBody := renderRebateFlowEmail("待返费审核申请", req.RebateTarget, items)
 	workbook, err := s.buildRebateWorkbook(c.Request.Context(), items)
 	if err != nil {
 		writeDriveError(c, err)
 		return
 	}
+	accounts, err := s.loadRebateAccounts(c.Request.Context())
+	if err != nil {
+		writeDriveError(c, err)
+		return
+	}
+	text, htmlBody := renderRebateFlowEmail("伟峰，本次需返费名单和金额请审核：", items, accounts)
 	sent, reason := email.SendMailWithAttachments(cfg, []string{"fanweifeng@iyanxuan.cn"}, subject, text, htmlBody, []email.Attachment{{
 		FileName:    workbook.FileName,
 		ContentType: workbook.ContentType,
@@ -3785,12 +3790,17 @@ func (s *Server) rebateSendPayment(c *gin.Context) {
 	}
 	cfg := s.emailConfig()
 	subject := fmt.Sprintf("待返费打款申请 - %s - %d笔", firstNonEmptyString(req.RebateTarget, items[0].RebateTarget), len(items))
-	text, htmlBody := renderRebateFlowEmail("待返费打款申请", req.RebateTarget, items)
 	workbook, err := s.buildRebateWorkbook(c.Request.Context(), items)
 	if err != nil {
 		writeDriveError(c, err)
 		return
 	}
+	accounts, err := s.loadRebateAccounts(c.Request.Context())
+	if err != nil {
+		writeDriveError(c, err)
+		return
+	}
+	text, htmlBody := renderRebateFlowEmail("欢姐，请按照如下名单和金额返费，感谢！", items, accounts)
 	sent, reason := email.SendMailWithAttachments(cfg, []string{"zhaohuan@iyanxuan.cn"}, subject, text, htmlBody, []email.Attachment{{
 		FileName:    workbook.FileName,
 		ContentType: workbook.ContentType,
@@ -3943,73 +3953,82 @@ func rebateCompletedFromPending(item rebateFlowItem, txRow *model.TransactionRow
 	return record
 }
 
-func renderRebateFlowEmail(title, rebateTarget string, items []rebateFlowItem) (string, string) {
-	target := strings.TrimSpace(rebateTarget)
-	if target == "" && len(items) > 0 {
-		target = items[0].RebateTarget
+func renderRebateFlowEmail(intro string, items []rebateFlowItem, accounts map[string]rebateAccountInfo) (string, string) {
+	type summary struct {
+		RebateTarget string
+		Total        float64
+		Account      rebateAccountInfo
 	}
-	totalSub, totalMgmt, totalPerf := 0.0, 0.0, 0.0
-	lines := []string{title, "返还人：" + firstNonEmptyString(target, "--"), ""}
-	var rows strings.Builder
+	summaryMap := map[string]*summary{}
 	for _, item := range items {
-		total := item.OutstandingSubscribe + item.OutstandingManagement + item.OutstandingPerformance
-		totalSub += item.OutstandingSubscribe
-		totalMgmt += item.OutstandingManagement
-		totalPerf += item.OutstandingPerformance
+		target := strings.TrimSpace(item.RebateTarget)
+		if target == "" {
+			target = "未填写返还人"
+		}
+		row := summaryMap[target]
+		if row == nil {
+			row = &summary{RebateTarget: target, Account: accounts[target]}
+			summaryMap[target] = row
+		}
+		row.Total += positive(item.OutstandingSubscribe) + positive(item.OutstandingManagement) + positive(item.OutstandingPerformance)
+	}
+	keys := make([]string, 0, len(summaryMap))
+	for key := range summaryMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	lines := []string{intro, ""}
+	var rows strings.Builder
+	grandTotal := 0.0
+	for _, key := range keys {
+		row := summaryMap[key]
+		grandTotal += row.Total
 		lines = append(lines,
-			"订单号："+item.OrderID,
-			"航班编号："+firstNonEmptyString(item.FlightID, "--"),
-			"航班名称："+firstNonEmptyString(item.ProductName, "--"),
-			"客户姓名："+firstNonEmptyString(item.CustomerName, "--"),
-			fmt.Sprintf("未返：申购费 %.2f，管理费 %.2f，业绩报酬 %.2f，合计 %.2f", item.OutstandingSubscribe, item.OutstandingManagement, item.OutstandingPerformance, total),
-			"",
+			fmt.Sprintf("%s：%.2f，收款人：%s，收款银行：%s，账号：%s",
+				row.RebateTarget, row.Total,
+				firstNonEmptyString(row.Account.PayeeName, "--"),
+				firstNonEmptyString(row.Account.BankName, "--"),
+				firstNonEmptyString(row.Account.AccountNo, "--"),
+			),
 		)
 		rows.WriteString(fmt.Sprintf(`<tr>
-			<td>%s</td><td>%s</td><td>%s</td><td>%s</td>
-			<td style="text-align:right">%.2f</td>
-			<td style="text-align:right">%.2f</td>
-			<td style="text-align:right">%.2f</td>
-			<td style="text-align:right">%.2f</td>
+			<td style="background:#f7f2ff;color:#000;padding:8px;border:1px solid #d8d2e8;">%s</td>
+			<td style="background:#f7f2ff;color:#000;padding:8px;border:1px solid #d8d2e8;text-align:right;">%.2f</td>
+			<td style="background:#f7f2ff;color:#000;padding:8px;border:1px solid #d8d2e8;">%s</td>
+			<td style="background:#f7f2ff;color:#000;padding:8px;border:1px solid #d8d2e8;">%s</td>
+			<td style="background:#f7f2ff;color:#000;padding:8px;border:1px solid #d8d2e8;">%s</td>
 		</tr>`,
-			html.EscapeString(item.OrderID),
-			html.EscapeString(firstNonEmptyString(item.FlightID, "--")),
-			html.EscapeString(firstNonEmptyString(item.ProductName, "--")),
-			html.EscapeString(firstNonEmptyString(item.CustomerName, "--")),
-			item.OutstandingSubscribe,
-			item.OutstandingManagement,
-			item.OutstandingPerformance,
-			total,
+			html.EscapeString(row.RebateTarget),
+			row.Total,
+			html.EscapeString(firstNonEmptyString(row.Account.PayeeName, "--")),
+			html.EscapeString(firstNonEmptyString(row.Account.BankName, "--")),
+			html.EscapeString(firstNonEmptyString(row.Account.AccountNo, "--")),
 		))
 	}
-	total := totalSub + totalMgmt + totalPerf
-	lines = append(lines, fmt.Sprintf("合计：申购费 %.2f，管理费 %.2f，业绩报酬 %.2f，总计 %.2f", totalSub, totalMgmt, totalPerf, total))
-	htmlBody := fmt.Sprintf(`<div>
-		<h2>%s</h2>
-		<p>返还人：%s；订单数：%d；总计：%.2f</p>
-		<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+	lines = append(lines, "", fmt.Sprintf("合计：%.2f", grandTotal))
+	htmlBody := fmt.Sprintf(`<div style="font-family:Arial,'Microsoft YaHei',sans-serif;font-size:14px;color:#000;">
+		<p>%s</p>
+		<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Arial,'Microsoft YaHei',sans-serif;font-size:14px;">
 			<thead><tr>
-				<th>订单号</th><th>航班编号</th><th>航班名称</th><th>客户姓名</th>
-				<th>未返-申购费</th><th>未返-管理费</th><th>未返-业绩报酬</th><th>未返合计</th>
+				<th style="background:#2f75b5;color:#fff;font-weight:bold;padding:8px;border:1px solid #1f4e79;">返还人</th>
+				<th style="background:#2f75b5;color:#fff;font-weight:bold;padding:8px;border:1px solid #1f4e79;">合计本次返费金额</th>
+				<th style="background:#2f75b5;color:#fff;font-weight:bold;padding:8px;border:1px solid #1f4e79;">收款人</th>
+				<th style="background:#2f75b5;color:#fff;font-weight:bold;padding:8px;border:1px solid #1f4e79;">收款银行</th>
+				<th style="background:#2f75b5;color:#fff;font-weight:bold;padding:8px;border:1px solid #1f4e79;">账号</th>
 			</tr></thead>
 			<tbody>%s</tbody>
 			<tfoot><tr>
-				<th colspan="4" style="text-align:right">合计</th>
-				<th style="text-align:right">%.2f</th>
-				<th style="text-align:right">%.2f</th>
-				<th style="text-align:right">%.2f</th>
-				<th style="text-align:right">%.2f</th>
+				<td style="background:#f7f2ff;color:#000;font-weight:bold;padding:8px;border:1px solid #d8d2e8;">合计</td>
+				<td style="background:#f7f2ff;color:#000;font-weight:bold;padding:8px;border:1px solid #d8d2e8;text-align:right;">%.2f</td>
+				<td style="background:#f7f2ff;color:#000;padding:8px;border:1px solid #d8d2e8;"></td>
+				<td style="background:#f7f2ff;color:#000;padding:8px;border:1px solid #d8d2e8;"></td>
+				<td style="background:#f7f2ff;color:#000;padding:8px;border:1px solid #d8d2e8;"></td>
 			</tr></tfoot>
 		</table>
 	</div>`,
-		html.EscapeString(title),
-		html.EscapeString(firstNonEmptyString(target, "--")),
-		len(items),
-		total,
+		html.EscapeString(intro),
 		rows.String(),
-		totalSub,
-		totalMgmt,
-		totalPerf,
-		total,
+		grandTotal,
 	)
 	return strings.Join(lines, "\n"), htmlBody
 }
