@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1135,7 +1136,7 @@ func (c *Client) AddDocxImage(ctx context.Context, documentID, fileName string, 
 	if err != nil {
 		return err
 	}
-	width, height := DocxImageDisplaySize(data, 600)
+	width, height := DocxImageDisplaySize(data, DocxImageMaxWidth())
 	return c.ReplaceDocxImage(ctx, documentID, blockID, blockToken, width, height)
 }
 
@@ -1182,12 +1183,25 @@ func (c *Client) InsertDocxImage(ctx context.Context, documentID, imageToken str
 	return resp.Data.Children[0].BlockID, nil
 }
 
+// DocxImageMaxWidth 返回飞书 docx 正文内容宽度，用于让图片块像手工截图粘贴
+// 那样“两边对齐”撑满正文宽度，而不是 600px 居中的缩小图。默认 686（飞书 docx
+// 默认正文宽度），可用环境变量 FEISHU_DOCX_CONTENT_WIDTH 覆盖；宽图按
+// min(原图宽, 内容宽度) 撑满，窄图保持原宽不放大。
+func DocxImageMaxWidth() int {
+	if v := strings.TrimSpace(os.Getenv("FEISHU_DOCX_CONTENT_WIDTH")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 686
+}
+
 // DocxImageDisplaySize returns a proportional display size for Feishu docx
 // image blocks. Feishu may preserve the uploaded image's pixel height when only
 // width is replaced, leaving a large blank area under tall images.
 func DocxImageDisplaySize(data []byte, maxWidth int) (int, int) {
 	if maxWidth <= 0 {
-		maxWidth = 600
+		maxWidth = DocxImageMaxWidth()
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
@@ -1211,7 +1225,7 @@ func (c *Client) ReplaceDocxImage(ctx context.Context, documentID, blockID, imag
 		return err
 	}
 	if width <= 0 {
-		width = 600
+		width = DocxImageMaxWidth()
 	}
 	replaceImage := map[string]any{
 		"token": imageToken,

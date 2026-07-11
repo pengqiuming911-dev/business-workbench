@@ -783,7 +783,7 @@ func (s *Service) createDocxMaterialTool(args map[string]any) map[string]any {
 		if err != nil {
 			return map[string]any{"error": "绑定飞书图片失败：" + err.Error()}
 		}
-		width, height := feishu.DocxImageDisplaySize(image.Data, 600)
+		width, height := feishu.DocxImageDisplaySize(image.Data, feishu.DocxImageMaxWidth())
 		if err := fc.ReplaceDocxImage(ctx, doc.DocumentID, blockID, blockToken, width, height); err != nil {
 			return map[string]any{"error": "替换飞书图片失败：" + err.Error()}
 		}

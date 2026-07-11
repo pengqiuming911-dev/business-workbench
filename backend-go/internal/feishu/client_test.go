@@ -32,6 +32,28 @@ func TestDocxImageDisplaySizeScalesHeight(t *testing.T) {
 	}
 }
 
+func TestDocxImageMaxWidthDefaultAndOverride(t *testing.T) {
+	// 默认正文内容宽度 686（两边对齐），环境变量为空时回退此值。
+	t.Setenv("FEISHU_DOCX_CONTENT_WIDTH", "")
+	if got := DocxImageMaxWidth(); got != 686 {
+		t.Fatalf("default DocxImageMaxWidth = %d, want 686", got)
+	}
+	// 环境变量覆盖：宽图按撑满正文宽度算，不再是 600 居中缩小图。
+	t.Setenv("FEISHU_DOCX_CONTENT_WIDTH", "860")
+	if got := DocxImageMaxWidth(); got != 860 {
+		t.Fatalf("overridden DocxImageMaxWidth = %d, want 860", got)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, 1000, 500))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode png: %v", err)
+	}
+	width, height := DocxImageDisplaySize(buf.Bytes(), DocxImageMaxWidth())
+	if width != 860 || height != 430 {
+		t.Fatalf("size = %dx%d, want 860x430", width, height)
+	}
+}
+
 // getTimeFuture 返回一个远未来时间，用于让 ensureValidToken 跳过刷新。
 func getTimeFuture() time.Time { return time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC) }
 
