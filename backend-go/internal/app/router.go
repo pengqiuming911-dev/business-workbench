@@ -956,7 +956,7 @@ func (s *Server) driveCreateRichDocx(c *gin.Context) {
 			writeDriveError(c, fmt.Errorf("绑定飞书图片失败: %w", err))
 			return
 		}
-		width, height := feishu.DocxImageDisplaySize(image.Data, 600)
+		width, height := feishu.DocxImageDisplaySize(image.Data, feishu.DocxImageMaxWidth())
 		if err := s.feishu.ReplaceDocxImage(c.Request.Context(), doc.DocumentID, blockID, blockToken, width, height); err != nil {
 			writeDriveError(c, fmt.Errorf("替换飞书图片失败: %w", err))
 			return
