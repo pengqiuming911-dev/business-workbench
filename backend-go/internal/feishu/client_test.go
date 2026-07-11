@@ -26,31 +26,33 @@ func TestDocxImageDisplaySizeScalesHeight(t *testing.T) {
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("encode png: %v", err)
 	}
+	// 自然宽高：飞书按正文内容宽度等比缩放显示，不再 cap 成 600 居中缩小图。
 	width, height := DocxImageDisplaySize(buf.Bytes(), 600)
-	if width != 600 || height != 878 {
-		t.Fatalf("size = %dx%d, want 600x878", width, height)
+	if width != 875 || height != 1280 {
+		t.Fatalf("size = %dx%d, want 875x1280 (natural)", width, height)
 	}
 }
 
 func TestDocxImageMaxWidthDefaultAndOverride(t *testing.T) {
-	// 默认正文内容宽度 686（两边对齐），环境变量为空时回退此值。
+	// 默认正文内容宽度 686（仅作 undecodable 兜底），环境变量为空时回退此值。
 	t.Setenv("FEISHU_DOCX_CONTENT_WIDTH", "")
 	if got := DocxImageMaxWidth(); got != 686 {
 		t.Fatalf("default DocxImageMaxWidth = %d, want 686", got)
 	}
-	// 环境变量覆盖：宽图按撑满正文宽度算，不再是 600 居中缩小图。
+	// 环境变量覆盖兜底值。
 	t.Setenv("FEISHU_DOCX_CONTENT_WIDTH", "860")
 	if got := DocxImageMaxWidth(); got != 860 {
 		t.Fatalf("overridden DocxImageMaxWidth = %d, want 860", got)
 	}
+	// 可解码图片用自然宽高（宽图 ≥ 正文宽度 → 飞书 clamp 撑满两边），与 maxWidth 无关。
 	img := image.NewRGBA(image.Rect(0, 0, 1000, 500))
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("encode png: %v", err)
 	}
 	width, height := DocxImageDisplaySize(buf.Bytes(), DocxImageMaxWidth())
-	if width != 860 || height != 430 {
-		t.Fatalf("size = %dx%d, want 860x430", width, height)
+	if width != 1000 || height != 500 {
+		t.Fatalf("size = %dx%d, want 1000x500 (natural)", width, height)
 	}
 }
 

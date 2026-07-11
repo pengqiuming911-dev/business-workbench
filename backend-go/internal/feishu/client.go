@@ -9,7 +9,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
-	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -1196,26 +1195,23 @@ func DocxImageMaxWidth() int {
 	return 686
 }
 
-// DocxImageDisplaySize returns a proportional display size for Feishu docx
-// image blocks. Feishu may preserve the uploaded image's pixel height when only
-// width is replaced, leaving a large blank area under tall images.
+// DocxImageDisplaySize returns the natural pixel width/height of the image,
+// matching how a manually pasted screenshot is stored in a Feishu docx image
+// block. Feishu clamps the display width to the document content width and
+// scales height proportionally, so a wide image (natural width ≥ content
+// width) renders edge-to-edge like a manual paste. Previously we capped width
+// at 600/686 which made images render as shrunk centered thumbnails.
+//
+// maxWidth is only used as a fallback when the image cannot be decoded.
 func DocxImageDisplaySize(data []byte, maxWidth int) (int, int) {
-	if maxWidth <= 0 {
-		maxWidth = DocxImageMaxWidth()
-	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+		if maxWidth <= 0 {
+			maxWidth = DocxImageMaxWidth()
+		}
 		return maxWidth, 0
 	}
-	width := maxWidth
-	if cfg.Width < width {
-		width = cfg.Width
-	}
-	height := int(math.Round(float64(cfg.Height) * float64(width) / float64(cfg.Width)))
-	if height <= 0 {
-		height = 1
-	}
-	return width, height
+	return cfg.Width, cfg.Height
 }
 
 // ReplaceDocxImage binds a docx image media token to an existing image block.
