@@ -722,20 +722,23 @@ func (s *Service) createDocxMaterialTool(args map[string]any) map[string]any {
 		case "separator":
 			// Keep the native material compact; visible separators are not required.
 		case "link_list":
-			lines := []string{}
+			// 飞书 markdown convert 对多链接/多段文本会乱序、并把多条链接塌成同一个
+			// (同 SKILL.md 硬规则 #16 的坑)。逐条单独 convert 成独立 block，锁住 label+url。
 			for _, item := range section.Items {
 				label := strings.TrimSpace(item.Label)
 				if label == "" {
 					label = "链接"
 				}
-				if strings.TrimSpace(item.URL) != "" {
-					lines = append(lines, fmt.Sprintf("- [%s](%s)", label, strings.TrimSpace(item.URL)))
+				url := strings.TrimSpace(item.URL)
+				var line string
+				if url != "" {
+					line = fmt.Sprintf("- [%s](%s)", label, url)
 				} else {
-					lines = append(lines, "- "+label)
+					line = "- " + label
 				}
-			}
-			if err := appendMarkdown(strings.Join(lines, "\n")); err != nil {
-				return map[string]any{"error": "转换链接列表失败：" + err.Error()}
+				if err := appendMarkdown(line); err != nil {
+					return map[string]any{"error": "转换链接列表失败：" + err.Error()}
+				}
 			}
 		case "image":
 			path := strings.TrimSpace(section.Path)

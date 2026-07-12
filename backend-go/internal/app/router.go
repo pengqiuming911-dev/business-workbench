@@ -893,20 +893,23 @@ func (s *Server) driveCreateRichDocx(c *gin.Context) {
 		case "separator":
 			// The current material template does not require visible separators.
 		case "link_list":
-			lines := []string{}
+			// 飞书 markdown convert 对多链接/多段文本会乱序、并把多条链接塌成同一个
+			// (同 SKILL.md 硬规则 #16 的坑)。逐条单独 convert 成独立 block，锁住 label+url。
 			for _, item := range section.Items {
 				label := strings.TrimSpace(item.Label)
 				if label == "" {
 					label = "链接"
 				}
-				if strings.TrimSpace(item.URL) != "" {
-					lines = append(lines, fmt.Sprintf("- [%s](%s)", label, strings.TrimSpace(item.URL)))
+				url := strings.TrimSpace(item.URL)
+				var line string
+				if url != "" {
+					line = fmt.Sprintf("- [%s](%s)", label, url)
 				} else {
-					lines = append(lines, "- "+label)
+					line = "- " + label
 				}
-			}
-			if !appendMarkdownBlocks(strings.Join(lines, "\n")) {
-				return
+				if !appendMarkdownBlocks(line) {
+					return
+				}
 			}
 		case "image":
 			imageData, fileName, ok := richDocxImageData(files, section.Path)
