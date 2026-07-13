@@ -36,6 +36,9 @@
       <div class="filter-actions">
         <button class="btn btn-primary btn-sm" @click="fetchData">查询</button>
         <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
+        <button class="btn btn-secondary btn-sm" :disabled="downloading || total === 0" @click="downloadCSV">
+          {{ downloading ? '下载中...' : '下载明细' }}
+        </button>
         <FullscreenToggle target=".customer-holding-page .table-section" />
       </div>
     </div>
@@ -190,6 +193,8 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = 20
 const showAdvanced = ref(false)
+const downloading = ref(false)
+const lastAppliedParams = ref(new URLSearchParams())
 
 const filters = ref({
   customerName: '',
@@ -214,6 +219,45 @@ const filterOptions = ref({
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+
+function defaultFilters() {
+  return {
+    customerName: '',
+    matchName: true,
+    matchBuyer: true,
+    obsDateStart: '',
+    obsDateEnd: '',
+    obsDividend: false,
+    obsKnockout: false,
+    rebateTarget: '',
+    holdingStatus: '',
+    productName: '',
+    flightDateStart: '',
+    flightDateEnd: '',
+    completeDateStart: '',
+    completeDateEnd: '',
+  }
+}
+
+function buildFilterParams() {
+  const params = new URLSearchParams()
+  const f = filters.value
+  if (f.customerName) params.set('customer_name', f.customerName)
+  params.set('match_name', f.matchName)
+  params.set('match_buyer', f.matchBuyer)
+  if (f.rebateTarget) params.set('rebate_target', f.rebateTarget)
+  if (f.holdingStatus) params.set('holding_status', f.holdingStatus)
+  if (f.obsDateStart) params.set('obs_date_start', f.obsDateStart)
+  if (f.obsDateEnd) params.set('obs_date_end', f.obsDateEnd)
+  params.set('observe_dividend', f.obsDividend)
+  params.set('observe_knockout', f.obsKnockout)
+  if (f.completeDateStart) params.set('complete_date_start', f.completeDateStart)
+  if (f.completeDateEnd) params.set('complete_date_end', f.completeDateEnd)
+  if (f.productName) params.set('product_name', f.productName)
+  if (f.flightDateStart) params.set('flight_date_start', f.flightDateStart)
+  if (f.flightDateEnd) params.set('flight_date_end', f.flightDateEnd)
+  return params
+}
 
 function isCompletedStatus(val) {
   if (typeof val !== 'string') return false
@@ -288,22 +332,7 @@ async function loadFilterOptions() {
 async function fetchData() {
   loading.value = true
   try {
-    const params = new URLSearchParams()
-    const f = filters.value
-    if (f.customerName) params.set('customer_name', f.customerName)
-    params.set('match_name', f.matchName)
-    params.set('match_buyer', f.matchBuyer)
-    if (f.rebateTarget) params.set('rebate_target', f.rebateTarget)
-    if (f.holdingStatus) params.set('holding_status', f.holdingStatus)
-    if (f.obsDateStart) params.set('obs_date_start', f.obsDateStart)
-    if (f.obsDateEnd) params.set('obs_date_end', f.obsDateEnd)
-    params.set('observe_dividend', f.obsDividend)
-    params.set('observe_knockout', f.obsKnockout)
-    if (f.completeDateStart) params.set('complete_date_start', f.completeDateStart)
-    if (f.completeDateEnd) params.set('complete_date_end', f.completeDateEnd)
-    if (f.productName) params.set('product_name', f.productName)
-    if (f.flightDateStart) params.set('flight_date_start', f.flightDateStart)
-    if (f.flightDateEnd) params.set('flight_date_end', f.flightDateEnd)
+    const params = buildFilterParams()
     params.set('page', currentPage.value)
     params.set('page_size', pageSize)
 
@@ -312,6 +341,7 @@ async function fetchData() {
     const data = await res.json()
     items.value = data.items || []
     total.value = data.total || items.value.length
+    lastAppliedParams.value = buildFilterParams()
   } catch {
     items.value = []
     total.value = 0
@@ -322,22 +352,7 @@ async function fetchData() {
 }
 
 function resetFilters() {
-  filters.value = {
-    customerName: '',
-    matchName: true,
-    matchBuyer: true,
-    obsDateStart: '',
-    obsDateEnd: '',
-    obsDividend: false,
-    obsKnockout: false,
-    rebateTarget: '',
-    holdingStatus: '',
-    productName: '',
-    flightDateStart: '',
-    flightDateEnd: '',
-    completeDateStart: '',
-    completeDateEnd: '',
-  }
+  filters.value = defaultFilters()
   currentPage.value = 1
   fetchData()
 }
@@ -360,6 +375,80 @@ async function refreshPrice(item) {
       }
     }
   } catch {}
+}
+
+function csvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`
+}
+
+function downloadRows(rows) {
+  const headers = [
+    '产品名称', '姓名', '实际申购人', '金额 / 万', '申购费返还比例', '管理费返还比例', '业绩报酬返还比例',
+    '返佣对象', '申购日期', '持有状态', '完结日期', '挂钩标的', '结构类型', '锁定期', '观察日', '观察类型',
+    '入场价', '首月敲出', '每月递减', '敲出价', '今日点位', '敲出线以上 / 以下', '降落伞',
+    '派息障碍（如有）', '月票息（税费后）', '第一段票息（税费后）', '第二段票息（税费后）', '第三段票息（税费后）',
+  ]
+  const body = rows.map(item => [
+    item.product_name,
+    item.customer_name,
+    item.actual_buyer,
+    item.amount,
+    item.subscribe_fee_ratio,
+    item.management_fee_ratio,
+    item.performance_fee_ratio,
+    item.rebate_target,
+    item.flight_date,
+    normalizeHoldingStatus(item.holding_status),
+    item.complete_date,
+    item.underlying,
+    item.structure_type,
+    item.lock_period,
+    displayObservationDay(item),
+    displayObservationType(item),
+    item.entry_price,
+    item.first_knockout_ratio != null ? Number(item.first_knockout_ratio).toFixed(2) : '',
+    item.monthly_decrease,
+    item.knockout_price,
+    displayTodayPrice(item),
+    displayKnockoutPosition(item),
+    item.parachute,
+    item.dividend_barrier,
+    item.monthly_coupon,
+    item.coupon_1st,
+    item.coupon_2nd,
+    item.coupon_3rd,
+  ])
+
+  const csvContent = '\ufeff' + [
+    headers.map(csvCell).join(','),
+    ...body.map(row => row.map(csvCell).join(',')),
+  ].join('\n')
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `客户持有明细_${new Date().toISOString().slice(0, 10)}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function downloadCSV() {
+  if (downloading.value || total.value === 0) return
+  downloading.value = true
+  try {
+    const params = new URLSearchParams(lastAppliedParams.value)
+    params.set('page', 1)
+    params.set('page_size', total.value)
+    const res = await fetch(`/api/holding/transactions?${params}`)
+    if (!res.ok) throw new Error('下载失败')
+    const data = await res.json()
+    downloadRows(data.items || [])
+  } catch (err) {
+    alert(err.message || '下载失败')
+  } finally {
+    downloading.value = false
+  }
 }
 
 onMounted(async () => {
