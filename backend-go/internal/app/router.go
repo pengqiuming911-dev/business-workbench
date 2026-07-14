@@ -3846,7 +3846,7 @@ func (s *Server) rebateCompletePayment(c *gin.Context) {
 			{"管理费", item.OutstandingManagement},
 			{"业绩报酬", item.OutstandingPerformance},
 		} {
-			if expense.amount <= 0 {
+			if expense.amount == 0 {
 				continue
 			}
 			record := rebateCompletedFromPending(item, txRow, expense.category, expense.amount)
@@ -3977,7 +3977,7 @@ func renderRebateFlowEmail(intro string, items []rebateFlowItem, accounts map[st
 			row = &summary{RebateTarget: target, Account: accounts[target]}
 			summaryMap[target] = row
 		}
-		row.Total += positive(item.OutstandingSubscribe) + positive(item.OutstandingManagement) + positive(item.OutstandingPerformance)
+		row.Total += item.OutstandingSubscribe + item.OutstandingManagement + item.OutstandingPerformance
 	}
 	keys := make([]string, 0, len(summaryMap))
 	for key := range summaryMap {

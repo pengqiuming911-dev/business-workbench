@@ -40,6 +40,9 @@
       <span class="text-label">
         汇总 {{ groupedRows.length }} 人 / 待返订单 {{ items.length }} 条
       </span>
+      <span v-if="selectedPlannedTotal < 0" class="negative-warning">
+        本次拟返合计为负数，请核对
+      </span>
       <div class="action-bar-actions">
         <button class="btn btn-secondary btn-sm" :disabled="items.length === 0 || busyAction === 'download-filtered'" @click="downloadFilteredWorkbook">
           <Download :size="14" />
@@ -139,7 +142,9 @@
                       :checked="isGroupSelected(group)"
                       @change="toggleGroupPlan(group, $event)"
                     />
-                    <span>{{ isGroupSelected(group) ? fmtNum(group.plan_total) : '0.00' }}</span>
+                    <span :class="{ 'negative-amount': isGroupSelected(group) && group.plan_total < 0 }">
+                      {{ isGroupSelected(group) ? fmtNum(group.plan_total) : '0.00' }}
+                    </span>
                   </label>
                 </td>
                 <td class="plan-cell">
@@ -199,9 +204,9 @@
             <tr class="summary-total-row">
               <td class="sticky-col">合计</td>
               <td colspan="12"></td>
-              <td>{{ fmtNum(selectedPlannedTotal) }}</td>
-              <td>{{ fmtNum(selectedReviewedTotal) }}</td>
-              <td>{{ fmtNum(selectedPaymentTotal) }}</td>
+              <td :class="{ 'negative-amount': selectedPlannedTotal < 0 }">{{ fmtNum(selectedPlannedTotal) }}</td>
+              <td :class="{ 'negative-amount': selectedReviewedTotal < 0 }">{{ fmtNum(selectedReviewedTotal) }}</td>
+              <td :class="{ 'negative-amount': selectedPaymentTotal < 0 }">{{ fmtNum(selectedPaymentTotal) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -285,7 +290,7 @@ const groupedRows = computed(() => {
     group.outstanding_subscribe += outstanding(item, 'subscribe')
     group.outstanding_management += outstanding(item, 'management')
     group.outstanding_performance += outstanding(item, 'performance')
-    group.plan_total += Math.max(0, outstanding(item, 'subscribe')) + Math.max(0, outstanding(item, 'management')) + Math.max(0, outstanding(item, 'performance'))
+    group.plan_total += itemOutstandingTotal(item)
   }
   return Array.from(groups.values()).sort((a, b) => b.plan_total - a.plan_total)
 })
@@ -493,17 +498,11 @@ function selectedPaymentItems() {
 
 function sumFlowItems(sourceItems) {
   return sourceItems.reduce((sum, item) => {
-    return sum + Math.max(0, outstanding(item, 'subscribe')) + Math.max(0, outstanding(item, 'management')) + Math.max(0, outstanding(item, 'performance'))
+    return sum + itemOutstandingTotal(item)
   }, 0)
 }
 
-function flowAmount(item, type, preserveNegative = false) {
-  const value = outstanding(item, type)
-  return preserveNegative ? value : Math.max(0, value)
-}
-
-function flowPayload(sourceItems, options = {}) {
-  const preserveNegative = options.preserveNegative === true
+function flowPayload(sourceItems) {
   return {
     rebate_target: sourceItems.length === 1 ? sourceItems[0].rebate_target : '',
     items: sourceItems.map(item => ({
@@ -512,9 +511,9 @@ function flowPayload(sourceItems, options = {}) {
       product_name: item.product_name || '',
       customer_name: item.customer_name || '',
       rebate_target: item.rebate_target || '',
-      outstanding_subscribe: flowAmount(item, 'subscribe', preserveNegative),
-      outstanding_management: flowAmount(item, 'management', preserveNegative),
-      outstanding_performance: flowAmount(item, 'performance', preserveNegative),
+      outstanding_subscribe: outstanding(item, 'subscribe'),
+      outstanding_management: outstanding(item, 'management'),
+      outstanding_performance: outstanding(item, 'performance'),
     })),
   }
 }
@@ -678,7 +677,7 @@ async function downloadWorkbook(sourceItems) {
   const res = await fetch('/api/rebate/pending/selected-workbook', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(flowPayload(sourceItems, { preserveNegative: true })),
+    body: JSON.stringify(flowPayload(sourceItems)),
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
@@ -716,6 +715,21 @@ async function downloadWorkbook(sourceItems) {
 .action-bar-actions {
   display: flex;
   gap: 10px;
+}
+
+.negative-warning {
+  padding: 4px 10px;
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  border-radius: 4px;
+  background: rgba(254, 226, 226, 0.8);
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.negative-amount {
+  color: #b42318 !important;
+  font-weight: 800;
 }
 
 .filter-bar {
