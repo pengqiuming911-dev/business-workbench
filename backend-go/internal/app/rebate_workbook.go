@@ -51,9 +51,9 @@ func (s *Server) buildRebateWorkbook(ctx context.Context, items []rebateFlowItem
 		if target == "" {
 			target = "未填写返还人"
 		}
-		sub := positive(item.OutstandingSubscribe)
-		mgmt := positive(item.OutstandingManagement)
-		perf := positive(item.OutstandingPerformance)
+		sub := item.OutstandingSubscribe
+		mgmt := item.OutstandingManagement
+		perf := item.OutstandingPerformance
 		total := sub + mgmt + perf
 		detailRows = append(detailRows, []string{
 			target,

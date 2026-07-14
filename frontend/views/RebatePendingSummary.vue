@@ -40,10 +40,16 @@
       <span class="text-label">
         汇总 {{ groupedRows.length }} 人 / 待返订单 {{ items.length }} 条
       </span>
-      <button class="btn btn-secondary btn-sm" :disabled="selectedPlannedItems().length === 0" @click="downloadSelectedWorkbook">
-        <Download :size="14" />
-        下载勾选的明细
-      </button>
+      <div class="action-bar-actions">
+        <button class="btn btn-secondary btn-sm" :disabled="items.length === 0 || busyAction === 'download-filtered'" @click="downloadFilteredWorkbook">
+          <Download :size="14" />
+          {{ busyAction === 'download-filtered' ? '下载中...' : '下载筛选明细' }}
+        </button>
+        <button class="btn btn-secondary btn-sm" :disabled="selectedPlannedItems().length === 0 || busyAction === 'download'" @click="downloadSelectedWorkbook">
+          <Download :size="14" />
+          {{ busyAction === 'download' ? '下载中...' : '下载勾选的明细' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -491,7 +497,13 @@ function sumFlowItems(sourceItems) {
   }, 0)
 }
 
-function flowPayload(sourceItems) {
+function flowAmount(item, type, preserveNegative = false) {
+  const value = outstanding(item, type)
+  return preserveNegative ? value : Math.max(0, value)
+}
+
+function flowPayload(sourceItems, options = {}) {
+  const preserveNegative = options.preserveNegative === true
   return {
     rebate_target: sourceItems.length === 1 ? sourceItems[0].rebate_target : '',
     items: sourceItems.map(item => ({
@@ -500,9 +512,9 @@ function flowPayload(sourceItems) {
       product_name: item.product_name || '',
       customer_name: item.customer_name || '',
       rebate_target: item.rebate_target || '',
-      outstanding_subscribe: Math.max(0, outstanding(item, 'subscribe')),
-      outstanding_management: Math.max(0, outstanding(item, 'management')),
-      outstanding_performance: Math.max(0, outstanding(item, 'performance')),
+      outstanding_subscribe: flowAmount(item, 'subscribe', preserveNegative),
+      outstanding_management: flowAmount(item, 'management', preserveNegative),
+      outstanding_performance: flowAmount(item, 'performance', preserveNegative),
     })),
   }
 }
@@ -642,27 +654,43 @@ async function downloadSelectedWorkbook() {
   if (targets.length === 0 || busyAction.value) return
   busyAction.value = 'download'
   try {
-    const res = await fetch('/api/rebate/pending/selected-workbook', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(flowPayload(targets)),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data.error || '下载失败')
-    }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `待返费明细_${new Date().toISOString().slice(0, 10)}.xlsx`
-    link.click()
-    URL.revokeObjectURL(url)
+    await downloadWorkbook(targets)
   } catch (e) {
     alert(e.message || '下载失败')
   } finally {
     busyAction.value = ''
   }
+}
+
+async function downloadFilteredWorkbook() {
+  if (items.value.length === 0 || busyAction.value) return
+  busyAction.value = 'download-filtered'
+  try {
+    await downloadWorkbook(items.value)
+  } catch (e) {
+    alert(e.message || '下载失败')
+  } finally {
+    busyAction.value = ''
+  }
+}
+
+async function downloadWorkbook(sourceItems) {
+  const res = await fetch('/api/rebate/pending/selected-workbook', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(flowPayload(sourceItems, { preserveNegative: true })),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || '下载失败')
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `待返费明细_${new Date().toISOString().slice(0, 10)}.xlsx`
+  link.click()
+  URL.revokeObjectURL(url)
 }
 </script>
 
@@ -683,6 +711,11 @@ async function downloadSelectedWorkbook() {
 .rebate-pending-summary-page > .filter-bar,
 .rebate-pending-summary-page > .action-bar {
   flex-shrink: 0;
+}
+
+.action-bar-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .filter-bar {
