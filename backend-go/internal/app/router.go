@@ -2882,6 +2882,7 @@ func (s *Server) enrichProductDocRows(rows []map[string]any) []map[string]any {
 			entryDate = firstNonEmptyString(structured["入场日期"], structured["入场时间"])
 		}
 		fields := []gin.H{
+			{"label": "标的", "value": structured["标的"]},
 			{"label": "期限", "value": firstNonEmptyString(structured["期限"], structured["结构"])},
 			{"label": "保证金", "value": firstNonEmptyString(structured["保证金"], structured["保证金比例"])},
 			{"label": "敲出线", "value": firstNonEmptyString(structured["敲出线"], structured["期初敲出线"])},

@@ -59,7 +59,7 @@ function getDisplayName(docName) {
   return docName.replace(/^销售物料[：:\s]*/, '')
 }
 
-const fallbackFieldOrder = ['期限', '保证金', '敲出线', '期初敲出线', '降敲', '降落伞', '派息线', '费后派息', '票息（税费后）', '管理人', '产品', '入场日期', '入场时间']
+const fallbackFieldOrder = ['标的', '期限', '保证金', '敲出线', '期初敲出线', '降敲', '降落伞', '派息线', '费后派息', '票息（税费后）', '管理人', '产品', '入场日期', '入场时间']
 
 function displayFields(product) {
   if (Array.isArray(product.display_fields)) {
