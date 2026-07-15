@@ -1,9 +1,5 @@
 <template>
   <div class="product-report-page">
-    <div class="page-header">
-      <h1 class="text-page-title">销售物料</h1>
-    </div>
-
     <PanelCard title="物料展示">
       <div class="month-search">
         <span class="text-label">数据源：</span>
@@ -26,10 +22,10 @@
             <span class="card-title">{{ getDisplayName(product.doc_name) }}</span>
           </div>
           <div class="card-body">
-            <template v-if="product.structured">
-              <div v-for="(value, key) in product.structured" :key="key" class="info-row">
-                <span class="info-key">{{ key }}</span>
-                <span class="info-val" :class="{ multiline: key === '降敲' }">{{ value }}</span>
+            <template v-if="displayFields(product).length > 0">
+              <div v-for="field in displayFields(product)" :key="field.label" class="info-row">
+                <span class="info-key">{{ field.label }}</span>
+                <span class="info-val" :class="{ multiline: field.label === '降敲' || field.label === '费后派息' }">{{ field.value || '--' }}</span>
               </div>
             </template>
             <template v-else>
@@ -61,6 +57,25 @@ const availableMonths = ref([])
 
 function getDisplayName(docName) {
   return docName.replace(/^销售物料[：:\s]*/, '')
+}
+
+const fallbackFieldOrder = ['期限', '保证金', '敲出线', '期初敲出线', '降敲', '降落伞', '派息线', '费后派息', '票息（税费后）', '管理人', '产品', '入场日期', '入场时间']
+
+function displayFields(product) {
+  if (Array.isArray(product.display_fields)) {
+    return product.display_fields
+  }
+  if (!product.structured) return []
+  return fallbackFieldOrder
+    .map(label => ({ label: normalizeLabel(label), value: product.structured[label] }))
+    .filter(field => field.value)
+}
+
+function normalizeLabel(label) {
+  if (label === '期初敲出线') return '敲出线'
+  if (label === '票息（税费后）') return '费后派息'
+  if (label === '入场时间') return '入场日期'
+  return label
 }
 
 function extractMonth(doc) {

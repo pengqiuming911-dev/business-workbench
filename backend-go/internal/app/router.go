@@ -492,6 +492,7 @@ func (s *Server) productDocs(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
+	rows = s.enrichProductDocRows(rows)
 	c.JSON(http.StatusOK, rows)
 }
 
@@ -2841,17 +2842,17 @@ func parseProductStructure(text string) map[string]string {
 		return nil
 	}
 	patterns := map[string]string{
-		"结构":      `结构[：:]\s*(.+)`,
-		"标的":      `标的[：:]\s*(.+)`,
-		"期限":      `期限[：:]\s*(.+)`,
-		"保证金比例":   `保证金比例[：:]\s*(.+)`,
-		"期初敲出线":   `(?:期初)?敲出线[：:]\s*(.+)`,
-		"降敲":      `降敲[：:]\s*(.+)`,
-		"降落伞":     `降落伞[：:]\s*(.+)`,
-		"派息线":     `派息线[：:]\s*(.+)`,
-		"票息（税费后）": `票息[（(]税费后[）)][：:]\s*(.+)`,
-		"打款时间":    `打款时间[：:]\s*(.+)`,
-		"入场时间":    `入场时间[：:]\s*(.+)`,
+		"结构":    `结构[：:]\s*(.+)`,
+		"标的":    `标的[：:]\s*(.+)`,
+		"期限":    `期限[：:]\s*(.+)`,
+		"保证金":   `保证金(?:比例)?[：:]\s*(.+)`,
+		"期初敲出线": `(?:期初)?敲出线[：:]\s*(.+)`,
+		"降敲":    `降敲[：:]\s*(.+)`,
+		"降落伞":   `降落伞[：:]\s*(.+)`,
+		"派息线":   `派息线[：:]\s*(.+)`,
+		"费后派息":  `(?:费后|税后)?(?:派息|票息|敲出票息)(?:[（(]税费后[）)])?[：:]\s*(.+)`,
+		"打款时间":  `打款时间[：:]\s*(.+)`,
+		"入场时间":  `入场时间[：:]\s*(.+)`,
 	}
 	result := map[string]string{}
 	for field, pattern := range patterns {
@@ -2864,6 +2865,135 @@ func parseProductStructure(text string) map[string]string {
 		return nil
 	}
 	return result
+}
+
+func (s *Server) enrichProductDocRows(rows []map[string]any) []map[string]any {
+	products, _ := s.store.QueryProducts("", "")
+	for _, row := range rows {
+		raw := fmt.Sprint(row["raw_content"])
+		structured := productDocStructured(row, raw)
+		manager := productDocSectionValue(raw, "管理人-基金业协会公示图")
+		productName := productDocSectionValue(raw, "产品-基金业协会公示图")
+		entryDate := ""
+		if product := bestProductForMaterial(products, productName, fmt.Sprint(row["doc_name"])); product != nil {
+			entryDate = formatSlashDate(product.IssueDate)
+		}
+		if entryDate == "" {
+			entryDate = firstNonEmptyString(structured["入场日期"], structured["入场时间"])
+		}
+		fields := []gin.H{
+			{"label": "期限", "value": firstNonEmptyString(structured["期限"], structured["结构"])},
+			{"label": "保证金", "value": firstNonEmptyString(structured["保证金"], structured["保证金比例"])},
+			{"label": "敲出线", "value": firstNonEmptyString(structured["敲出线"], structured["期初敲出线"])},
+			{"label": "降敲", "value": structured["降敲"]},
+			{"label": "降落伞", "value": structured["降落伞"]},
+			{"label": "派息线", "value": structured["派息线"]},
+			{"label": "费后派息", "value": firstNonEmptyString(structured["费后派息"], structured["票息（税费后）"], structured["票息（税后）"])},
+			{"label": "管理人", "value": manager},
+			{"label": "产品", "value": productName},
+			{"label": "入场日期", "value": entryDate},
+		}
+		row["display_fields"] = fields
+	}
+	return rows
+}
+
+func productDocStructured(row map[string]any, raw string) map[string]string {
+	out := map[string]string{}
+	if existing, ok := row["structured"].(map[string]any); ok {
+		for key, value := range existing {
+			out[key] = strings.TrimSpace(fmt.Sprint(value))
+		}
+	}
+	if parsed := parseProductStructure(raw); parsed != nil {
+		for key, value := range parsed {
+			out[key] = value
+		}
+	}
+	if value := firstLineMatch(raw, `(?:期初)?敲出线[：:]\s*(.+)`); value != "" {
+		out["敲出线"] = value
+	}
+	return out
+}
+
+func productDocSectionValue(raw, heading string) string {
+	lines := strings.Split(raw, "\n")
+	for i, line := range lines {
+		if !strings.Contains(strings.TrimSpace(line), heading) {
+			continue
+		}
+		for _, next := range lines[i+1:] {
+			value := strings.TrimSpace(next)
+			if value == "" || strings.HasPrefix(strings.ToLower(value), "http") || strings.HasPrefix(strings.ToLower(value), "amac") || strings.Contains(value, ".png") || strings.Contains(value, ".jpg") || strings.Contains(value, "image.") {
+				continue
+			}
+			return value
+		}
+	}
+	return ""
+}
+
+func firstLineMatch(text, pattern string) string {
+	re := regexp.MustCompile(`(?m)^` + pattern + `$`)
+	if match := re.FindStringSubmatch(text); len(match) > 1 {
+		return strings.TrimSpace(match[1])
+	}
+	return ""
+}
+
+func bestProductForMaterial(products []model.Product, productName, docName string) *model.Product {
+	needles := []string{normalizeProductMatchText(productName), normalizeProductMatchText(docName)}
+	var best *model.Product
+	bestScore := 0
+	for i := range products {
+		haystack := normalizeProductMatchText(products[i].Name)
+		if haystack == "" {
+			continue
+		}
+		score := 0
+		for _, needle := range needles {
+			if needle == "" {
+				continue
+			}
+			switch {
+			case haystack == needle:
+				score = max(score, 1000+len(needle))
+			case strings.Contains(haystack, needle):
+				score = max(score, 700+len(needle))
+			case strings.Contains(needle, haystack):
+				score = max(score, 500+len(haystack))
+			}
+		}
+		if score > bestScore {
+			best = &products[i]
+			bestScore = score
+		}
+	}
+	if bestScore == 0 {
+		return nil
+	}
+	return best
+}
+
+func normalizeProductMatchText(value string) string {
+	value = strings.TrimSpace(value)
+	replacers := []string{
+		"销售物料", "", "私募证券投资基金", "", "私募投资基金", "", "证券投资基金", "",
+		"基金", "", "：", "", ":", "", "-", "", " ", "", "　", "", "\t", "", "\n", "",
+		"2倍DCN", "", "平层DCN", "", "DCN", "", "2倍早利锁盈", "", "早利锁盈", "",
+	}
+	for i := 0; i+1 < len(replacers); i += 2 {
+		value = strings.ReplaceAll(value, replacers[i], replacers[i+1])
+	}
+	return strings.ToLower(value)
+}
+
+func formatSlashDate(value string) string {
+	t, err := time.Parse("2006-01-02", strings.TrimSpace(value))
+	if err != nil {
+		return strings.TrimSpace(value)
+	}
+	return fmt.Sprintf("%d/%d/%d", t.Year(), int(t.Month()), t.Day())
 }
 
 func uniqueProductCodes(products []model.Product) []string {
