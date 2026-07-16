@@ -44,6 +44,14 @@
         本次拟返合计为负数，请核对
       </span>
       <div class="action-bar-actions">
+        <button class="btn btn-secondary btn-sm" :disabled="groupedRows.length === 0 || !!busyAction" @click="selectAllPlanned">
+          <CheckSquare :size="14" />
+          {{ busyAction === 'select-all' ? '处理中...' : '全部勾选' }}
+        </button>
+        <button class="btn btn-secondary btn-sm" :disabled="selectedTargets.size === 0 || !!busyAction" @click="clearAllPlanned">
+          <Square :size="14" />
+          {{ busyAction === 'clear-selected' ? '处理中...' : '批量取消勾选' }}
+        </button>
         <button class="btn btn-secondary btn-sm" :disabled="items.length === 0 || busyAction === 'download-filtered'" @click="downloadFilteredWorkbook">
           <Download :size="14" />
           {{ busyAction === 'download-filtered' ? '下载中...' : '下载筛选明细' }}
@@ -225,7 +233,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ChevronDown, ChevronRight, Download, Search } from '@lucide/vue'
+import { CheckSquare, ChevronDown, ChevronRight, Download, Search, Square } from '@lucide/vue'
 import FullscreenToggle from '../components/FullscreenToggle.vue'
 
 defineProps({
@@ -573,36 +581,63 @@ async function completePayment() {
 
 async function toggleGroupPlan(group, event) {
   const checked = event.target.checked
+  await updatePlanSelectionForGroups([group], checked, 'plan')
+}
+
+async function selectAllPlanned() {
+  await updatePlanSelectionForGroups(groupedRows.value, true, 'select-all')
+}
+
+async function clearAllPlanned() {
+  await updatePlanSelectionForGroups(groupedRows.value.filter(group => selectedTargets.value.has(targetKey(group))), false, 'clear-selected')
+}
+
+async function updatePlanSelectionForGroups(groups, checked, action) {
+  if (groups.length === 0 || busyAction.value) return
+  if (action) busyAction.value = action
   const next = new Set(selectedTargets.value)
-  if (checked) {
-    next.add(targetKey(group))
-  } else {
-    next.delete(targetKey(group))
+  const nextReview = new Set(reviewSelectedTargets.value)
+  const nextPayment = new Set(paymentSelectedTargets.value)
+  for (const group of groups) {
+    const key = targetKey(group)
+    if (checked) {
+      next.add(key)
+    } else {
+      next.delete(key)
+      nextReview.delete(key)
+      nextPayment.delete(key)
+    }
+    for (const item of group.items) {
+      item.plan_subscribe = checked ? 1 : 0
+      item.plan_management = checked ? 1 : 0
+      item.plan_performance = checked ? 1 : 0
+    }
   }
   selectedTargets.value = next
-  for (const item of group.items) {
-    item.plan_subscribe = checked ? 1 : 0
-    item.plan_management = checked ? 1 : 0
-    item.plan_performance = checked ? 1 : 0
-  }
+  reviewSelectedTargets.value = nextReview
+  paymentSelectedTargets.value = nextPayment
   try {
-    for (const item of group.items) {
-      const res = await fetch('/api/rebate/pending/status', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order_id: item.order_id,
-          plan_subscribe: item.plan_subscribe,
-          plan_management: item.plan_management,
-          plan_performance: item.plan_performance,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || '更新勾选状态失败')
+    for (const group of groups) {
+      for (const item of group.items) {
+        const res = await fetch('/api/rebate/pending/status', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_id: item.order_id,
+            plan_subscribe: item.plan_subscribe,
+            plan_management: item.plan_management,
+            plan_performance: item.plan_performance,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || '更新勾选状态失败')
+      }
     }
   } catch (e) {
     alert(e.message || '更新勾选状态失败')
     await fetchData()
+  } finally {
+    if (action) busyAction.value = ''
   }
 }
 
@@ -714,6 +749,8 @@ async function downloadWorkbook(sourceItems) {
 
 .action-bar-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
 }
 
