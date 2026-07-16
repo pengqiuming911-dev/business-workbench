@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"math"
 	"mime/multipart"
 	"net/http"
@@ -1174,6 +1175,7 @@ func (s *Server) driveExportSheet(c *gin.Context) {
 	}
 	data, contentType, err := s.feishu.ExportSheet(c.Request.Context(), sheetToken)
 	if err != nil {
+		log.Printf("drive export sheet failed token=%s: %v", sheetToken, err)
 		writeDriveError(c, err)
 		return
 	}
@@ -1325,6 +1327,7 @@ func (s *Server) syncRebateDetail(c *gin.Context) {
 	}
 	info, err := s.performRebateDetailSync(c.Request.Context())
 	if err != nil {
+		log.Printf("sync rebate detail failed: %v", err)
 		writeError(c, err)
 		return
 	}

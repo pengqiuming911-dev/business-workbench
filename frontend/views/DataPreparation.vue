@@ -284,6 +284,11 @@ async function syncRebateDetailClientSide() {
   return { row_count: rows.length, sheet_name: latest.name, rows }
 }
 
+async function readApiError(res) {
+  const data = await res.json().catch(() => ({}))
+  return data.error || res.statusText || res.status
+}
+
 async function syncAll() {
   syncing.value = true
   syncError.value = ''
@@ -298,12 +303,7 @@ async function syncAll() {
       if (data.rebateRowCount !== undefined) {
         parts.push(`返费明细 ${data.rebateRowCount} 条`)
       } else if (data.rebateError) {
-        try {
-          const rebateInfo = await syncRebateDetailClientSide()
-          parts.push(`返费明细 ${rebateInfo.row_count} 条（${rebateInfo.sheet_name}）`)
-        } catch (rebateErr) {
-          syncError.value = '返费同步失败：' + rebateErr.message
-        }
+        syncError.value = '返费同步失败：' + data.rebateError
       }
       syncSuccess.value = '同步成功：' + parts.join('、')
       await Promise.all([loadSyncStatus(), loadDocStatus(), loadRebateStatus()])
@@ -335,8 +335,7 @@ async function syncAll() {
         const rebateData = await rebateRes.json()
         if (rebateData.row_count !== undefined) parts.push(`返费明细 ${rebateData.row_count} 条`)
       } else {
-        const rebateInfo = await syncRebateDetailClientSide()
-        parts.push(`返费明细 ${rebateInfo.row_count} 条（${rebateInfo.sheet_name}）`)
+        throw new Error(await readApiError(rebateRes))
       }
     } catch (rebateErr) {
       syncError.value = '返费同步失败：' + rebateErr.message
@@ -417,11 +416,7 @@ async function syncRebate() {
       await loadRebateStatus()
       return
     }
-    // 后端导出失败时回退到客户端解析
-    const info = await syncRebateDetailClientSide()
-    rebateMsg.value = `同步成功：返费明细 ${info.row_count} 条（${info.sheet_name}）`
-    rebateMsgIsError.value = false
-    await loadRebateStatus()
+    throw new Error(await readApiError(res))
   } catch (e) {
     rebateMsg.value = '同步失败：' + e.message
     rebateMsgIsError.value = true
