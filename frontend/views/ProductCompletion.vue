@@ -463,8 +463,10 @@ function reloadPosterCopy() {
 function toCopyProduct(item) {
   const product = item.product || {}
   const observation = item.observation || {}
+  const artifact = item.artifact || {}
   return {
     ...product,
+    poster_artifact: artifact,
     observations: [{
       ...observation,
       date: observation.observation_date,
@@ -775,6 +777,13 @@ function formatRateNumber(rate, digits = 2) {
 }
 
 function dividendCount(product, obs) {
+  const artifactCount = Number(product?.poster_artifact?.dividend_count)
+  if (Number.isFinite(artifactCount) && artifactCount >= 0) return artifactCount
+  const observations = Array.isArray(product?.observations) ? product.observations : []
+  const targetDate = obs?.date || todayDate.value
+  if (observations.length > 1 && targetDate) {
+    return observations.filter(item => item.date <= targetDate && item.is_dividend === '是').length
+  }
   return Math.max(0, eventMonths(product, obs))
 }
 
@@ -815,6 +824,7 @@ function buildNotificationCopy(product, type) {
     '',
     `【${name}】于${formatChineseDate(product.issue_date)}进场`,
     `✅️挂钩标的：【${underlyingName(product)}】`,
+    `✅️入场价：【${formatPlainPrice(product.entry_price, product)}】`,
     `✅️派息观察线：【${formatPercent(product.dividend_barrier, 0)}】，对应派息线【${dividendLine}】`,
     `✅️今天收盘价：【${closePrice}】${priceCompareText(obs, obs.dividend_line, product)}，触发派息分红事件。`,
     '',
