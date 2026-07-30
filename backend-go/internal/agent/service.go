@@ -519,7 +519,13 @@ func (s *Service) generatePoster(args map[string]any) map[string]any {
 		return map[string]any{"error": "no observation record for " + observationDate + " on product " + productID}
 	}
 
-	data := posters.GenerateData(*product, observationDate, monthsSinceEntry)
+	actualDividendCount := 0
+	for _, record := range records {
+		if record.ObservationDate <= observationDate && record.IsDividend == "\u662f" {
+			actualDividendCount++
+		}
+	}
+	data := posters.GenerateDataWithDividendCount(*product, observationDate, monthsSinceEntry, actualDividendCount)
 	artifact := posters.BuildArtifact(*product, data, observationDate)
 	return map[string]any{
 		"poster_artifact":  artifact,

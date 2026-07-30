@@ -24,8 +24,15 @@ type Data struct {
 }
 
 func GenerateData(product model.Product, observationDate string, monthsSinceEntry int) Data {
+	return GenerateDataWithDividendCount(product, observationDate, monthsSinceEntry, -1)
+}
+
+func GenerateDataWithDividendCount(product model.Product, observationDate string, monthsSinceEntry int, actualDividendCount int) Data {
 	monthlyCoupon := parseRatio(product.MonthlyCoupon)
 	dividendCount := computeDividendCount(product.IssueDate, observationDate)
+	if actualDividendCount >= 0 {
+		dividendCount = actualDividendCount
+	}
 	return Data{
 		HasDividendObservation: monthlyCoupon > 0,
 		UnderlyingName:         getUnderlyingName(product.Code),
@@ -48,6 +55,12 @@ func FormatChineseDate(dateStr string) string {
 	return fmt.Sprintf("%d年%d月%d日", date.Year(), date.Month(), date.Day())
 }
 
+func formatEntryPrice(value *float64) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.4f", *value), "0"), ".")
+}
 func getUnderlyingName(code string) string {
 	code = strings.TrimSpace(code)
 	if code == "" {
@@ -183,6 +196,7 @@ func derefInt(value *int) int {
 
 // BuildArtifact 把计算好的喜报数据转成前端模板直接消费的展示字段 map。
 // 所有数字在此一次性格式化成字符串,前端与 agent 都不得再解析或改写这些数字。
+
 func BuildArtifact(product model.Product, data Data, observationDate string) map[string]any {
 	return map[string]any{
 		"product_id":               product.ID,
@@ -197,6 +211,7 @@ func BuildArtifact(product model.Product, data Data, observationDate string) map
 		"cumulative_dividend_rate": fmt.Sprintf("%.2f", data.CumulativeDividendRate*100),
 		"dividend_count":           data.DividendCount,
 		"underlying_name":          data.UnderlyingName,
+		"entry_price":              formatEntryPrice(product.EntryPrice),
 		"dividend_barrier_value":   data.DividendBarrierValue,
 		"knockout_value":           data.KnockoutValue,
 		"parachute_value":          data.ParachuteValue,

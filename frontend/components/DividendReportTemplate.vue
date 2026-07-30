@@ -26,6 +26,7 @@
         <div class="dash"></div>
         <div class="info">
           挂钩标的: {{ fields.underlying_name }}<br>
+          ✅️入场价:【{{ fields.entry_price }}】<br>
           派息界限: {{ fields.dividend_barrier_value }}<br>
           止盈界限: {{ fields.knockout_value }}<br>
           末月降至: {{ fields.parachute_value }}<br>
@@ -234,3 +235,4 @@ defineExpose({ downloadPng, getPngDataUrl })
 .btn-download{ padding:8px 16px; background:#cf141d; color:#fff; border:none; border-radius:6px; cursor:pointer; }
 .btn-download:disabled{ opacity:.6; cursor:default; }
 </style>
+

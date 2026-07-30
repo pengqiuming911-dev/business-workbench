@@ -1949,7 +1949,13 @@ func (s *Server) posterCopy(c *gin.Context) {
 			} else if info, ok := observationInfoForDate(*product, targetDate); ok {
 				monthsSinceEntry = info.MonthsSinceEntry
 			}
-			data := posters.GenerateData(*product, targetDate, monthsSinceEntry)
+			records, err := s.store.QueryObservationsByProduct(product.ID)
+			if err != nil {
+				writeError(c, err)
+				return
+			}
+			actualDividendCount := countActualDividends(records, targetDate)
+			data := posters.GenerateDataWithDividendCount(*product, targetDate, monthsSinceEntry, actualDividendCount)
 			artifact := posters.BuildArtifact(*product, data, targetDate)
 			artifact["is_knocked_out"] = obs.IsKnockedOut
 			artifact["is_dividend"] = obs.IsDividend
@@ -2017,7 +2023,8 @@ func (s *Server) generatePosters(c *gin.Context) {
 		if targetRecord == nil {
 			continue
 		}
-		data := posters.GenerateData(product, targetDate, targetObsInfo.MonthsSinceEntry)
+		actualDividendCount := countActualDividends(records, targetDate)
+		data := posters.GenerateDataWithDividendCount(product, targetDate, targetObsInfo.MonthsSinceEntry, actualDividendCount)
 		isKnockout := data.KnockoutValue != "" && targetRecord.IsKnockedOut == "是"
 		isDividend := data.HasDividendObservation && data.DividendBarrierValue != "" && targetRecord.IsDividend == "是"
 
@@ -2344,7 +2351,8 @@ func (s *Server) generateAutoPosters() {
 		if targetRecord == nil {
 			continue
 		}
-		data := posters.GenerateData(product, today, targetObsInfo.MonthsSinceEntry)
+		actualDividendCount := countActualDividends(records, today)
+		data := posters.GenerateDataWithDividendCount(product, today, targetObsInfo.MonthsSinceEntry, actualDividendCount)
 		isKnockout := data.KnockoutValue != "" && targetRecord.IsKnockedOut == "是"
 		isDividend := data.HasDividendObservation && data.DividendBarrierValue != "" && targetRecord.IsDividend == "是"
 
@@ -3041,6 +3049,15 @@ func observationEvalMap(eval observations.Evaluation) map[string]any {
 	}
 }
 
+func countActualDividends(records []model.Observation, targetDate string) int {
+	count := 0
+	for _, record := range records {
+		if record.ObservationDate <= targetDate && record.IsDividend == "\u662f" {
+			count++
+		}
+	}
+	return count
+}
 func observationInfoForDate(product model.Product, targetDate string) (observations.ObservationDate, bool) {
 	if len(targetDate) < 7 {
 		return observations.ObservationDate{}, false
