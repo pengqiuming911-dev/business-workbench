@@ -849,7 +849,7 @@ function buildPosterCopy(product, type) {
   const monthlyCoupon = normalizeRatio(product.monthly_coupon)
   const count = dividendCount(product, obs)
   const cumulative = monthlyCoupon * count
-  return `这张图帮我把“鹿*8号（三期）”改为“${maskedName}”；把“2026年4月30日”改成“${observeDate}”；把15.96%改成“${formatRateNumber(monthlyCoupon * 12)}%”；把“分红3次”改成“分红${count}次”；把“3.99%”改成“${formatRateNumber(cumulative)}%”；把“1.33%”改为“${formatRateNumber(monthlyCoupon)}%”；把“恒科ETF指数”改成“${underlyingIndexName(product)}”；把“80%”改成“${formatPercent(product.dividend_barrier, 0)}”；把“102%”改成“${currentKnockoutPercent(product, obs)}”；把“75%”改成“${barrierPercent(product.parachute)}”；把“2026年1月30日”改成“${entryDate}”`
+  return `这张图帮我把“鹿*8号（三期）”改为“${maskedName}”；把“2026年4月30日”改成“${observeDate}”；把15.96%改成“${formatRateNumber(monthlyCoupon * 12)}%”；把“分红3次”改成“分红${count}次”；把“3.99%”改成“${formatRateNumber(cumulative)}%”；把“1.33%”改为“${formatRateNumber(monthlyCoupon)}%”；把“恒科ETF指数”改成“${underlyingIndexName(product)}”；把“80%”改成“${formatPercent(product.dividend_barrier, 0)}”；把“102%”改成“${formatPercent(product.first_knockout_ratio, 0)}”；把“75%”改成“${barrierPercent(product.parachute)}”；把“2026年1月30日”改成“${entryDate}”`
 }
 
 async function copyText(text) {
