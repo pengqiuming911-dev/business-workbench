@@ -703,6 +703,8 @@ function maskedProductName(product) {
   const name = productName(product)
   const match = name.match(/^(.).*?(\d+号(?:[（(][^)）]+[)）])?)/)
   if (match) return `${match[1]}*${match[2]}`
+  // 无数字编号的产品名：保留首字 + * + 末三字（如「卓银精选二号」→「卓*选二号」）
+  if (name.length >= 5) return `${name[0]}*${name.slice(-3)}`
   return name.length > 1 ? `${name[0]}*${name.slice(-1)}` : name
 }
 
@@ -826,7 +828,7 @@ function buildNotificationCopy(product, type) {
     `✅️挂钩标的：【${underlyingName(product)}】`,
     `✅️入场价：【${formatPlainPrice(product.entry_price, product)}】`,
     `✅️派息观察线：【${formatPercent(product.dividend_barrier, 0)}】，对应派息线【${dividendLine}】`,
-    `✅️今天收盘价：【${closePrice}】${priceCompareText(obs, obs.dividend_line, product)}，触发派息分红事件。`,
+    `✅️今天收盘价：【${closePrice}】${obs.is_knocked_out === '否' ? '小于敲出价，产品未敲出，' : ''}${priceCompareText(obs, obs.dividend_line, product)}，触发派息分红事件。`,
     '',
     `分红将于T+【${copyTDays.value}】日，也就是${arrivalText()}到账。`,
     '',
