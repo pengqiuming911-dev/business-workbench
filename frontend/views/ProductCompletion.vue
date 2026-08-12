@@ -821,19 +821,27 @@ function buildNotificationCopy(product, type) {
     ].join('\n')
   }
   const dividendLine = formatPlainPrice(obs.dividend_line, product)
-  return [
+  const knockoutObserved = Boolean(obs.is_knocked_out) && obs.is_knocked_out !== '不观察'
+  const lines = [
     '各位投资者大家好！',
     '',
     `【${name}】于${formatChineseDate(product.issue_date)}进场`,
     `✅️挂钩标的：【${underlyingName(product)}】`,
     `✅️入场价：【${formatPlainPrice(product.entry_price, product)}】`,
     `✅️派息观察线：【${formatPercent(product.dividend_barrier, 0)}】，对应派息线【${dividendLine}】`,
+  ]
+  if (knockoutObserved) {
+    const koPrice3 = Number(obs.knockout_price).toLocaleString('zh-CN', { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false })
+    lines.push(`✅️敲出观察线：【${formatPercent(product.first_knockout_ratio, 0)}】，每月降敲【${formatPercent(product.monthly_decrease, 2)}】，对应敲出线【${koPrice3}】`)
+  }
+  lines.push(
     `✅️今天收盘价：【${closePrice}】${obs.is_knocked_out === '否' ? '小于敲出价，产品未敲出；' : ''}${priceCompareText(obs, obs.dividend_line, product)}，触发派息分红事件。`,
     '',
     `分红将于T+【${copyTDays.value}】日，也就是${arrivalText()}到账。`,
     '',
     '恭喜各位投资人！[庆祝][庆祝]',
-  ].join('\n')
+  )
+  return lines.join('\n')
 }
 
 function buildPosterCopy(product, type) {
