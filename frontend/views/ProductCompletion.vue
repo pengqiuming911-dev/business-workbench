@@ -560,7 +560,7 @@ const calendarProductCount = computed(() => (
   Array.from(calendarMap.value.values()).reduce((sum, products) => sum + products.length, 0)
 ))
 
-const copyCandidates = computed(() => todayProducts.value)
+const copyCandidates = computed(() => todayProducts.value.filter(p => eventType(p)))
 
 const copyPanelTitle = computed(() => {
   const prefix = copyMode.value === 'date' ? '历史观察产品' : '最新观察产品'
@@ -625,10 +625,9 @@ function todayObs(product) {
 
 function eventType(product) {
   const obs = todayObs(product)
+  // 仅当真触发（敲出/派息为「是」）才算事件；观察但未触发（「否」）不在喜报文案展示
   if (obs?.is_knocked_out === '是') return 'knockout'
   if (obs?.is_dividend === '是') return 'dividend'
-  if (obs?.is_knocked_out && obs.is_knocked_out !== '不观察') return 'knockout'
-  if (obs?.is_dividend && obs.is_dividend !== '不观察') return 'dividend'
   return ''
 }
 
@@ -642,8 +641,8 @@ function eventLabel(product) {
 function canUseCopyType(product, type) {
   const obs = todayObs(product)
   if (!obs) return false
-  if (type === 'knockout') return Boolean(obs.is_knocked_out && obs.is_knocked_out !== '不观察')
-  if (type === 'dividend') return Boolean(obs.is_dividend && obs.is_dividend !== '不观察')
+  if (type === 'knockout') return obs.is_knocked_out === '是'
+  if (type === 'dividend') return obs.is_dividend === '是'
   return false
 }
 
