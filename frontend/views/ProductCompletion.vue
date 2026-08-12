@@ -702,7 +702,10 @@ function maskedProductName(product) {
   const name = productName(product)
   const match = name.match(/^(.).*?(\d+号(?:[（(][^)）]+[)）])?)/)
   if (match) return `${match[1]}*${match[2]}`
-  // 无数字编号的产品名：保留首字 + * + 末三字（如「卓银精选二号」→「卓*选二号」）
+  // 带（X期）后缀的产品名：首字 + * + 后缀前三个字 + 后缀（如「珺容精进多策略一号（二期）」→「珺*略一号（二期）」）
+  const suffixMatch = name.match(/^(.)(.+)(.{3})([（(][^)）]*期[)）])$/)
+  if (suffixMatch) return `${suffixMatch[1]}*${suffixMatch[3]}${suffixMatch[4]}`
+  // 其他无后缀产品名：首字 + * + 末三字（如「卓银精选二号」→「卓*选二号」）
   if (name.length >= 5) return `${name[0]}*${name.slice(-3)}`
   return name.length > 1 ? `${name[0]}*${name.slice(-1)}` : name
 }
