@@ -76,6 +76,10 @@ func DatesForMonth(product model.Product, month string) []ObservationDate {
 		if product.CompleteDate != "" && adjusted > product.CompleteDate {
 			break
 		}
+		// 既无敲出可观察、又无派息可观察的月份不算观察日，不进日历。
+		if !isObservable(product, months) {
+			continue
+		}
 		if adjusted >= monthStart && adjusted <= monthEnd {
 			result = append(result, ObservationDate{Date: adjusted, MonthsSinceEntry: months})
 		}
@@ -93,6 +97,10 @@ func DatesUntil(product model.Product, today string) []ObservationDate {
 		if rawDate > today {
 			break
 		}
+		// 既无敲出可观察、又无派息可观察的月份不算观察日，不纳入历史/今日观察列表。
+		if !isObservable(product, months) {
+			continue
+		}
 		result = append(result, ObservationDate{
 			Date:             AdjustForHoliday(rawDate, product.HolidayAdjust),
 			MonthsSinceEntry: months,
@@ -108,11 +116,16 @@ func NextObservationDate(product model.Product, today string) string {
 	for months := 1; months < 600; months++ {
 		rawDate := AddMonths(product.IssueDate, months)
 		adjusted := AdjustForHoliday(rawDate, product.HolidayAdjust)
-		if adjusted > today {
+		if adjusted > today && isObservable(product, months) {
 			return adjusted
 		}
 	}
 	return ""
+}
+
+// isObservable 判断该存续月是否有可观察项：过锁定期后可计算敲出价，或存在月票息。
+func isObservable(product model.Product, monthsSinceEntry int) bool {
+	return ComputeKnockoutPrice(product, monthsSinceEntry) != nil || parseRatio(product.MonthlyCoupon) > 0
 }
 
 func buildCalendarProduct(product model.Product, obs ObservationDate, opts CalendarOpts) model.CalendarProduct {

@@ -40,9 +40,12 @@ func TestAdjustForHoliday_NormalDay(t *testing.T) {
 }
 
 func TestDatesUntil_UsesHolidayAdjust(t *testing.T) {
+	// 月票息非 0，确保该月份「有可观察项」，DatesUntil 才会生成观察日；
+	// 本用例关注的是 HolidayAdjust 是否生效。
 	product := model.Product{
 		IssueDate:     "2026-01-01",
 		HolidayAdjust: "提前",
+		MonthlyCoupon: floatPtr(0.05),
 	}
 	dates := DatesUntil(product, "2026-03-01")
 	if len(dates) == 0 {
